@@ -1,4 +1,16 @@
-export type CodeLanguage = 'typescript' | 'javascript' | 'python' | 'markdown' | 'json';
+export type CodeLanguage = 'typescript' | 'javascript' | 'python' | 'markdown' | 'json' | 'plaintext';
+
+export function detectCodeLanguage(fileName: string): CodeLanguage {
+  const extension = fileName.split('.').pop()?.toLowerCase();
+  switch (extension) {
+    case 'ts': return 'typescript';
+    case 'js': return 'javascript';
+    case 'py': return 'python';
+    case 'json': return 'json';
+    case 'md': return 'markdown';
+    default: return 'plaintext';
+  }
+}
 
 export type CodeFile = {
   id: string;

@@ -1,21 +1,46 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { Ionicons } from '@expo/vector-icons';
+import * as DocumentPicker from 'expo-document-picker';
+import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View, type ReactNode } from 'react-native';
 import { ScreenContainer } from '@/components/screen-container';
 import { AcademicButton, academicColors } from '@/components/academic/design-system';
 import { MonacoEditor } from '@/components/monaco-editor';
-import { CodeFile, CodeProject, DEFAULT_CODE_PROJECT, runEducationalExample, runSandboxCommand, updateProjectFile } from '@/lib/code-workspace';
+import { CodeFile, CodeProject, DEFAULT_CODE_PROJECT, detectCodeLanguage, runEducationalExample, runSandboxCommand, updateProjectFile } from '@/lib/code-workspace';
 import { useThemeContext } from '@/lib/theme-provider';
 import { trpc } from '@/lib/trpc';
 
 const PROJECT_KEY = '@estudo-organizado/code-project-v1';
+const MAX_IMPORTED_FILE_SIZE_BYTES = 1_000_000;
 const AI_ACTIONS = [
   { id: 'explain', label: 'Explicar código', icon: '◌' },
   { id: 'ideas', label: 'Sugerir ideias', icon: '✦' },
   { id: 'tests', label: 'Criar testes', icon: '✓' },
   { id: 'review', label: 'Revisar trecho', icon: '⌁' },
 ] as const;
+
+async function readImportedFile(asset: DocumentPicker.DocumentPickerAsset): Promise<string> {
+  if (Platform.OS === 'web') {
+    if (asset.file) return asset.file.text();
+    const response = await fetch(asset.uri);
+    if (!response.ok) throw new Error('Não foi possível ler o arquivo.');
+    return response.text();
+  }
+  return FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.UTF8 });
+}
+
+function hasBinaryContent(content: string, mimeType?: string): boolean {
+  if (/^(image|audio|video)\//i.test(mimeType ?? '') || mimeType === 'application/pdf') return true;
+  const sample = content.slice(0, 8192);
+  if (sample.includes('\0')) return true;
+  let controlCharacters = 0;
+  for (const character of sample) {
+    const code = character.charCodeAt(0);
+    if (code < 32 && code !== 9 && code !== 10 && code !== 13) controlCharacters += 1;
+  }
+  return sample.length > 0 && controlCharacters / sample.length > 0.1;
+}
 
 export default function CodeScreen() {
   const { width } = useWindowDimensions();
@@ -139,6 +164,50 @@ export default function CodeScreen() {
     setSelectedFileId(id);
   };
 
+  const importFiles = async () => {
+    try {
+      const result = await DocumentPicker.getDocumentAsync({ multiple: true, type: '*/*', copyToCacheDirectory: true });
+      if (result.canceled) return;
+
+      const batchId = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+      const importedFiles: CodeFile[] = [];
+      const skippedFiles: string[] = [];
+
+      for (const [index, asset] of result.assets.entries()) {
+        if (asset.size !== undefined && asset.size > MAX_IMPORTED_FILE_SIZE_BYTES) {
+          skippedFiles.push(asset.name);
+          continue;
+        }
+        try {
+          const content = await readImportedFile(asset);
+          if (content.length > MAX_IMPORTED_FILE_SIZE_BYTES || hasBinaryContent(content, asset.mimeType)) {
+            skippedFiles.push(asset.name);
+            continue;
+          }
+          importedFiles.push({
+            id: `file-import-${batchId}-${index}`,
+            name: asset.name,
+            language: detectCodeLanguage(asset.name),
+            content,
+            updatedAt: new Date().toISOString(),
+          });
+        } catch {
+          skippedFiles.push(asset.name);
+        }
+      }
+
+      if (importedFiles.length) {
+        persistProject({ ...project, files: [...project.files, ...importedFiles], updatedAt: new Date().toISOString() });
+        setSelectedFileId(importedFiles[0].id);
+      }
+      if (skippedFiles.length) {
+        Alert.alert('Alguns arquivos não foram importados', `${skippedFiles.length} arquivo(s) eram binários, excediam 1 MB ou não puderam ser lidos.`);
+      }
+    } catch {
+      Alert.alert('Falha ao importar arquivos', 'Não foi possível abrir ou ler os arquivos selecionados.');
+    }
+  };
+
   return <ScreenContainer style={styles.screen}>
     <ScrollView contentContainerStyle={styles.content}>
       <View style={styles.header}>
@@ -154,7 +223,17 @@ export default function CodeScreen() {
 
       <View style={[styles.workspace, isWide && styles.workspaceWide]}>
         <View style={[styles.filesPanel, isWide && styles.filesPanelWide]}>
-          <View style={styles.panelHeader}><View><Text style={styles.panelKicker}>PROJETO</Text><Text style={styles.panelTitle}>{project.name}</Text></View><TouchableOpacity onPress={addFile} style={styles.addButton} accessibilityRole="button"><Text style={styles.addButtonText}>+ Arquivo</Text></TouchableOpacity></View>
+          <View style={styles.panelHeader}><View><Text style={styles.panelKicker}>PROJETO</Text><Text style={styles.panelTitle}>{project.name}</Text></View></View>
+          <View style={styles.fileActions}>
+            <TouchableOpacity onPress={() => { void importFiles(); }} style={styles.addButton} accessibilityRole="button" accessibilityLabel="Importar um ou mais arquivos">
+              <Ionicons name="download-outline" size={18} color="#5B3CC4" />
+              <Text style={styles.addButtonText}>Importar arquivos</Text>
+            </TouchableOpacity>
+            <TouchableOpacity onPress={addFile} style={styles.addButton} accessibilityRole="button" accessibilityLabel="Criar arquivo novo">
+              <Ionicons name="add-outline" size={18} color="#5B3CC4" />
+              <Text style={styles.addButtonText}>+ Arquivo</Text>
+            </TouchableOpacity>
+          </View>
           <Text style={styles.projectDescription}>{project.description}</Text>
           {project.files.map(file => <TouchableOpacity key={file.id} onPress={() => setSelectedFileId(file.id)} style={[styles.fileRow, file.id === selectedFileId && styles.fileRowActive]} accessibilityRole="button"><Text style={styles.fileGlyph}>{file.language === 'markdown' ? 'M' : '{'}</Text><Text style={[styles.fileName, file.id === selectedFileId && styles.fileNameActive]}>{file.name}</Text></TouchableOpacity>)}
           <View style={styles.sustainabilityBox}><Text style={styles.sustainabilityTitle}>Uso responsável</Text><Text style={styles.sustainabilityText}>Otimizar bateria e armazenamento</Text><TouchableOpacity onPress={() => setIsSustainable(value => !value)} style={[styles.switch, isSustainable && styles.switchOn]} accessibilityRole="switch" accessibilityState={{ checked: isSustainable }}><View style={[styles.switchKnob, isSustainable && styles.switchKnobOn]} /></TouchableOpacity></View>
@@ -266,7 +345,9 @@ const styles = StyleSheet.create({
   workspace: { gap: 14 },
   filesPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E3E7EE', borderRadius: 16, padding: 16 },
   panelHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start' }, panelKicker: { color: '#8290A8', fontSize: 10, fontWeight: '800', letterSpacing: 1.2 }, panelTitle: { color: '#172033', fontSize: 17, fontWeight: '800', marginTop: 4 }, projectDescription: { color: '#687088', fontSize: 12, lineHeight: 17, marginTop: 8, marginBottom: 12 },
-  addButton: { backgroundColor: '#F0EEFF', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 8 }, addButtonText: { color: '#5B3CC4', fontSize: 12, fontWeight: '800' },
+  fileActions: { gap: 8, marginBottom: 10 },
+  addButton: { alignItems: 'center', backgroundColor: '#F0EEFF', borderRadius: 8, flexDirection: 'row', gap: 8, minHeight: 44, paddingHorizontal: 10, width: '100%' },
+  addButtonText: { color: '#5B3CC4', fontSize: 12, fontWeight: '800' },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 11 }, fileRowActive: { backgroundColor: '#F3F1FF' }, fileGlyph: { width: 22, height: 22, textAlign: 'center', paddingTop: 2, color: '#5B3CC4', backgroundColor: '#EEEBFF', borderRadius: 6, fontWeight: '800' }, fileName: { color: '#687088', fontSize: 13, fontWeight: '600' }, fileNameActive: { color: '#3346A8', fontWeight: '800' },
   sustainabilityBox: { borderTopWidth: 1, borderTopColor: '#EEF0F4', marginTop: 12, paddingTop: 14, position: 'relative' }, sustainabilityTitle: { color: '#172033', fontSize: 12, fontWeight: '800' }, sustainabilityText: { color: '#8290A8', fontSize: 11, marginTop: 4, paddingRight: 56 }, switch: { position: 'absolute', right: 0, top: 18, width: 42, height: 24, borderRadius: 12, backgroundColor: '#DDE2EA', padding: 3 }, switchOn: { backgroundColor: '#18865B' }, switchKnob: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#FFFFFF' }, switchKnobOn: { alignSelf: 'flex-end' },
   editorPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E3E7EE', borderRadius: 16, overflow: 'hidden' },   editorTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, padding: 16 }, editorActions: { alignItems: 'flex-end', flexDirection: 'row', gap: 10 }, playButton: { backgroundColor: '#18865B', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }, playButtonDisabled: { opacity: 0.6 }, playButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' }, tabStrip: { alignItems: 'center', backgroundColor: '#F1F3F7', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E3E7EE', paddingHorizontal: 8 }, fileTab: { borderRightWidth: 1, borderRightColor: '#E3E7EE', paddingHorizontal: 13, paddingVertical: 11 }, fileTabActive: { backgroundColor: '#FFFFFF', borderTopWidth: 2, borderTopColor: '#6B4DE6' }, fileTabText: { color: '#8290A8', fontSize: 12, fontWeight: '700' }, fileTabTextActive: { color: '#3346A8', fontWeight: '900' }, newTab: { paddingHorizontal: 12, paddingVertical: 9 }, newTabText: { color: '#5B3CC4', fontSize: 18, fontWeight: '900' }, outputHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 13 }, outputStatus: { color: '#18865B', fontSize: 10, fontWeight: '800' }, outputStatusError: { color: '#B3261E' }, outputBox: { backgroundColor: '#F8F9FA', borderBottomWidth: 1, borderBottomColor: '#E3E7EE', minHeight: 48, paddingHorizontal: 16, paddingVertical: 10 }, outputText: { color: '#46526A', fontFamily: 'monospace', fontSize: 12, lineHeight: 18 }, fileContext: { color: '#8290A8', fontSize: 10, fontWeight: '800', letterSpacing: 1.1 }, editorTitle: { color: '#172033', fontSize: 17, fontWeight: '800', marginTop: 4 }, savedText: { color: '#18865B', fontSize: 11, paddingTop: 6 }, codeToolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F8F9FA', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#EEF0F4', padding: 10 }, languageBadge: { color: '#5B3CC4', backgroundColor: '#EEEBFF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, fontWeight: '800' }, toolbarHint: { color: '#8290A8', fontSize: 11 }, codeInput: { minHeight: 310, padding: 16, color: '#24324A', backgroundColor: '#FBFCFE', fontFamily: 'monospace', fontSize: 14, lineHeight: 22 },
