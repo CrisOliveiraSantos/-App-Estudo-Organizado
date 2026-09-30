@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { ScreenContainer } from '@/components/screen-container';
 import { AcademicButton, academicColors } from '@/components/academic/design-system';
 import { MonacoEditor } from '@/components/monaco-editor';
@@ -18,6 +18,8 @@ const AI_ACTIONS = [
 ] as const;
 
 export default function CodeScreen() {
+  const { width } = useWindowDimensions();
+  const isWide = width >= 900;
   const { colorScheme } = useThemeContext();
   const [project, setProject] = useState<CodeProject>(DEFAULT_CODE_PROJECT);
   const [selectedFileId, setSelectedFileId] = useState(DEFAULT_CODE_PROJECT.files[0].id);
@@ -30,6 +32,7 @@ export default function CodeScreen() {
   const [executionOutput, setExecutionOutput] = useState('Pronto para executar o arquivo ativo.');
   const [isRunning, setIsRunning] = useState(false);
   const [executionStatus, setExecutionStatus] = useState<'idle' | 'running' | 'success' | 'error'>('idle');
+  const [isTerminalCollapsed, setIsTerminalCollapsed] = useState(false);
   const [crisChatInput, setCrisChatInput] = useState('');
   const [crisChatMessages, setCrisChatMessages] = useState<{ role: 'user' | 'cris'; text: string }[]>([{ role: 'cris', text: 'Olá, Cris. Eu sou a Cris, sua mentora neste Espaço Código. Pergunte sobre programação, estudos ou sobre o arquivo aberto.' }]);
   const crisChatScrollRef = useRef<ScrollView>(null);
@@ -149,15 +152,15 @@ export default function CodeScreen() {
 
       <View style={styles.safetyBanner}><Text style={styles.safetyIcon}>✓</Text><View style={styles.safetyCopy}><Text style={styles.safetyTitle}>Sandbox protegida</Text><Text style={styles.safetyText}>O terminal desta versão não acessa o sistema, a rede, segredos ou arquivos fora do projeto.</Text></View></View>
 
-      <View style={styles.workspace}>
-        <View style={styles.filesPanel}>
+      <View style={[styles.workspace, isWide && styles.workspaceWide]}>
+        <View style={[styles.filesPanel, isWide && styles.filesPanelWide]}>
           <View style={styles.panelHeader}><View><Text style={styles.panelKicker}>PROJETO</Text><Text style={styles.panelTitle}>{project.name}</Text></View><TouchableOpacity onPress={addFile} style={styles.addButton} accessibilityRole="button"><Text style={styles.addButtonText}>+ Arquivo</Text></TouchableOpacity></View>
           <Text style={styles.projectDescription}>{project.description}</Text>
           {project.files.map(file => <TouchableOpacity key={file.id} onPress={() => setSelectedFileId(file.id)} style={[styles.fileRow, file.id === selectedFileId && styles.fileRowActive]} accessibilityRole="button"><Text style={styles.fileGlyph}>{file.language === 'markdown' ? 'M' : '{'}</Text><Text style={[styles.fileName, file.id === selectedFileId && styles.fileNameActive]}>{file.name}</Text></TouchableOpacity>)}
           <View style={styles.sustainabilityBox}><Text style={styles.sustainabilityTitle}>Uso responsável</Text><Text style={styles.sustainabilityText}>Otimizar bateria e armazenamento</Text><TouchableOpacity onPress={() => setIsSustainable(value => !value)} style={[styles.switch, isSustainable && styles.switchOn]} accessibilityRole="switch" accessibilityState={{ checked: isSustainable }}><View style={[styles.switchKnob, isSustainable && styles.switchKnobOn]} /></TouchableOpacity></View>
         </View>
 
-        <View style={styles.editorPanel}>
+        <View style={[styles.editorPanel, isWide && styles.editorPanelWide]}>
           <View style={styles.editorTop}><View><Text style={styles.fileContext}>EDITOR · ARQUIVO ABERTO</Text><Text style={styles.editorTitle}>{selectedFile?.name ?? 'Nenhum arquivo'}</Text></View><View style={styles.editorActions}><Text style={styles.savedText}>{savedAt}</Text><TouchableOpacity onPress={runActiveFile} disabled={isRunning || !selectedFile} style={[styles.playButton, isRunning && styles.playButtonDisabled]} accessibilityRole="button" accessibilityLabel="Executar arquivo ativo"><Text style={styles.playButtonText}>{isRunning ? '…' : '▶ Play'}</Text></TouchableOpacity></View></View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabStrip}>{project.files.map(file => <TouchableOpacity key={file.id} onPress={() => setSelectedFileId(file.id)} style={[styles.fileTab, file.id === selectedFileId && styles.fileTabActive]} accessibilityRole="tab" accessibilityState={{ selected: file.id === selectedFileId }}><Text style={[styles.fileTabText, file.id === selectedFileId && styles.fileTabTextActive]}>{file.name}{file.id === selectedFileId ? ' •' : ''}</Text></TouchableOpacity>)}<TouchableOpacity onPress={addFile} style={styles.newTab} accessibilityRole="button"><Text style={styles.newTabText}>＋</Text></TouchableOpacity></ScrollView>
           <View style={styles.codeToolbar}><Text style={styles.languageBadge}>{selectedFile?.language ?? 'texto'}</Text><Text style={styles.toolbarHint}>Edição local · autosave · Sandbox segura</Text></View>
@@ -170,11 +173,37 @@ export default function CodeScreen() {
             height={310}
           />
           <View style={styles.outputHeader}><Text style={styles.fileContext}>SAÍDA</Text><Text style={[styles.outputStatus, executionStatus === 'error' && styles.outputStatusError]}>{isRunning ? 'Executando…' : executionStatus === 'success' ? 'Concluído' : executionStatus === 'error' ? 'Revisar saída' : 'Pronto'}</Text></View><View style={styles.outputBox}><Text style={styles.outputText}>{executionOutput}</Text></View>
-          <View style={styles.terminalHeader}><View><Text style={styles.fileContext}>SANDBOX EDUCACIONAL</Text><Text style={styles.terminalTitle}>Terminal Cris</Text><Text style={styles.terminalDescription}>Um terminal de aprendizagem dentro do projeto. Ele simula navegação e execução didática; não é ainda um shell do Android.</Text></View><Text style={styles.terminalMode}>modo seguro</Text></View>
-          <View style={styles.terminalBox}>{terminalLines.map((line, index) => <Text key={`${line}-${index}`} style={styles.terminalLine}>{line}</Text>)}<View style={styles.commandRow}><Text style={styles.prompt}>›</Text><TextInput value={terminalInput} onChangeText={setTerminalInput} onSubmitEditing={runCommand} returnKeyType="send" style={styles.commandInput} placeholder="help" placeholderTextColor="#8290A8" autoCapitalize="none" autoCorrect={false} /><TouchableOpacity onPress={runCommand} style={styles.runButton} accessibilityRole="button"><Text style={styles.runText}>Executar</Text></TouchableOpacity></View></View>
+          <View style={[styles.terminalHeader, isWide && styles.terminalHeaderWide]}>
+            <View>
+              <Text style={styles.fileContext}>SANDBOX EDUCACIONAL</Text>
+              <Text style={styles.terminalTitle}>Terminal Cris</Text>
+              <Text style={styles.terminalDescription}>Um terminal de aprendizagem dentro do projeto. Ele simula navegação e execução didática; não é ainda um shell do Android.</Text>
+            </View>
+            <View style={styles.terminalActions}>
+              <Text style={styles.terminalMode}>modo seguro</Text>
+              <TouchableOpacity
+                onPress={() => setIsTerminalCollapsed(value => !value)}
+                accessibilityRole="button"
+                accessibilityState={{ expanded: !isTerminalCollapsed }}
+                accessibilityLabel={isTerminalCollapsed ? 'Expandir Terminal Cris' : 'Recolher Terminal Cris'}
+                style={styles.terminalCollapseButton}
+              >
+                <Text style={styles.terminalCollapseText}>{isTerminalCollapsed ? 'Expandir' : 'Recolher'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+          {!isTerminalCollapsed && (
+            <View style={[styles.terminalBox, isWide && styles.terminalBoxWide, isWide && { height: 210 }]}>
+              <ScrollView style={styles.terminalLinesScroll} nestedScrollEnabled>
+                {terminalLines.map((line, index) => <Text key={`${line}-${index}`} style={styles.terminalLine}>{line}</Text>)}
+              </ScrollView>
+              <View style={styles.commandRow}><Text style={styles.prompt}>›</Text><TextInput value={terminalInput} onChangeText={setTerminalInput} onSubmitEditing={runCommand} returnKeyType="send" style={styles.commandInput} placeholder="help" placeholderTextColor="#8290A8" autoCapitalize="none" autoCorrect={false} /><TouchableOpacity onPress={runCommand} style={styles.runButton} accessibilityRole="button"><Text style={styles.runText}>Executar</Text></TouchableOpacity></View>
+            </View>
+          )}
         </View>
 
-        <View style={styles.aiPanel}>
+        <View style={[styles.aiPanel, isWide && styles.aiPanelWide]}>
+          <PanelScroll enabled={isWide}>
           <View style={styles.aiHeader}><View style={styles.aiAvatar}><Text style={styles.aiAvatarText}>C</Text></View><View><Text style={styles.aiName}>Cris</Text><Text style={styles.aiStatus}>{crisAsk.isPending ? 'Cris online · analisando…' : crisMode === 'online' ? 'Cris online · conectada' : 'Cris local · fallback seguro'}</Text></View></View>
           <Text style={styles.aiIntro}>Sua parceira de estudos para entender, praticar e evoluir no código.</Text>
           <ScrollView style={styles.aiMessage} contentContainerStyle={styles.aiMessageContent} nestedScrollEnabled showsVerticalScrollIndicator keyboardShouldPersistTaps="handled"><Text style={styles.aiMessageText}>{aiMessage}</Text></ScrollView>
@@ -186,13 +215,40 @@ export default function CodeScreen() {
             <View style={styles.crisChatComposer}><TextInput value={crisChatInput} onChangeText={setCrisChatInput} onSubmitEditing={sendCrisChat} returnKeyType="send" placeholder="Pergunte à Cris…" placeholderTextColor="#8290A8" style={styles.crisChatInput} multiline={false} /><TouchableOpacity onPress={sendCrisChat} disabled={!crisChatInput.trim() || crisAsk.isPending} style={styles.crisChatSend} accessibilityRole="button" accessibilityLabel="Enviar pergunta para Cris"><Text style={styles.crisChatSendText}>{crisAsk.isPending ? '…' : 'Enviar'}</Text></TouchableOpacity></View>
           </View>
           <View style={styles.offlineCard}><Text style={styles.offlineTitle}>Cris híbrida</Text><Text style={styles.offlineText}>Na web, a Cris online fica disponível automaticamente quando houver conexão. Sem internet, o aplicativo mantém as orientações locais e, no Android, poderá instalar um modelo GGUF pelo próprio menu — sem procurar arquivos manualmente.</Text><AcademicButton label="Ver configurações" onPress={() => router.push('/ai-settings')} compact tone="neutral" /></View>
+          </PanelScroll>
         </View>
       </View>
     </ScrollView>
   </ScreenContainer>;
 }
 
+function PanelScroll({ enabled, children }: { enabled: boolean; children: ReactNode }) {
+  if (!enabled) return <>{children}</>;
+  return (
+    <ScrollView
+      style={styles.panelScroll}
+      contentContainerStyle={styles.panelScrollContent}
+      nestedScrollEnabled
+    >
+      {children}
+    </ScrollView>
+  );
+}
+
 const styles = StyleSheet.create({
+  contentWide: { flexGrow: 1 },
+  workspaceWide: { alignItems: 'stretch', flex: 1, flexDirection: 'row', minHeight: 0 },
+  filesPanelWide: { flexShrink: 0, height: '100%', overflow: 'hidden', width: 180 },
+  editorPanelWide: { flex: 1, height: '100%', minHeight: 0, minWidth: 0 },
+  terminalHeaderWide: { paddingVertical: 8 },
+  terminalActions: { alignItems: 'flex-end', gap: 8 },
+  terminalCollapseButton: { justifyContent: 'center', minHeight: 44, paddingHorizontal: 8 },
+  terminalCollapseText: { color: '#3346A8', fontSize: 11, fontWeight: '700' },
+  terminalBoxWide: { borderRadius: 0, margin: 0, minHeight: 0, overflow: 'hidden', padding: 10 },
+  terminalLinesScroll: { flex: 1 },
+  aiPanelWide: { flexShrink: 0, height: '100%', overflow: 'hidden', padding: 0, width: 340 },
+  panelScroll: { flex: 1 },
+  panelScrollContent: { padding: 16 },
   screen: { backgroundColor: '#F8F9FA' },
   content: { padding: 24, gap: 18, paddingBottom: 120 },
   header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 16 },
