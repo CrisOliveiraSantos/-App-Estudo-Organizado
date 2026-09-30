@@ -9,8 +9,12 @@ const connectionInput = z.object({
   token: z.string().min(8).max(500),
 });
 
+// Prevent arbitrary HTTPS hosts from receiving the Moodle token supplied by the user.
+const ALLOWED_MOODLE_HOST_SUFFIXES = [".edu.br", ".edu"] as const;
+
 async function callMoodle(baseUrl: string, token: string, functionName: string, extra: Record<string, string> = {}) {
   const endpoint = moodleEndpoint(baseUrl);
+  // Moodle REST requires wstoken in the query; never log this URL or its parameters.
   const params = new URLSearchParams({ wstoken: token, wsfunction: functionName, moodlewsrestformat: 'json', ...extra });
   const response = await fetch(`${endpoint}?${params.toString()}`, { method: 'GET', headers: { Accept: 'application/json' } });
   const payload = await response.json() as Record<string, unknown>;
@@ -21,6 +25,10 @@ async function callMoodle(baseUrl: string, token: string, functionName: string, 
 function moodleEndpoint(baseUrl: string) {
   const parsed = new URL(baseUrl);
   if (parsed.protocol !== 'https:') throw new TRPCError({ code: 'BAD_REQUEST', message: 'Use somente um endereço HTTPS institucional.' });
+  const hostname = parsed.hostname.toLowerCase();
+  if (!ALLOWED_MOODLE_HOST_SUFFIXES.some(suffix => hostname.endsWith(suffix))) {
+    throw new TRPCError({ code: 'BAD_REQUEST', message: 'Use um domínio acadêmico autorizado (.edu.br ou .edu).' });
+  }
   return `${parsed.origin}${parsed.pathname.replace(/\/$/, '')}/webservice/rest/server.php`;
 }
 
