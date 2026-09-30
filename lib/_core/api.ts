@@ -20,7 +20,6 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
   if (Platform.OS !== "web") {
     const sessionToken = await Auth.getSessionToken();
     console.log("[API] apiCall:", {
-      endpoint,
       hasToken: !!sessionToken,
       method: options.method || "GET",
     });
@@ -29,7 +28,7 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
       console.log("[API] Authorization header added");
     }
   } else {
-    console.log("[API] apiCall:", { endpoint, platform: "web", method: options.method || "GET" });
+    console.log("[API] apiCall:", { platform: "web", method: options.method || "GET" });
   }
 
   const baseUrl = getApiBaseUrl();
@@ -37,7 +36,7 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
   const cleanBaseUrl = baseUrl.endsWith("/") ? baseUrl.slice(0, -1) : baseUrl;
   const cleanEndpoint = endpoint.startsWith("/") ? endpoint : `/${endpoint}`;
   const url = baseUrl ? `${cleanBaseUrl}${cleanEndpoint}` : endpoint;
-  console.log("[API] Full URL:", url);
+  console.log("[API] Request URL resolved");
 
   try {
     console.log("[API] Making request...");
@@ -48,18 +47,16 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
     });
 
     console.log("[API] Response status:", response.status, response.statusText);
-    const responseHeaders = Object.fromEntries(response.headers.entries());
-    console.log("[API] Response headers:", responseHeaders);
+    console.log("[API] Response received with headers");
 
     // Check if Set-Cookie header is present (cookies are automatically handled in React Native)
-    const setCookie = response.headers.get("Set-Cookie");
-    if (setCookie) {
-      console.log("[API] Set-Cookie header received:", setCookie);
+    if (response.headers.get("Set-Cookie")) {
+      console.log("[API] Session cookie received");
     }
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error("[API] Error response:", errorText);
+      console.error("[API] Error response received");
       let errorMessage = errorText;
       try {
         const errorJson = JSON.parse(errorText);
@@ -81,7 +78,7 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
     console.log("[API] Text response received");
     return (text ? JSON.parse(text) : {}) as T;
   } catch (error) {
-    console.error("[API] Request failed:", error);
+    console.error("[API] Request failed");
     if (error instanceof Error) {
       throw error;
     }
@@ -99,7 +96,7 @@ export async function exchangeOAuthCode(
   // Use GET with query params
   const params = new URLSearchParams({ code, state });
   const endpoint = `/api/oauth/mobile?${params.toString()}`;
-  console.log("[API] Calling OAuth mobile endpoint:", endpoint);
+  console.log("[API] Calling OAuth mobile endpoint");
   const result = await apiCall<{ app_session_id: string; user: any }>(endpoint);
 
   // Convert app_session_id to sessionToken for compatibility
@@ -107,7 +104,6 @@ export async function exchangeOAuthCode(
   console.log("[API] OAuth exchange result:", {
     hasSessionToken: !!sessionToken,
     hasUser: !!result.user,
-    sessionToken: sessionToken ? `${sessionToken.substring(0, 50)}...` : null,
   });
 
   return {
@@ -136,7 +132,7 @@ export async function getMe(): Promise<{
     const result = await apiCall<{ user: any }>("/api/auth/me");
     return result.user || null;
   } catch (error) {
-    console.error("[API] getMe failed:", error);
+    console.error("[API] getMe failed");
     return null;
   }
 }
