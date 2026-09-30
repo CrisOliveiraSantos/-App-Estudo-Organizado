@@ -164,14 +164,16 @@ export default function CodeScreen() {
           <View style={styles.editorTop}><View><Text style={styles.fileContext}>EDITOR · ARQUIVO ABERTO</Text><Text style={styles.editorTitle}>{selectedFile?.name ?? 'Nenhum arquivo'}</Text></View><View style={styles.editorActions}><Text style={styles.savedText}>{savedAt}</Text><TouchableOpacity onPress={runActiveFile} disabled={isRunning || !selectedFile} style={[styles.playButton, isRunning && styles.playButtonDisabled]} accessibilityRole="button" accessibilityLabel="Executar arquivo ativo"><Text style={styles.playButtonText}>{isRunning ? '…' : '▶ Play'}</Text></TouchableOpacity></View></View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabStrip}>{project.files.map(file => <TouchableOpacity key={file.id} onPress={() => setSelectedFileId(file.id)} style={[styles.fileTab, file.id === selectedFileId && styles.fileTabActive]} accessibilityRole="tab" accessibilityState={{ selected: file.id === selectedFileId }}><Text style={[styles.fileTabText, file.id === selectedFileId && styles.fileTabTextActive]}>{file.name}{file.id === selectedFileId ? ' •' : ''}</Text></TouchableOpacity>)}<TouchableOpacity onPress={addFile} style={styles.newTab} accessibilityRole="button"><Text style={styles.newTabText}>＋</Text></TouchableOpacity></ScrollView>
           <View style={styles.codeToolbar}><Text style={styles.languageBadge}>{selectedFile?.language ?? 'texto'}</Text><Text style={styles.toolbarHint}>Edição local · autosave · Sandbox segura</Text></View>
-          <MonacoEditor
-            value={selectedFile?.content ?? ''}
-            language={selectedFile?.language ?? 'typescript'}
-            onChange={onChangeContent}
-            theme={colorScheme === 'dark' ? 'dark' : 'light'}
-            readOnly={false}
-            height={310}
-          />
+          <View style={styles.monacoContainer}>
+            <MonacoEditor
+              value={selectedFile?.content ?? ''}
+              language={selectedFile?.language ?? 'typescript'}
+              onChange={onChangeContent}
+              theme={colorScheme === 'dark' ? 'dark' : 'light'}
+              readOnly={false}
+              height="100%"
+            />
+          </View>
           <View style={styles.outputHeader}><Text style={styles.fileContext}>SAÍDA</Text><Text style={[styles.outputStatus, executionStatus === 'error' && styles.outputStatusError]}>{isRunning ? 'Executando…' : executionStatus === 'success' ? 'Concluído' : executionStatus === 'error' ? 'Revisar saída' : 'Pronto'}</Text></View><View style={styles.outputBox}><Text style={styles.outputText}>{executionOutput}</Text></View>
           <View style={[styles.terminalHeader, isWide && styles.terminalHeaderWide]}>
             <View>
@@ -236,6 +238,7 @@ function PanelScroll({ enabled, children }: { enabled: boolean; children: ReactN
 }
 
 const styles = StyleSheet.create({
+  monacoContainer: { flex: 1, minHeight: 310, minWidth: 0 },
   contentWide: { flexGrow: 1 },
   workspaceWide: { alignItems: 'stretch', flex: 1, flexDirection: 'row', minHeight: 0 },
   filesPanelWide: { flexShrink: 0, height: '100%', overflow: 'hidden', width: 180 },
