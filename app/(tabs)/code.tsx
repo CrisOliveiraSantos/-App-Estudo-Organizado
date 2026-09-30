@@ -4,7 +4,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { ScreenContainer } from '@/components/screen-container';
 import { AcademicButton, academicColors } from '@/components/academic/design-system';
+import { MonacoEditor } from '@/components/monaco-editor';
 import { CodeFile, CodeProject, DEFAULT_CODE_PROJECT, runEducationalExample, runSandboxCommand, updateProjectFile } from '@/lib/code-workspace';
+import { useThemeContext } from '@/lib/theme-provider';
 import { trpc } from '@/lib/trpc';
 
 const PROJECT_KEY = '@estudo-organizado/code-project-v1';
@@ -16,6 +18,7 @@ const AI_ACTIONS = [
 ] as const;
 
 export default function CodeScreen() {
+  const { colorScheme } = useThemeContext();
   const [project, setProject] = useState<CodeProject>(DEFAULT_CODE_PROJECT);
   const [selectedFileId, setSelectedFileId] = useState(DEFAULT_CODE_PROJECT.files[0].id);
   const [terminalInput, setTerminalInput] = useState('help');
@@ -158,7 +161,14 @@ export default function CodeScreen() {
           <View style={styles.editorTop}><View><Text style={styles.fileContext}>EDITOR · ARQUIVO ABERTO</Text><Text style={styles.editorTitle}>{selectedFile?.name ?? 'Nenhum arquivo'}</Text></View><View style={styles.editorActions}><Text style={styles.savedText}>{savedAt}</Text><TouchableOpacity onPress={runActiveFile} disabled={isRunning || !selectedFile} style={[styles.playButton, isRunning && styles.playButtonDisabled]} accessibilityRole="button" accessibilityLabel="Executar arquivo ativo"><Text style={styles.playButtonText}>{isRunning ? '…' : '▶ Play'}</Text></TouchableOpacity></View></View>
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabStrip}>{project.files.map(file => <TouchableOpacity key={file.id} onPress={() => setSelectedFileId(file.id)} style={[styles.fileTab, file.id === selectedFileId && styles.fileTabActive]} accessibilityRole="tab" accessibilityState={{ selected: file.id === selectedFileId }}><Text style={[styles.fileTabText, file.id === selectedFileId && styles.fileTabTextActive]}>{file.name}{file.id === selectedFileId ? ' •' : ''}</Text></TouchableOpacity>)}<TouchableOpacity onPress={addFile} style={styles.newTab} accessibilityRole="button"><Text style={styles.newTabText}>＋</Text></TouchableOpacity></ScrollView>
           <View style={styles.codeToolbar}><Text style={styles.languageBadge}>{selectedFile?.language ?? 'texto'}</Text><Text style={styles.toolbarHint}>Edição local · autosave · Sandbox segura</Text></View>
-          <TextInput multiline value={selectedFile?.content ?? ''} onChangeText={onChangeContent} style={styles.codeInput} textAlignVertical="top" autoCapitalize="none" autoCorrect={false} spellCheck={false} accessibilityLabel="Editor de código" />
+          <MonacoEditor
+            value={selectedFile?.content ?? ''}
+            language={selectedFile?.language ?? 'typescript'}
+            onChange={onChangeContent}
+            theme={colorScheme === 'dark' ? 'dark' : 'light'}
+            readOnly={false}
+            height={310}
+          />
           <View style={styles.outputHeader}><Text style={styles.fileContext}>SAÍDA</Text><Text style={[styles.outputStatus, executionStatus === 'error' && styles.outputStatusError]}>{isRunning ? 'Executando…' : executionStatus === 'success' ? 'Concluído' : executionStatus === 'error' ? 'Revisar saída' : 'Pronto'}</Text></View><View style={styles.outputBox}><Text style={styles.outputText}>{executionOutput}</Text></View>
           <View style={styles.terminalHeader}><View><Text style={styles.fileContext}>SANDBOX EDUCACIONAL</Text><Text style={styles.terminalTitle}>Terminal Cris</Text><Text style={styles.terminalDescription}>Um terminal de aprendizagem dentro do projeto. Ele simula navegação e execução didática; não é ainda um shell do Android.</Text></View><Text style={styles.terminalMode}>modo seguro</Text></View>
           <View style={styles.terminalBox}>{terminalLines.map((line, index) => <Text key={`${line}-${index}`} style={styles.terminalLine}>{line}</Text>)}<View style={styles.commandRow}><Text style={styles.prompt}>›</Text><TextInput value={terminalInput} onChangeText={setTerminalInput} onSubmitEditing={runCommand} returnKeyType="send" style={styles.commandInput} placeholder="help" placeholderTextColor="#8290A8" autoCapitalize="none" autoCorrect={false} /><TouchableOpacity onPress={runCommand} style={styles.runButton} accessibilityRole="button"><Text style={styles.runText}>Executar</Text></TouchableOpacity></View></View>
