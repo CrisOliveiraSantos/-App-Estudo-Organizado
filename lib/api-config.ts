@@ -1,0 +1,546 @@
+import * as SecureStore from 'expo-secure-store';
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { Platform } from 'react-native';
+
+/* ------------------------------------------------------------------ *
+ * Provedores de API de terceiros (compatíveis com a API OpenAI /v1)
+ * ------------------------------------------------------------------ */
+
+export type ApiProviderId = 'groq' | 'gemini' | 'openai' | 'openrouter' | 'custom';
+
+export type ApiProviderPreset = {
+  id: ApiProviderId;
+  label: string;
+  baseUrl: string;
+  defaultModel: string;
+  keyUrl: string;
+  accent: string;
+  hint: string;
+};
+
+export const API_PROVIDERS: Record<ApiProviderId, ApiProviderPreset> = {
+  groq: {
+    id: 'groq',
+    label: 'Groq',
+    baseUrl: 'https://api.groq.com/openai/v1',
+    defaultModel: 'llama-3.3-70b-versatile',
+    keyUrl: 'https://console.groq.com/keys',
+    accent: '#F55036',
+    hint: 'Camada gratuita rápida para Llama e modelos abertos.',
+  },
+  gemini: {
+    id: 'gemini',
+    label: 'Gemini',
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    defaultModel: 'gemini-2.5-pro',
+    keyUrl: 'https://aistudio.google.com/app/apikey',
+    accent: '#4285F4',
+    hint: 'Camada gratuita do Google AI Studio (endpoint compatível com OpenAI).',
+  },
+  openai: {
+    id: 'openai',
+    label: 'OpenAI',
+    baseUrl: 'https://api.openai.com/v1',
+    defaultModel: 'gpt-4o-mini',
+    keyUrl: 'https://platform.openai.com/api-keys',
+    accent: '#10A37F',
+    hint: 'Uso pago por token; prefira modelos econômicos.',
+  },
+  openrouter: {
+    id: 'openrouter',
+    label: 'OpenRouter',
+    baseUrl: 'https://openrouter.ai/api/v1',
+    defaultModel: 'openrouter/auto',
+    keyUrl: 'https://openrouter.ai/keys',
+    accent: '#6366F1',
+    hint: 'Vários modelos com uma única chave e escolha automática.',
+  },
+  custom: {
+    id: 'custom',
+    label: 'Personalizado',
+    baseUrl: '',
+    defaultModel: '',
+    keyUrl: '',
+    accent: '#687088',
+    hint: 'Qualquer serviço compatível com a API OpenAI (/v1).',
+  },
+};
+
+export const PROVIDER_ORDER: ApiProviderId[] = ['groq', 'gemini', 'openai', 'openrouter', 'custom'];
+
+/* ------------------------------------------------------------------ *
+ * Detecção de IA local (best-effort, sem fixar um backend)
+ * ------------------------------------------------------------------ */
+
+export type LocalAiCandidate = { port: number; name: string; hint: string };
+
+export const LOCAL_AI_CANDIDATES: LocalAiCandidate[] = [
+  { port: 11434, name: 'Ollama', hint: 'ollama serve' },
+  { port: 1234, name: 'LM Studio', hint: 'Servidor local do LM Studio' },
+  { port: 5001, name: 'LocalAI', hint: 'Backend compatível com OpenAI' },
+  { port: 8000, name: 'vLLM / LocalAI', hint: 'Endpoint /v1 na porta 8000' },
+  { port: 8080, name: 'llama.cpp', hint: 'llama-server' },
+  { port: 5000, name: 'Text Generation WebUI', hint: 'Modo --api' },
+  { port: 11435, name: 'Ollama (alternativo)', hint: 'Porta alternativa do Ollama' },
+];
+
+export const LOCAL_AI_PORTS: number[] = LOCAL_AI_CANDIDATES.map(candidate => candidate.port);
+
+/* ------------------------------------------------------------------ *
+ * Configuração persistida
+ * ------------------------------------------------------------------ */
+
+export type LocalAiConfig = {
+  url: string;
+  backend: string | null;
+  model: string | null;
+};
+
+export type ProviderAiConfig = {
+  id: ApiProviderId;
+  apiKey: string;
+  baseUrl: string;
+  model: string;
+};
+
+export type AiConfig = {
+  mode: 'local' | 'provider';
+  local: LocalAiConfig;
+  provider: ProviderAiConfig;
+  updatedAt: string | null;
+};
+
+export const AI_API_CONFIG_KEY = '@estudo-organizado/ai-api-config-v1';
+
+export const DEFAULT_AI_CONFIG: AiConfig = {
+  mode: 'local',
+  local: { url: '', backend: null, model: null },
+  provider: {
+    id: 'groq',
+    apiKey: '',
+    baseUrl: API_PROVIDERS.groq.baseUrl,
+    model: API_PROVIDERS.groq.defaultModel,
+  },
+  updatedAt: null,
+};
+
+function isProviderId(value: unknown): value is ApiProviderId {
+  return typeof value === 'string' && PROVIDER_ORDER.includes(value as ApiProviderId);
+}
+
+function normalizeConfig(raw: unknown): AiConfig {
+  const source = (raw && typeof raw === 'object' ? raw : {}) as Partial<AiConfig>;
+  const localSource = (source.local && typeof source.local === 'object' ? source.local : {}) as Partial<LocalAiConfig>;
+  const providerSource = (source.provider && typeof source.provider === 'object' ? source.provider : {}) as Partial<ProviderAiConfig>;
+  const id = isProviderId(providerSource.id) ? providerSource.id : DEFAULT_AI_CONFIG.provider.id;
+  return {
+    mode: source.mode === 'provider' ? 'provider' : 'local',
+    local: {
+      url: typeof localSource.url === 'string' ? localSource.url : '',
+      backend: typeof localSource.backend === 'string' ? localSource.backend : null,
+      model: typeof localSource.model === 'string' ? localSource.model : null,
+    },
+    provider: {
+      id,
+      apiKey: typeof providerSource.apiKey === 'string' ? providerSource.apiKey : '',
+      baseUrl: typeof providerSource.baseUrl === 'string' && providerSource.baseUrl ? providerSource.baseUrl : API_PROVIDERS[id].baseUrl,
+      model: typeof providerSource.model === 'string' && providerSource.model ? providerSource.model : API_PROVIDERS[id].defaultModel,
+    },
+    updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : null,
+  };
+}
+
+/* ------------------------------------------------------------------ *
+ * Armazenamento seguro (SecureStore no nativo / localStorage na web)
+ * ------------------------------------------------------------------ */
+
+async function readRaw(): Promise<string | null> {
+  try {
+    if (Platform.OS === 'web') {
+      return typeof localStorage === 'undefined' ? null : localStorage.getItem(AI_API_CONFIG_KEY);
+    }
+    return await SecureStore.getItemAsync(AI_API_CONFIG_KEY);
+  } catch {
+    return null;
+  }
+}
+
+async function writeRaw(value: string): Promise<void> {
+  try {
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') localStorage.setItem(AI_API_CONFIG_KEY, value);
+      return;
+    }
+    await SecureStore.setItemAsync(AI_API_CONFIG_KEY, value, {
+      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+    });
+  } catch {
+    // Uma falha ao gravar não deve travar a configuração em memória.
+  }
+}
+
+async function clearRaw(): Promise<void> {
+  try {
+    if (Platform.OS === 'web') {
+      if (typeof localStorage !== 'undefined') localStorage.removeItem(AI_API_CONFIG_KEY);
+      return;
+    }
+    await SecureStore.deleteItemAsync(AI_API_CONFIG_KEY);
+  } catch {
+    // Melhor esforço.
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Store em memória (mantém o hook sincronizado) + persistência
+ * ------------------------------------------------------------------ */
+
+let current: AiConfig | null = null;
+let loadPromise: Promise<AiConfig> | null = null;
+const listeners = new Set<(config: AiConfig) => void>();
+
+function emit(next: AiConfig) {
+  current = next;
+  listeners.forEach(listener => listener(next));
+}
+
+async function ensureLoaded(): Promise<AiConfig> {
+  if (current) return current;
+  if (!loadPromise) {
+    loadPromise = (async () => {
+      const raw = await readRaw();
+      let parsed: unknown = null;
+      if (raw) {
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          parsed = null;
+        }
+      }
+      current = normalizeConfig(parsed);
+      return current;
+    })();
+  }
+  return loadPromise;
+}
+
+export async function saveAiConfig(next: AiConfig): Promise<AiConfig> {
+  const normalized = normalizeConfig({ ...next, updatedAt: new Date().toISOString() });
+  emit(normalized);
+  await writeRaw(JSON.stringify(normalized));
+  return normalized;
+}
+
+export function useApiConfig() {
+  const [config, setConfig] = useState<AiConfig>(current ?? DEFAULT_AI_CONFIG);
+  const [loading, setLoading] = useState(!current);
+
+  useEffect(() => {
+    let active = true;
+    const listener = (next: AiConfig) => {
+      if (active) setConfig(next);
+    };
+    listeners.add(listener);
+    void ensureLoaded().then(next => {
+      if (!active) return;
+      setConfig(next);
+      setLoading(false);
+    });
+    return () => {
+      active = false;
+      listeners.delete(listener);
+    };
+  }, []);
+
+  const update = useCallback(async (patch: Partial<AiConfig>) => {
+    const base = current ?? (await ensureLoaded());
+    return saveAiConfig({ ...base, ...patch });
+  }, []);
+
+  const saveLocal = useCallback(async (local: LocalAiConfig) => {
+    const base = current ?? (await ensureLoaded());
+    return saveAiConfig({ ...base, local });
+  }, []);
+
+  const saveProvider = useCallback(async (provider: ProviderAiConfig) => {
+    const base = current ?? (await ensureLoaded());
+    return saveAiConfig({ ...base, provider });
+  }, []);
+
+  const setMode = useCallback(async (mode: AiConfig['mode']) => {
+    const base = current ?? (await ensureLoaded());
+    return saveAiConfig({ ...base, mode });
+  }, []);
+
+  const reset = useCallback(async () => {
+    await clearRaw();
+    const next = normalizeConfig(DEFAULT_AI_CONFIG);
+    emit(next);
+    return next;
+  }, []);
+
+  return { config, loading, update, saveLocal, saveProvider, setMode, reset };
+}
+
+/* ------------------------------------------------------------------ *
+ * Utilitários de URL
+ * ------------------------------------------------------------------ */
+
+export function normalizeLocalUrl(input: string): string {
+  const value = (input ?? '').trim().replace(/\/+$/, '');
+  if (!value) return '';
+  if (/^https?:\/\//i.test(value)) return value;
+  return `http://${value}`;
+}
+
+export function buildLocalUrl(protocol: string, host: string, port: string): string {
+  const scheme = protocol === 'https' ? 'https' : 'http';
+  const cleanHost = (host ?? '').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '');
+  const cleanPort = (port ?? '').trim().replace(/[^0-9]/g, '');
+  if (!cleanHost) return '';
+  return cleanPort ? `${scheme}://${cleanHost}:${cleanPort}` : `${scheme}://${cleanHost}`;
+}
+
+export function parseLocalUrl(url: string): { protocol: 'http' | 'https'; host: string; port: string } {
+  const fallback = { protocol: 'http' as const, host: 'localhost', port: '11434' };
+  const normalized = normalizeLocalUrl(url);
+  if (!normalized) return fallback;
+  try {
+    const parsed = new URL(normalized);
+    return {
+      protocol: parsed.protocol === 'https:' ? 'https' : 'http',
+      host: parsed.hostname || 'localhost',
+      port: parsed.port || '',
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Testes de conexão
+ * ------------------------------------------------------------------ */
+
+export type ApiTestResult = {
+  ok: boolean;
+  status?: number;
+  models: string[];
+  message: string;
+  latencyMs: number;
+  url: string;
+};
+
+const DEFAULT_TIMEOUT_MS = 6000;
+
+async function fetchWithTimeout(
+  url: string,
+  init: RequestInit,
+  timeoutMs: number,
+  externalSignal?: AbortSignal,
+): Promise<Response> {
+  const controller = new AbortController();
+  const onAbort = () => controller.abort();
+  if (externalSignal) {
+    if (externalSignal.aborted) controller.abort();
+    else externalSignal.addEventListener('abort', onAbort, { once: true });
+  }
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+    externalSignal?.removeEventListener('abort', onAbort);
+  }
+}
+
+function extractModels(payload: unknown): string[] {
+  if (!payload || typeof payload !== 'object') return [];
+  const data = (payload as { data?: unknown }).data;
+  if (!Array.isArray(data)) return [];
+  return data
+    .map(item => {
+      if (typeof item === 'string') return item;
+      if (item && typeof item === 'object' && typeof (item as { id?: unknown }).id === 'string') {
+        return (item as { id: string }).id;
+      }
+      return null;
+    })
+    .filter((value): value is string => Boolean(value));
+}
+
+/** Testa GET /v1/models em um servidor de IA local. */
+export async function testLocalAi(
+  url: string,
+  timeoutMs = DEFAULT_TIMEOUT_MS,
+  externalSignal?: AbortSignal,
+): Promise<ApiTestResult> {
+  const base = normalizeLocalUrl(url);
+  const startedAt = Date.now();
+  if (!base) {
+    return { ok: false, models: [], message: 'Informe o endereço da IA local (ex.: http://192.168.0.10:11434).', latencyMs: 0, url: '' };
+  }
+  const endpoint = `${base}/v1/models`;
+  try {
+    const response = await fetchWithTimeout(endpoint, { method: 'GET', headers: { Accept: 'application/json' } }, timeoutMs, externalSignal);
+    const latencyMs = Date.now() - startedAt;
+    if (!response.ok) {
+      return { ok: false, status: response.status, models: [], message: `O servidor respondeu ${response.status}. Confirme se a API /v1 está ativa.`, latencyMs, url: endpoint };
+    }
+    let models: string[] = [];
+    try {
+      models = extractModels(await response.json());
+    } catch {
+      models = [];
+    }
+    return {
+      ok: true,
+      status: response.status,
+      models,
+      message: models.length ? `IA local ativa · ${models.length} modelo(s) disponível(is).` : 'IA local ativa, mas nenhum modelo foi listado.',
+      latencyMs,
+      url: endpoint,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    return {
+      ok: false,
+      models: [],
+      message: aborted
+        ? 'Tempo esgotado ao contatar a IA local.'
+        : 'Não foi possível alcançar a IA local. No navegador o CORS pode bloquear; no Android use o IP da rede.',
+      latencyMs,
+      url: endpoint,
+    };
+  }
+}
+
+/** Testa GET /models na API do provedor escolhido. */
+export async function testProviderApi(config: ProviderAiConfig, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ApiTestResult> {
+  const baseUrl = (config.baseUrl || API_PROVIDERS[config.id]?.baseUrl || '').trim().replace(/\/+$/, '');
+  const startedAt = Date.now();
+  if (!baseUrl) {
+    return { ok: false, models: [], message: 'Informe a URL base do provedor.', latencyMs: 0, url: '' };
+  }
+  const endpoint = `${baseUrl}/models`;
+  if (!config.apiKey.trim()) {
+    return { ok: false, models: [], message: 'Cole a chave de API para testar.', latencyMs: 0, url: endpoint };
+  }
+  try {
+    const response = await fetchWithTimeout(
+      endpoint,
+      { method: 'GET', headers: { Accept: 'application/json', Authorization: `Bearer ${config.apiKey.trim()}` } },
+      timeoutMs,
+    );
+    const latencyMs = Date.now() - startedAt;
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, status: response.status, models: [], message: 'A chave foi recusada pelo provedor. Confira se copiou por completo.', latencyMs, url: endpoint };
+    }
+    if (response.status === 404) {
+      return { ok: false, status: response.status, models: [], message: 'Endpoint /models não encontrado. Confira a URL base.', latencyMs, url: endpoint };
+    }
+    if (!response.ok) {
+      return { ok: false, status: response.status, models: [], message: `O provedor respondeu ${response.status}.`, latencyMs, url: endpoint };
+    }
+    let models: string[] = [];
+    try {
+      models = extractModels(await response.json());
+    } catch {
+      models = [];
+    }
+    return {
+      ok: true,
+      status: response.status,
+      models,
+      message: models.length ? `Conexão validada · ${models.length} modelo(s) disponível(is).` : 'Conexão validada com o provedor.',
+      latencyMs,
+      url: endpoint,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    return {
+      ok: false,
+      models: [],
+      message: aborted ? 'Tempo esgotado ao contatar o provedor.' : 'Falha de rede ao contatar o provedor. Verifique a conexão.',
+      latencyMs,
+      url: endpoint,
+    };
+  }
+}
+
+/* ------------------------------------------------------------------ *
+ * Hook de detecção de IA local
+ * ------------------------------------------------------------------ */
+
+export type DetectedLocalServer = {
+  url: string;
+  host: string;
+  port: number;
+  protocol: 'http' | 'https';
+  name: string;
+  hint: string;
+  models: string[];
+  latencyMs: number;
+};
+
+export function useLocalAiDetection() {
+  const [servers, setServers] = useState<DetectedLocalServer[]>([]);
+  const [scanning, setScanning] = useState(false);
+  const [message, setMessage] = useState<string | null>(null);
+  const abortRef = useRef<AbortController | null>(null);
+
+  const scan = useCallback(async (hostInput?: string, protocol: 'http' | 'https' = 'http') => {
+    const host = (hostInput || 'localhost').trim().replace(/^https?:\/\//i, '').replace(/\/.*$/, '') || 'localhost';
+
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    setScanning(true);
+    setMessage('Procurando servidores de IA local…');
+    try {
+      const results = await Promise.all(
+        LOCAL_AI_CANDIDATES.map(async candidate => {
+          if (controller.signal.aborted) return null;
+          const url = `${protocol}://${host}:${candidate.port}`;
+          const result = await testLocalAi(url, 4000, controller.signal);
+          if (!result.ok) return null;
+          return {
+            url,
+            host,
+            port: candidate.port,
+            protocol,
+            name: candidate.name,
+            hint: candidate.hint,
+            models: result.models,
+            latencyMs: result.latencyMs,
+          } as DetectedLocalServer;
+        }),
+      );
+      if (controller.signal.aborted) return [];
+      const found = results
+        .filter((item): item is DetectedLocalServer => item !== null)
+        .sort((a, b) => a.latencyMs - b.latencyMs);
+      setServers(found);
+      setMessage(
+        found.length
+          ? `${found.length} servidor(es) encontrado(s).`
+          : 'Nenhum servidor de IA local respondeu. Confirme que ele está ativo e, no Android, use o IP da rede (ex.: 192.168.0.10).',
+      );
+      return found;
+    } finally {
+      if (abortRef.current === controller) abortRef.current = null;
+      setScanning(false);
+    }
+  }, []);
+
+  const cancel = useCallback(() => {
+    abortRef.current?.abort();
+    setScanning(false);
+  }, []);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  return { servers, scanning, message, scan, cancel };
+}
