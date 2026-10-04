@@ -53,6 +53,7 @@ export default function CodeScreen() {
   const [terminalLines, setTerminalLines] = useState<string[]>(['Terminal Cris · sandbox educacional segura', 'Digite help para ver comandos, run para testar e check para verificar o arquivo.']);
   const [aiMessage, setAiMessage] = useState('Olá, Cris. Posso explicar seu código, sugerir melhorias e criar exercícios. A IA local ainda será conectada em um Development Build Android.');
   const [savedAt, setSavedAt] = useState('Pronto para começar');
+  const [dirtyFileIds, setDirtyFileIds] = useState<Record<string, boolean>>({});
   const [isSustainable, setIsSustainable] = useState(true);
   const [crisMode, setCrisMode] = useState<'online' | 'local'>('local');
   const [executionOutput, setExecutionOutput] = useState('Pronto para executar o arquivo ativo.');
@@ -81,15 +82,54 @@ export default function CodeScreen() {
     });
   }, []);
 
-  const persistProject = (next: CodeProject) => {
+  const persistProject = (next: CodeProject, clearedDirtyFileId?: string) => {
     setProject(next);
     setSavedAt('Salvando…');
-    AsyncStorage.setItem(PROJECT_KEY, JSON.stringify(next)).then(() => setSavedAt('Salvo neste dispositivo'));
+    AsyncStorage.setItem(PROJECT_KEY, JSON.stringify(next)).then(() => {
+      setSavedAt('Salvo neste dispositivo');
+      if (clearedDirtyFileId) {
+        setDirtyFileIds(current => {
+          const nextDirty = { ...current };
+          delete nextDirty[clearedDirtyFileId];
+          return nextDirty;
+        });
+      }
+    });
   };
 
   const onChangeContent = (content: string) => {
     if (!selectedFile) return;
-    persistProject(updateProjectFile(project, selectedFile.id, content));
+    setDirtyFileIds(current => ({ ...current, [selectedFile.id]: true }));
+    persistProject(updateProjectFile(project, selectedFile.id, content), selectedFile.id);
+  };
+
+  const closeFile = (fileId: string) => {
+    if (project.files.length <= 1) return;
+    const file = project.files.find(item => item.id === fileId);
+    if (!file) return;
+
+    const performClose = () => {
+      const remainingFiles = project.files.filter(item => item.id !== fileId);
+      const nextSelectedId = remainingFiles[0]?.id ?? project.files[0].id;
+      const nextProject = { ...project, files: remainingFiles, updatedAt: new Date().toISOString() };
+      persistProject(nextProject, fileId);
+      setSelectedFileId(nextSelectedId);
+      setDirtyFileIds(current => {
+        const nextDirty = { ...current };
+        delete nextDirty[fileId];
+        return nextDirty;
+      });
+    };
+
+    if (!dirtyFileIds[fileId]) {
+      performClose();
+      return;
+    }
+
+    Alert.alert('Fechar arquivo?', `Há alterações em "${file.name}" que ainda não foram salvas. Deseja descartar?`, [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Descartar', style: 'destructive', onPress: performClose },
+    ]);
   };
 
   const runActiveFile = () => {
@@ -242,7 +282,7 @@ export default function CodeScreen() {
 
         <View style={[styles.editorPanel, isWide && styles.editorPanelWide]}>
           <View style={styles.editorTop}><View><Text style={styles.fileContext}>EDITOR · ARQUIVO ABERTO</Text><Text style={styles.editorTitle}>{selectedFile?.name ?? 'Nenhum arquivo'}</Text></View><View style={styles.editorActions}><Text style={styles.savedText}>{savedAt}</Text><TouchableOpacity onPress={runActiveFile} disabled={isRunning || !selectedFile} style={[styles.playButton, isRunning && styles.playButtonDisabled]} accessibilityRole="button" accessibilityLabel="Executar arquivo ativo"><Text style={styles.playButtonText}>{isRunning ? '…' : '▶ Play'}</Text></TouchableOpacity></View></View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabStrip}>{project.files.map(file => <TouchableOpacity key={file.id} onPress={() => setSelectedFileId(file.id)} style={[styles.fileTab, file.id === selectedFileId && styles.fileTabActive]} accessibilityRole="tab" accessibilityState={{ selected: file.id === selectedFileId }}><Text style={[styles.fileTabText, file.id === selectedFileId && styles.fileTabTextActive]}>{file.name}{file.id === selectedFileId ? ' •' : ''}</Text></TouchableOpacity>)}<TouchableOpacity onPress={addFile} style={styles.newTab} accessibilityRole="button"><Text style={styles.newTabText}>＋</Text></TouchableOpacity></ScrollView>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.tabStrip}>{project.files.map(file => <View key={file.id} style={[styles.fileTab, file.id === selectedFileId && styles.fileTabActive]}><TouchableOpacity onPress={() => setSelectedFileId(file.id)} style={styles.fileTabButton} accessibilityRole="tab" accessibilityState={{ selected: file.id === selectedFileId }}><Text style={[styles.fileTabText, file.id === selectedFileId && styles.fileTabTextActive]}>{file.name}{file.id === selectedFileId ? ' •' : ''}</Text></TouchableOpacity><TouchableOpacity onPress={() => closeFile(file.id)} style={[styles.tabCloseButton, file.id === selectedFileId && styles.tabCloseButtonActive]} accessibilityRole="button" accessibilityLabel={`Fechar arquivo ${file.name}`} hitSlop={8}><Text style={[styles.tabCloseText, file.id === selectedFileId && styles.tabCloseTextActive]}>×</Text></TouchableOpacity></View>)}<TouchableOpacity onPress={addFile} style={styles.newTab} accessibilityRole="button"><Text style={styles.newTabText}>＋</Text></TouchableOpacity></ScrollView>
           <View style={styles.codeToolbar}><Text style={styles.languageBadge}>{selectedFile?.language ?? 'texto'}</Text><Text style={styles.toolbarHint}>Edição local · autosave · Sandbox segura</Text></View>
           <View style={styles.monacoContainer}>
             <MonacoEditor
@@ -351,7 +391,7 @@ const styles = StyleSheet.create({
   addButtonText: { color: '#5B3CC4', fontSize: 12, fontWeight: '800' },
   fileRow: { flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 9, paddingHorizontal: 10, paddingVertical: 11 }, fileRowActive: { backgroundColor: '#F3F1FF' }, fileGlyph: { width: 22, height: 22, textAlign: 'center', paddingTop: 2, color: '#5B3CC4', backgroundColor: '#EEEBFF', borderRadius: 6, fontWeight: '800' }, fileName: { color: '#687088', fontSize: 13, fontWeight: '600' }, fileNameActive: { color: '#3346A8', fontWeight: '800' },
   sustainabilityBox: { borderTopWidth: 1, borderTopColor: '#EEF0F4', marginTop: 12, paddingTop: 14, position: 'relative' }, sustainabilityTitle: { color: '#172033', fontSize: 12, fontWeight: '800' }, sustainabilityText: { color: '#8290A8', fontSize: 11, marginTop: 4, paddingRight: 56 }, switch: { position: 'absolute', right: 0, top: 18, width: 42, height: 24, borderRadius: 12, backgroundColor: '#DDE2EA', padding: 3 }, switchOn: { backgroundColor: '#18865B' }, switchKnob: { width: 18, height: 18, borderRadius: 9, backgroundColor: '#FFFFFF' }, switchKnobOn: { alignSelf: 'flex-end' },
-  editorPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E3E7EE', borderRadius: 16, overflow: 'hidden' },   editorTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, padding: 16 }, editorActions: { alignItems: 'flex-end', flexDirection: 'row', gap: 10 }, playButton: { backgroundColor: '#18865B', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }, playButtonDisabled: { opacity: 0.6 }, playButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' }, tabStrip: { alignItems: 'center', backgroundColor: '#F1F3F7', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E3E7EE', paddingHorizontal: 8 }, fileTab: { borderRightWidth: 1, borderRightColor: '#E3E7EE', paddingHorizontal: 13, paddingVertical: 11 }, fileTabActive: { backgroundColor: '#FFFFFF', borderTopWidth: 2, borderTopColor: '#6B4DE6' }, fileTabText: { color: '#8290A8', fontSize: 12, fontWeight: '700' }, fileTabTextActive: { color: '#3346A8', fontWeight: '900' }, newTab: { paddingHorizontal: 12, paddingVertical: 9 }, newTabText: { color: '#5B3CC4', fontSize: 18, fontWeight: '900' }, outputHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 13 }, outputStatus: { color: '#18865B', fontSize: 10, fontWeight: '800' }, outputStatusError: { color: '#B3261E' }, outputBox: { backgroundColor: '#F8F9FA', borderBottomWidth: 1, borderBottomColor: '#E3E7EE', minHeight: 48, paddingHorizontal: 16, paddingVertical: 10 }, outputText: { color: '#46526A', fontFamily: 'monospace', fontSize: 12, lineHeight: 18 }, fileContext: { color: '#8290A8', fontSize: 10, fontWeight: '800', letterSpacing: 1.1 }, editorTitle: { color: '#172033', fontSize: 17, fontWeight: '800', marginTop: 4 }, savedText: { color: '#18865B', fontSize: 11, paddingTop: 6 }, codeToolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F8F9FA', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#EEF0F4', padding: 10 }, languageBadge: { color: '#5B3CC4', backgroundColor: '#EEEBFF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, fontWeight: '800' }, toolbarHint: { color: '#8290A8', fontSize: 11 }, codeInput: { minHeight: 310, padding: 16, color: '#24324A', backgroundColor: '#FBFCFE', fontFamily: 'monospace', fontSize: 14, lineHeight: 22 },
+  editorPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E3E7EE', borderRadius: 16, overflow: 'hidden' },   editorTop: { flexDirection: 'row', justifyContent: 'space-between', gap: 12, padding: 16 }, editorActions: { alignItems: 'flex-end', flexDirection: 'row', gap: 10 }, playButton: { backgroundColor: '#18865B', borderRadius: 8, paddingHorizontal: 12, paddingVertical: 8 }, playButtonDisabled: { opacity: 0.6 }, playButtonText: { color: '#FFFFFF', fontSize: 12, fontWeight: '900' }, tabStrip: { alignItems: 'center', backgroundColor: '#F1F3F7', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#E3E7EE', paddingHorizontal: 8 }, fileTab: { alignItems: 'center', borderRightWidth: 1, borderRightColor: '#E3E7EE', flexDirection: 'row', gap: 4, paddingHorizontal: 8, paddingVertical: 11 }, fileTabActive: { backgroundColor: '#FFFFFF', borderTopWidth: 2, borderTopColor: '#6B4DE6' }, fileTabButton: { paddingHorizontal: 5, paddingVertical: 4 }, fileTabText: { color: '#8290A8', fontSize: 12, fontWeight: '700' }, fileTabTextActive: { color: '#3346A8', fontWeight: '900' }, tabCloseButton: { alignItems: 'center', borderRadius: 6, height: 18, justifyContent: 'center', width: 18 }, tabCloseButtonActive: { backgroundColor: '#F1F3F7' }, tabCloseText: { color: '#8290A8', fontSize: 15, fontWeight: '700', lineHeight: 15 }, tabCloseTextActive: { color: '#3346A8' }, newTab: { paddingHorizontal: 12, paddingVertical: 9 }, newTabText: { color: '#5B3CC4', fontSize: 18, fontWeight: '900' }, outputHeader: { flexDirection: 'row', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 13 }, outputStatus: { color: '#18865B', fontSize: 10, fontWeight: '800' }, outputStatusError: { color: '#B3261E' }, outputBox: { backgroundColor: '#F8F9FA', borderBottomWidth: 1, borderBottomColor: '#E3E7EE', minHeight: 48, paddingHorizontal: 16, paddingVertical: 10 }, outputText: { color: '#46526A', fontFamily: 'monospace', fontSize: 12, lineHeight: 18 }, fileContext: { color: '#8290A8', fontSize: 10, fontWeight: '800', letterSpacing: 1.1 }, editorTitle: { color: '#172033', fontSize: 17, fontWeight: '800', marginTop: 4 }, savedText: { color: '#18865B', fontSize: 11, paddingTop: 6 }, codeToolbar: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: '#F8F9FA', borderTopWidth: 1, borderBottomWidth: 1, borderColor: '#EEF0F4', padding: 10 }, languageBadge: { color: '#5B3CC4', backgroundColor: '#EEEBFF', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 4, fontSize: 11, fontWeight: '800' }, toolbarHint: { color: '#8290A8', fontSize: 11 }, codeInput: { minHeight: 310, padding: 16, color: '#24324A', backgroundColor: '#FBFCFE', fontFamily: 'monospace', fontSize: 14, lineHeight: 22 },
   terminalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 16, borderTopWidth: 1, borderTopColor: '#E3E7EE' }, terminalTitle: { color: '#172033', fontWeight: '800', marginTop: 4 }, terminalDescription: { color: '#687088', fontSize: 11, lineHeight: 16, marginTop: 4, maxWidth: 560 }, terminalMode: { color: '#8290A8', fontSize: 10 }, terminalBox: { backgroundColor: '#172033', margin: 12, borderRadius: 12, padding: 12, minHeight: 170 }, terminalLine: { color: '#D8E2F2', fontFamily: 'monospace', fontSize: 12, lineHeight: 19 }, commandRow: { flexDirection: 'row', alignItems: 'center', marginTop: 8, borderTopWidth: 1, borderTopColor: '#30405C', paddingTop: 9, gap: 6 }, prompt: { color: '#8C7BFF', fontSize: 18 }, commandInput: { flex: 1, color: '#FFFFFF', fontFamily: 'monospace', fontSize: 12, paddingVertical: 4 }, runButton: { backgroundColor: '#6B4DE6', borderRadius: 7, paddingHorizontal: 10, paddingVertical: 8 }, runText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800' },
   aiPanel: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E3E7EE', borderRadius: 16, padding: 16 }, aiHeader: { flexDirection: 'row', gap: 10, alignItems: 'center' }, aiAvatar: { width: 38, height: 38, borderRadius: 19, backgroundColor: '#EEEBFF', alignItems: 'center', justifyContent: 'center' }, aiAvatarText: { color: '#5B3CC4', fontSize: 18, fontWeight: '900' }, aiName: { color: '#172033', fontWeight: '800' }, aiStatus: { color: '#18865B', fontSize: 11, marginTop: 2 }, aiIntro: { color: '#687088', fontSize: 12, lineHeight: 18, marginTop: 14 }, aiMessage: { backgroundColor: '#F7F6FF', borderLeftWidth: 3, borderLeftColor: '#6B4DE6', borderRadius: 8, height: 270, marginTop: 12 }, aiMessageContent: { padding: 12 }, aiMessageText: { color: '#3A4160', fontSize: 12, lineHeight: 18 }, aiKicker: { color: '#8290A8', fontSize: 10, fontWeight: '800', letterSpacing: 1.1, marginTop: 18, marginBottom: 8 }, aiAction: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 11, borderBottomWidth: 1, borderBottomColor: '#EEF0F4' }, aiActionIcon: { color: '#6B4DE6', fontSize: 17, width: 22, textAlign: 'center' }, aiActionText: { flex: 1, color: '#33405A', fontWeight: '700', fontSize: 13 }, chevron: { color: '#9AA4B5', fontSize: 20 },   offlineCard: { marginTop: 18, backgroundColor: '#F8F9FA', borderRadius: 10, padding: 12 }, offlineTitle: { color: '#172033', fontWeight: '800', fontSize: 12 }, offlineText: { color: '#687088', fontSize: 11, lineHeight: 17, marginTop: 5, marginBottom: 10 }, crisChatCard: { borderTopColor: '#EEF0F4', borderTopWidth: 1, marginTop: 18, paddingTop: 16 }, crisChatHeader: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between' }, crisChatTitle: { color: '#172033', fontSize: 15, fontWeight: '900', marginTop: 2 }, crisChatMode: { color: '#18865B', fontSize: 10, fontWeight: '800', marginTop: 4 }, crisChatHistory: { height: 270, marginTop: 11 }, crisChatHistoryContent: { gap: 8, paddingBottom: 4 }, crisBubble: { alignSelf: 'flex-start', backgroundColor: '#F3F1FF', borderRadius: 10, maxWidth: '92%', padding: 9 }, crisBubbleUser: { alignSelf: 'flex-end', backgroundColor: '#3346A8' }, crisBubbleText: { color: '#3A4160', fontSize: 12, lineHeight: 17 }, crisBubbleTextUser: { color: '#FFFFFF' }, crisChatComposer: { alignItems: 'flex-end', flexDirection: 'row', gap: 7, marginTop: 10 }, crisChatInput: { backgroundColor: '#F8F9FA', borderColor: '#DDE2EA', borderRadius: 9, borderWidth: 1, color: '#172033', flex: 1, fontSize: 12, minHeight: 38, paddingHorizontal: 10, paddingVertical: 8 }, crisChatSend: { backgroundColor: '#6B4DE6', borderRadius: 8, paddingHorizontal: 10, paddingVertical: 10 }, crisChatSendText: { color: '#FFFFFF', fontSize: 11, fontWeight: '900' },
 });
