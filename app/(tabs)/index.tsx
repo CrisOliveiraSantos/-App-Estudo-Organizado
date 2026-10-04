@@ -81,7 +81,7 @@ export default function HomeScreen() {
         <View style={styles.headerCopy}>
           <Text style={styles.overline}>ESTUDO ORGANIZADO · CRIS</Text>
           <Text style={styles.greeting}>Olá, Cris 👋</Text>
-          <Text style={styles.subtitle}>{openTasks.length ? `Você tem ${openTasks.length} ${openTasks.length === 1 ? 'passo pendente' : 'passos pendentes'} no seu plano.` : 'Seu plano está em dia. Que tal registrar o próximo objetivo?'}</Text><TouchableOpacity onPress={() => router.push('/code')} style={styles.codeShortcut} accessibilityRole="button" accessibilityLabel="Abrir Espaço Código e Cris"><View style={styles.codeShortcutMark}><Text style={styles.codeShortcutMarkText}>⌘</Text></View><View style={styles.codeShortcutCopy}><Text style={styles.codeShortcutTitle}>Espaço Código · Cris</Text><Text style={styles.codeShortcutText}>Editar, testar e aprender com segurança</Text></View><Text style={styles.codeShortcutArrow}>›</Text></TouchableOpacity>
+          <Text style={styles.subtitle}>{openTasks.length ? `Você tem ${openTasks.length} ${openTasks.length === 1 ? 'passo pendente' : 'passos pendentes'} no seu plano.` : 'Seu plano está em dia. Que tal registrar o próximo objetivo?'}</Text>
         </View>
         <TouchableOpacity accessibilityRole="button" accessibilityLabel="Abrir perfil" onPress={() => router.push('/profile')} activeOpacity={0.78} style={styles.avatar}><Text style={styles.avatarText}>C</Text></TouchableOpacity>
       </View>
@@ -91,7 +91,7 @@ export default function HomeScreen() {
         <View style={styles.creatorCopy}>
           <Text style={styles.creatorKicker}>AUTORIA DO PROJETO</Text>
           <Text style={styles.creatorTitle}>Pensado e construído por Cris</Text>
-          <Text style={styles.creatorText}>Um espaço para agilizar a faculdade com planejamento, editor de texto, editor de código, Cris online e recursos preparados para nuvem e uso local.</Text>
+          <Text style={styles.creatorText}>Um espaço para agilizar a faculdade com planejamento, editor de texto, Cris online e recursos preparados para nuvem e uso local.</Text>
           <View style={styles.creatorActions}>
             <TouchableOpacity onPress={() => router.push('/settings')} accessibilityRole="button" style={styles.creatorAbout}><Text style={styles.creatorAboutText}>Conheça o projeto</Text></TouchableOpacity>
             <TouchableOpacity onPress={() => Linking.openURL('mailto:cris.de.santos.tst@gmail.com')} accessibilityRole="button" style={styles.creatorContact}><Text style={styles.creatorContactText}>Falar com Cris</Text></TouchableOpacity>
@@ -190,13 +190,6 @@ function Legend({ color, label }: { color: string; label: string }) {
 const styles = StyleSheet.create({
   avatar: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderColor: '#D8D0FF', borderRadius: 18, borderWidth: 1, height: 52, justifyContent: 'center', width: 52 },
   avatarText: { color: academicColors.violet, fontSize: 21, fontWeight: '900' },
-  codeShortcut: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: '#DDE2EA', borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 10, marginTop: 14, maxWidth: 430, padding: 11 },
-  codeShortcutMark: { alignItems: 'center', backgroundColor: '#F0EEFF', borderRadius: 9, height: 32, justifyContent: 'center', width: 32 },
-  codeShortcutMarkText: { color: academicColors.violet, fontSize: 16, fontWeight: '900' },
-  codeShortcutCopy: { flex: 1 },
-  codeShortcutTitle: { color: '#24324A', fontSize: 12, fontWeight: '800' },
-  codeShortcutText: { color: '#687088', fontSize: 11, marginTop: 2 },
-  codeShortcutArrow: { color: academicColors.indigo, fontSize: 22, fontWeight: '700' },
   calendarArrow: { alignItems: 'center', backgroundColor: '#F0F3FA', borderRadius: 10, height: 34, justifyContent: 'center', width: 34 },
   calendarArrowText: { color: academicColors.indigo, fontSize: 25, fontWeight: '500', lineHeight: 28 },
   calendarCard: { padding: 14 },

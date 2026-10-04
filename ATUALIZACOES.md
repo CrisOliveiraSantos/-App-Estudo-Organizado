@@ -12,4 +12,6 @@
 - 2026-09-30 — Fase 3: layout IDE responsivo aplicado ao Espaço Código; arquivos à esquerda, editor com Terminal Cris no centro e painel da Cris à direita em telas >= 900 px; layout empilhado mantido no mobile. Play, troca de arquivos e lógica do Chat preservados.
 - 2026-09-30 — Fase 4A, Etapa 1: Monaco envolvido em contêiner `flex: 1`, altura `100%` e limites mínimos de 310 dp/0 de largura; teste manual pendente em `npx expo start --web --port 8081`.
 - 2026-09-30 — Fase 4A, Etapa 2: adicionado botão para importar múltiplos arquivos de texto, com leitura Web/nativa, detecção de linguagem, limite de 1 MB e rejeição de binários; botão de novo arquivo preservado. Teste manual pendente em `npx expo start --web --port 8081`.
+- 2026-10-04 — Removido da Home o atalho para o Espaço Código e sua descrição, pois o editor foi arquivado; os demais cards e atalhos foram preservados.
 - 2026-09-30 — Corrigido `app/(tabs)/code.tsx`: restaurado o import de hooks React removido, evitando `ReferenceError: useState is not defined`.
+- 2026-10-04 — Removido o botão “Ver espaço Código” das configurações da Cris; mantidas as opções de armazenamento e modelo local.

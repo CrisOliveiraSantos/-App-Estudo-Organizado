@@ -28,7 +28,6 @@ export default function TabLayout() {
     >
       <Tabs.Screen name="index" options={{ title: 'Hoje', tabBarIcon: ({ color }) => <IconSymbol size={24} name="house.fill" color={color} /> }} />
       <Tabs.Screen name="editor" options={{ title: 'Editor', tabBarIcon: ({ color }) => <IconSymbol size={24} name="note.text" color={color} /> }} />
-      <Tabs.Screen name="code" options={{ title: 'Código', tabBarIcon: ({ color }) => <IconSymbol size={24} name="chevron.right" color={color} /> }} />
       <Tabs.Screen name="planning" options={{ title: 'Planejamento', tabBarIcon: ({ color }) => <IconSymbol size={24} name="chart.bar.fill" color={color} /> }} />
       <Tabs.Screen name="library" options={{ title: 'Biblioteca', tabBarIcon: ({ color }) => <IconSymbol size={24} name="book.fill" color={color} /> }} />
       <Tabs.Screen name="chat" options={{ title: 'Conversas', tabBarIcon: ({ color }) => <IconSymbol size={24} name="bubble.left.and.bubble.right.fill" color={color} /> }} />

@@ -92,7 +92,6 @@ export default function RootLayout() {
             <Stack.Screen name="subject" />
             <Stack.Screen name="oauth/callback" />
             <Stack.Screen name="auth/confirm" />
-            <Stack.Screen name="code" />
             <Stack.Screen name="ai-settings" />
           </Stack>
           <StatusBar style="auto" />
