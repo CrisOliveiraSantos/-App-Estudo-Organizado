@@ -21,7 +21,36 @@ export default function LibraryScreen() {
   const [showFolderForm, setShowFolderForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [draftTitle, setDraftTitle] = useState('');
-  const pickPdf = async () => { const result = await DocumentPicker.getDocumentAsync({ type: 'application/pdf', copyToCacheDirectory: true }); if (!result.canceled) { const asset = result.assets[0]; const safeName = asset.name.replace(/[^a-zA-Z0-9._-]/g, '_'); const permanentUri = `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}${Date.now()}-${safeName}`; try { await FileSystem.copyAsync({ from: asset.uri, to: permanentUri }); addPdf(asset.name, permanentUri); Alert.alert('PDF importado', 'O arquivo foi copiado para o armazenamento persistente e está disponível para visualização.'); } catch { addPdf(asset.name, asset.uri); Alert.alert('PDF importado', 'O arquivo foi registrado. Se ele não abrir após reiniciar, importe-o novamente.'); } } };
+  const pickPdf = async () => {
+    const result = await DocumentPicker.getDocumentAsync({
+      type: 'application/pdf',
+      copyToCacheDirectory: true,
+      base64: Platform.OS === 'web',
+    });
+    if (result.canceled) return;
+
+    const asset = result.assets[0];
+    if (Platform.OS === 'web') {
+      if (!asset.base64) {
+        Alert.alert('Falha ao importar PDF', 'O navegador não forneceu os dados do arquivo.');
+        return;
+      }
+      addPdf(asset.name, asset.base64);
+      Alert.alert('PDF importado', 'O arquivo foi salvo para visualização e extração de texto.');
+      return;
+    }
+
+    const safeName = asset.name.replace(/[^a-zA-Z0-9._-]/g, '_');
+    const permanentUri = `${FileSystem.documentDirectory ?? FileSystem.cacheDirectory}${Date.now()}-${safeName}`;
+    try {
+      await FileSystem.copyAsync({ from: asset.uri, to: permanentUri });
+      addPdf(asset.name, permanentUri);
+      Alert.alert('PDF importado', 'O arquivo foi copiado para o armazenamento persistente e está disponível para visualização.');
+    } catch {
+      addPdf(asset.name, asset.uri);
+      Alert.alert('PDF importado', 'O arquivo foi registrado. Se ele não abrir após reiniciar, importe-o novamente.');
+    }
+  };
   const pickImage = async () => { const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 10, quality: 1 }); if (!result.canceled) { try { const pages = []; for (const [index, asset] of result.assets.entries()) { const imageBase64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 }); const recognized = await ocrMutation.mutateAsync({ imageBase64, mimeType: asset.mimeType ?? 'image/jpeg' }); pages.push({ id: `${Date.now()}-${index}`, pageNumber: index + 1, imageUri: asset.uri, extractedText: recognized.text || '[Nenhum texto legível]', ocrStatus: 'complete' as const }); } addOcrDocument(`Documento OCR — ${new Date().toLocaleDateString('pt-BR')}`, pages); Alert.alert('Documento reconhecido', `${pages.length} página(s) foram transcritas e salvas na Biblioteca.`); } catch { Alert.alert('OCR indisponível', 'Verifique sua conexão e tente novamente com imagens mais nítidas.'); } } };
   const shown = useMemo(() => notes.filter(note => (filter === 'Todos' || (filter === 'Notas' ? note.kind === 'note' : note.kind === 'pdf')) && [note.title, note.content, note.folder, note.selectedText].join(' ').toLowerCase().includes(query.toLowerCase())).sort((left, right) => left.title.localeCompare(right.title, 'pt-BR')), [notes, filter, query]);
   const finishRename = () => { if (editingId && draftTitle.trim()) renameNote(editingId, draftTitle.trim()); setEditingId(null); setDraftTitle(''); };

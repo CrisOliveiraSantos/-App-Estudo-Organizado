@@ -15,3 +15,4 @@
 - 2026-10-04 — Removido da Home o atalho para o Espaço Código e sua descrição, pois o editor foi arquivado; os demais cards e atalhos foram preservados.
 - 2026-09-30 — Corrigido `app/(tabs)/code.tsx`: restaurado o import de hooks React removido, evitando `ReferenceError: useState is not defined`.
 - 2026-10-04 — Removido o botão “Ver espaço Código” das configurações da Cris; mantidas as opções de armazenamento e modelo local.
+- 2026-10-04 — Corrigida a extração de PDF na Web: importação preserva o Base64 do DocumentPicker e o OCR lê Data URL/blob sem usar `expo-file-system/legacy`; leitura nativa mantida.
