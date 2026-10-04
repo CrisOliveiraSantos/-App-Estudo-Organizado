@@ -60,6 +60,7 @@ logs
 Thumbs.db
 
 # Build files
+dist-github-pages/
 *.tgz
 *.tar.gz
 .cache/
