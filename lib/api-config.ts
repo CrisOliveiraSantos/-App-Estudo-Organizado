@@ -285,6 +285,29 @@ export async function saveAiConfig(next: AiConfig): Promise<AiConfig> {
   return normalized;
 }
 
+/* ------------------------------------------------------------------ *
+ * Fase 1B — acesso à configuração sem React e prontidão de cada alvo
+ * ------------------------------------------------------------------ */
+
+/**
+ * Config atual sem depender de React (cache em memória ou armazenamento seguro).
+ * Usada por `lib/cris-client.ts` para chamar a IA direto do dispositivo.
+ */
+export async function getAiConfig(): Promise<AiConfig> {
+  return ensureLoaded();
+}
+
+/** Um provedor de terceiros está pronto para uso direto pelo dispositivo? (chave + URL base) */
+export function isProviderConfigured(provider: ProviderAiConfig): boolean {
+  const baseUrl = (provider.baseUrl || API_PROVIDERS[provider.id].baseUrl).trim();
+  return Boolean(provider.apiKey.trim()) && Boolean(baseUrl);
+}
+
+/** A IA local está configurada (endereço salvo) e pode ser chamada direto do dispositivo? */
+export function isLocalConfigured(local: LocalAiConfig): boolean {
+  return Boolean(normalizeLocalUrl(local.url));
+}
+
 export function useApiConfig() {
   const [config, setConfig] = useState<AiConfig>(current ?? DEFAULT_AI_CONFIG);
   const [loading, setLoading] = useState(!current);
