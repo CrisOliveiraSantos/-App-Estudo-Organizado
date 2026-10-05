@@ -90,10 +90,16 @@ export const LOCAL_AI_PORTS: number[] = LOCAL_AI_CANDIDATES.map(candidate => can
  * Configuração persistida
  * ------------------------------------------------------------------ */
 
+/** Resultado do último teste de conexão: nunca testado (null/untested), sucesso ou falha. */
+export type AiTestStatus = 'success' | 'error' | 'untested';
+
 export type LocalAiConfig = {
   url: string;
   backend: string | null;
   model: string | null;
+  lastTestStatus: AiTestStatus | null;
+  lastTestedAt: string | null;
+  lastTestedTarget: string | null;
 };
 
 export type ProviderAiConfig = {
@@ -101,6 +107,9 @@ export type ProviderAiConfig = {
   apiKey: string;
   baseUrl: string;
   model: string;
+  lastTestStatus: AiTestStatus | null;
+  lastTestedAt: string | null;
+  lastTestedTarget: string | null;
 };
 
 export type AiConfig = {
@@ -114,18 +123,57 @@ export const AI_API_CONFIG_KEY = '@estudo-organizado/ai-api-config-v1';
 
 export const DEFAULT_AI_CONFIG: AiConfig = {
   mode: 'local',
-  local: { url: '', backend: null, model: null },
+  local: { url: '', backend: null, model: null, lastTestStatus: null, lastTestedAt: null, lastTestedTarget: null },
   provider: {
     id: 'groq',
     apiKey: '',
     baseUrl: API_PROVIDERS.groq.baseUrl,
     model: API_PROVIDERS.groq.defaultModel,
+    lastTestStatus: null,
+    lastTestedAt: null,
+    lastTestedTarget: null,
   },
   updatedAt: null,
 };
 
 function isProviderId(value: unknown): value is ApiProviderId {
   return typeof value === 'string' && PROVIDER_ORDER.includes(value as ApiProviderId);
+}
+
+function normalizeTestStatus(value: unknown): AiTestStatus | null {
+  return value === 'success' || value === 'error' || value === 'untested' ? value : null;
+}
+
+function normalizeText(value: unknown): string | null {
+  return typeof value === 'string' ? value : null;
+}
+
+/** Dados necessários para testar um provedor (sem o histórico do último teste). */
+export type TestableProviderConfig = Pick<ProviderAiConfig, 'id' | 'apiKey' | 'baseUrl' | 'model'>;
+
+/** Identidade testável de um provedor: muda se id, URL base, modelo ou chave mudarem. */
+export function providerTestTarget(config: TestableProviderConfig): string {
+  return `${config.id}|${config.baseUrl}|${config.model}|${config.apiKey}`;
+}
+
+/** Estado real do último teste da IA local (só vale quando o alvo testado é o alvo salvo). */
+export function localTestState(local: LocalAiConfig): AiTestStatus | null {
+  return local.lastTestedTarget === local.url ? local.lastTestStatus : null;
+}
+
+/** Estado real do último teste do provedor (só vale quando o alvo testado é o alvo salvo). */
+export function providerTestState(provider: ProviderAiConfig): AiTestStatus | null {
+  return provider.lastTestedTarget === providerTestTarget(provider) ? provider.lastTestStatus : null;
+}
+
+/** A IA local está realmente ativa? (endereço salvo + teste bem-sucedido do mesmo endereço) */
+export function isLocalAiReady(local: LocalAiConfig): boolean {
+  return Boolean(local.url.trim()) && localTestState(local) === 'success';
+}
+
+/** A API de terceiros está realmente ativa? (chave salva + teste bem-sucedido da mesma configuração) */
+export function isProviderAiReady(provider: ProviderAiConfig): boolean {
+  return Boolean(provider.apiKey.trim()) && providerTestState(provider) === 'success';
 }
 
 function normalizeConfig(raw: unknown): AiConfig {
@@ -139,12 +187,18 @@ function normalizeConfig(raw: unknown): AiConfig {
       url: typeof localSource.url === 'string' ? localSource.url : '',
       backend: typeof localSource.backend === 'string' ? localSource.backend : null,
       model: typeof localSource.model === 'string' ? localSource.model : null,
+      lastTestStatus: normalizeTestStatus(localSource.lastTestStatus),
+      lastTestedAt: normalizeText(localSource.lastTestedAt),
+      lastTestedTarget: normalizeText(localSource.lastTestedTarget),
     },
     provider: {
       id,
       apiKey: typeof providerSource.apiKey === 'string' ? providerSource.apiKey : '',
       baseUrl: typeof providerSource.baseUrl === 'string' && providerSource.baseUrl ? providerSource.baseUrl : API_PROVIDERS[id].baseUrl,
       model: typeof providerSource.model === 'string' && providerSource.model ? providerSource.model : API_PROVIDERS[id].defaultModel,
+      lastTestStatus: normalizeTestStatus(providerSource.lastTestStatus),
+      lastTestedAt: normalizeText(providerSource.lastTestedAt),
+      lastTestedTarget: normalizeText(providerSource.lastTestedTarget),
     },
     updatedAt: typeof source.updatedAt === 'string' ? source.updatedAt : null,
   };
@@ -416,7 +470,7 @@ export async function testLocalAi(
 }
 
 /** Testa GET /models na API do provedor escolhido. */
-export async function testProviderApi(config: ProviderAiConfig, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ApiTestResult> {
+export async function testProviderApi(config: TestableProviderConfig, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ApiTestResult> {
   const baseUrl = (config.baseUrl || API_PROVIDERS[config.id]?.baseUrl || '').trim().replace(/\/+$/, '');
   const startedAt = Date.now();
   if (!baseUrl) {

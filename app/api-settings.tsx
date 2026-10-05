@@ -1,22 +1,29 @@
 import { router } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { AcademicButton, AcademicPill, academicColors } from '@/components/academic/design-system';
+import { AcademicButton, AcademicPill, academicColors, type AcademicTone } from '@/components/academic/design-system';
 import { ScreenContainer } from '@/components/screen-container';
 import {
   API_PROVIDERS,
   PROVIDER_ORDER,
   buildLocalUrl,
+  isLocalAiReady,
+  isProviderAiReady,
+  localTestState,
   parseLocalUrl,
+  providerTestState,
+  providerTestTarget,
   testLocalAi,
   testProviderApi,
   useApiConfig,
   useLocalAiDetection,
+  type AiTestStatus,
   type ApiProviderId,
   type ApiTestResult,
   type DetectedLocalServer,
   type LocalAiConfig,
   type ProviderAiConfig,
+  type TestableProviderConfig,
 } from '@/lib/api-config';
 
 type LocalForm = { protocol: 'http' | 'https'; host: string; port: string };
@@ -30,6 +37,24 @@ const DEFAULT_PROVIDER_FORM: ProviderForm = {
   model: API_PROVIDERS.groq.defaultModel,
 };
 
+type SectionBadge = { label: string; tone: AcademicTone };
+
+/** "ativo" só com teste bem-sucedido; "não configurado" sem alvo; o resto é "configurado, não testado". */
+function badgeFor(configured: boolean, state: AiTestStatus | null): SectionBadge {
+  if (!configured) return { label: 'não configurado', tone: 'neutral' };
+  if (state === 'success') return { label: 'ativo', tone: 'success' };
+  if (state === 'error') return { label: 'falha no último teste', tone: 'warning' };
+  return { label: 'configurado, não testado', tone: 'warning' };
+}
+
+function formatTestedAt(value: string | null): string {
+  if (!value) return '';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '';
+  const pad = (input: number) => String(input).padStart(2, '0');
+  return `${pad(date.getDate())}/${pad(date.getMonth() + 1)} às ${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 export default function ApiSettingsScreen() {
   const { config, loading, saveLocal, saveProvider, setMode } = useApiConfig();
   const { servers, scanning, message: scanMessage, scan } = useLocalAiDetection();
@@ -41,6 +66,7 @@ export default function ApiSettingsScreen() {
   const [testingLocal, setTestingLocal] = useState(false);
   const [testingProvider, setTestingProvider] = useState(false);
   const [localResult, setLocalResult] = useState<ApiTestResult | null>(null);
+  const [localHint, setLocalHint] = useState<string | null>(null);
   const [providerResult, setProviderResult] = useState<ApiTestResult | null>(null);
   const [status, setStatus] = useState('Configuração somente neste dispositivo');
 
@@ -59,20 +85,49 @@ export default function ApiSettingsScreen() {
 
   const providerPreset = API_PROVIDERS[providerForm.id];
   const localUrl = buildLocalUrl(localForm.protocol, localForm.host, localForm.port);
+  const providerFormTarget = providerTestTarget({
+    id: providerForm.id,
+    apiKey: providerForm.apiKey.trim(),
+    baseUrl: providerForm.baseUrl.trim(),
+    model: providerForm.model.trim(),
+  });
+
+  const localActive = isLocalAiReady(config.local);
+  const providerActive = isProviderAiReady(config.provider);
+  const localBadge = badgeFor(Boolean(config.local.url.trim()), localTestState(config.local));
+  const providerBadge = badgeFor(Boolean(config.provider.apiKey.trim()), providerTestState(config.provider));
+  const localChanged = localUrl !== config.local.url;
+  const providerChanged = providerFormTarget !== providerTestTarget(config.provider);
+
+  const modeWarning =
+    config.mode === 'local'
+      ? localActive
+        ? null
+        : 'Modo local selecionado, mas nenhuma IA local está ativa. Detecte um servidor e clique em “Testar” na seção IA Local.'
+      : providerActive
+        ? null
+        : 'Modo API selecionado, mas nenhuma chave está ativa. Salve a chave e clique em “Testar” na seção API de Terceiros.';
 
   const runLocalTest = useCallback(async () => {
     setTestingLocal(true);
     setLocalResult(null);
+    setLocalHint(null);
     const result = await testLocalAi(localUrl);
     setLocalResult(result);
     setStatus(result.message);
     setTestingLocal(false);
-  }, [localUrl]);
+    await saveLocal({
+      ...config.local,
+      lastTestStatus: result.ok ? 'success' : 'error',
+      lastTestedAt: new Date().toISOString(),
+      lastTestedTarget: localUrl,
+    });
+  }, [config.local, localUrl, saveLocal]);
 
   const runProviderTest = useCallback(async () => {
     setTestingProvider(true);
     setProviderResult(null);
-    const payload: ProviderAiConfig = {
+    const payload: TestableProviderConfig = {
       id: providerForm.id,
       apiKey: providerForm.apiKey,
       baseUrl: providerForm.baseUrl,
@@ -82,17 +137,31 @@ export default function ApiSettingsScreen() {
     setProviderResult(result);
     setStatus(result.message);
     setTestingProvider(false);
-  }, [providerForm]);
+    await saveProvider({
+      ...config.provider,
+      lastTestStatus: result.ok ? 'success' : 'error',
+      lastTestedAt: new Date().toISOString(),
+      lastTestedTarget: providerTestTarget({
+        id: providerForm.id,
+        apiKey: providerForm.apiKey.trim(),
+        baseUrl: providerForm.baseUrl.trim(),
+        model: providerForm.model.trim(),
+      }),
+    });
+  }, [config.provider, providerForm, saveProvider]);
 
   const persistLocal = useCallback(async () => {
     const next: LocalAiConfig = {
       url: localUrl,
       backend: selectedServer?.name ?? config.local.backend,
       model: selectedServer?.models[0] ?? config.local.model,
+      lastTestStatus: config.local.lastTestStatus,
+      lastTestedAt: config.local.lastTestedAt,
+      lastTestedTarget: config.local.lastTestedTarget,
     };
     await saveLocal(next);
     setStatus('Preferências de IA local salvas somente neste dispositivo.');
-  }, [config.local.backend, config.local.model, localUrl, saveLocal, selectedServer]);
+  }, [config.local, localUrl, saveLocal, selectedServer]);
 
   const persistProvider = useCallback(async () => {
     const next: ProviderAiConfig = {
@@ -100,22 +169,20 @@ export default function ApiSettingsScreen() {
       apiKey: providerForm.apiKey.trim(),
       baseUrl: providerForm.baseUrl.trim(),
       model: providerForm.model.trim(),
+      lastTestStatus: config.provider.lastTestStatus,
+      lastTestedAt: config.provider.lastTestedAt,
+      lastTestedTarget: config.provider.lastTestedTarget,
     };
     await saveProvider(next);
     setStatus(`Chave do ${providerPreset.label} salva somente neste dispositivo.`);
-  }, [providerForm, providerPreset.label, saveProvider]);
+  }, [config.provider, providerForm, providerPreset.label, saveProvider]);
 
   const selectServer = useCallback((server: DetectedLocalServer) => {
     setSelectedServer(server);
     setLocalForm({ protocol: server.protocol, host: server.host, port: String(server.port) });
-    setLocalResult({
-      ok: true,
-      status: 200,
-      models: server.models,
-      message: `${server.name} detectado em ${server.latencyMs} ms.`,
-      latencyMs: server.latencyMs,
-      url: `${server.url}/v1/models`,
-    });
+    setLocalResult(null);
+    setLocalHint(`${server.name} detectado em ${server.latencyMs} ms — clique em “Testar” para validar a conexão.`);
+    setStatus(`${server.name} detectado em ${server.latencyMs} ms. Clique em “Testar” para validar a conexão.`);
   }, []);
 
   const changeProvider = useCallback((id: ApiProviderId) => {
@@ -166,6 +233,7 @@ export default function ApiSettingsScreen() {
               { id: 'provider', label: 'API de terceiros', detail: 'Groq, Gemini, OpenAI ou OpenRouter' },
             ] as const).map(option => {
               const active = config.mode === option.id;
+              const operational = option.id === 'local' ? localActive : providerActive;
               return (
                 <TouchableOpacity
                   key={option.id}
@@ -176,16 +244,25 @@ export default function ApiSettingsScreen() {
                 >
                   <Text style={[styles.modeTitle, active && styles.modeTitleActive]}>{option.label}</Text>
                   <Text style={styles.modeDetail}>{option.detail}</Text>
+                  <Text style={[styles.modeState, operational ? styles.modeStateOk : styles.modeStateWarn]}>
+                    {operational ? '● ativa agora' : '○ não ativa'}
+                  </Text>
                 </TouchableOpacity>
               );
             })}
           </View>
+          {modeWarning ? (
+            <View style={styles.warn}>
+              <Text style={styles.warnTitle}>Modo escolhido ainda não está operante</Text>
+              <Text style={styles.warnText}>{modeWarning}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={styles.section}>
           <View style={styles.sectionHead}>
             <Text style={styles.sectionTitle}>IA Local</Text>
-            <AcademicPill label={config.mode === 'local' ? 'ativo' : 'disponível'} tone={config.mode === 'local' ? 'success' : 'neutral'} />
+            <AcademicPill label={localBadge.label} tone={localBadge.tone} />
           </View>
           <Text style={styles.sectionHint}>
             Busca em portas conhecidas (11434, 1234, 5001, 8000, 8080, 5000, 11435) e permite ajustar o endereço.
@@ -270,7 +347,13 @@ export default function ApiSettingsScreen() {
             <AcademicButton label="Testar" tone="ghost" onPress={() => void runLocalTest()} disabled={testingLocal || !localUrl} />
             <AcademicButton label="Salvar IA local" tone="violet" onPress={() => void persistLocal()} disabled={!localUrl} />
           </View>
-          <TestFeedback result={localResult} testing={testingLocal} />
+          <TestFeedback result={localResult} testing={testingLocal} hint={localHint} />
+          {config.local.lastTestedAt ? (
+            <Text style={styles.helper}>
+              Último teste: {formatTestedAt(config.local.lastTestedAt)}
+              {localChanged ? ' · alterações não salvas' : ''}
+            </Text>
+          ) : null}
 
           <View style={styles.warn}>
             <Text style={styles.warnTitle}>Aviso sobre CORS (navegador)</Text>
@@ -285,7 +368,7 @@ export default function ApiSettingsScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHead}>
             <Text style={styles.sectionTitle}>API de Terceiros</Text>
-            <AcademicPill label={config.mode === 'provider' ? 'ativo' : 'disponível'} tone={config.mode === 'provider' ? 'success' : 'neutral'} />
+            <AcademicPill label={providerBadge.label} tone={providerBadge.tone} />
           </View>
           <Text style={styles.sectionHint}>Use uma chave própria. O app só envia a chave para o provedor escolhido.</Text>
 
@@ -374,6 +457,13 @@ export default function ApiSettingsScreen() {
             />
           </View>
           <TestFeedback result={providerResult} testing={testingProvider} />
+          {config.provider.lastTestedAt ? (
+            <Text style={styles.helper}>
+              Último teste: {formatTestedAt(config.provider.lastTestedAt)}
+              {providerChanged ? ' · alterações não salvas' : ''}
+            </Text>
+          ) : null}
+          <Text style={styles.helper}>A chave não é gravada pelo botão “Testar” — só pelo “Salvar”.</Text>
 
           <View style={styles.warn}>
             <Text style={styles.warnTitle}>Segurança</Text>
@@ -390,7 +480,7 @@ export default function ApiSettingsScreen() {
   );
 }
 
-function TestFeedback({ result, testing }: { result: ApiTestResult | null; testing: boolean }) {
+function TestFeedback({ result, testing, hint }: { result: ApiTestResult | null; testing: boolean; hint?: string | null }) {
   if (testing) {
     return (
       <View style={[styles.feedback, styles.feedbackNeutral]}>
@@ -398,7 +488,14 @@ function TestFeedback({ result, testing }: { result: ApiTestResult | null; testi
       </View>
     );
   }
-  if (!result) return null;
+  if (!result) {
+    if (!hint) return null;
+    return (
+      <View style={[styles.feedback, styles.feedbackNeutral]}>
+        <Text style={styles.feedbackText}>{hint}</Text>
+      </View>
+    );
+  }
   return (
     <View style={[styles.feedback, result.ok ? styles.feedbackOk : styles.feedbackError]}>
       <Text style={[styles.feedbackTitle, { color: result.ok ? academicColors.success : academicColors.danger }]}>
@@ -438,6 +535,9 @@ const styles = StyleSheet.create({
   modeTitle: { color: academicColors.ink, fontSize: 14, fontWeight: '800' },
   modeTitleActive: { color: academicColors.violet },
   modeDetail: { color: academicColors.muted, fontSize: 11, lineHeight: 16, marginTop: 3 },
+  modeState: { fontSize: 11, fontWeight: '800', marginTop: 6 },
+  modeStateOk: { color: academicColors.success },
+  modeStateWarn: { color: academicColors.warning },
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 },
   helper: { color: academicColors.muted, fontSize: 12, lineHeight: 18 },
   serverList: { gap: 8, marginTop: 4 },
