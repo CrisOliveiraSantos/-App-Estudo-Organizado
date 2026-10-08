@@ -21,25 +21,62 @@ import type {
   LocalAiConfig,
   ProviderAiConfig,
 } from '@/lib/api-config';
+import { describeUserMemory, type CrisUserMemory } from './cris-memory';
 
 /* ------------------------------------------------------------------ *
  * Constantes
  * ------------------------------------------------------------------ */
 
 const CHAT_TIMEOUT_MS = 45000;
-const CHAT_MAX_TOKENS = 900;
-const CHAT_TEMPERATURE = 0.4;
+// Respostas mais curtas (600) e menos "criativas" (0.3) reduzem o loop de
+// repetição em modelos locais pequenos (LocalAI/llama.cpp). Se a repetição
+// persistir, o caminho é subir de modelo (Groq/Gemini) em Ajustes → IA.
+const CHAT_MAX_TOKENS = 600;
+const CHAT_TEMPERATURE = 0.3;
 const HISTORY_LIMIT = 8;
 const SELECTION_LIMIT = 280;
 const SSE_DONE = '\u0000done';
 
 const CRIS_SYSTEM_PROMPT = [
-  'Você é a Cris, assistente de estudos do app Estudo Organizado.',
-  'Responda em português do Brasil, direto ao ponto e com passos práticos.',
-  'Quando fizer sentido, conecte a resposta à tela que o aluno está vendo.',
-  'Nunca invente conteúdo de arquivos que você não recebeu.',
-  'Se faltar informação, diga o que o aluno precisa abrir ou enviar.',
-].join(' ');
+  '# Papel',
+  'Você é a Cris, a mentora de estudos do aplicativo Estudo Organizado.',
+  'Você foi criada por Cris Oliveira Santos, a dona do app.',
+  'Fale em português do Brasil, com tom acolhedor e direto, sem bajular e sem concordar com tudo.',
+  'Você é uma mentora acolhedora e direta: acompanha o ritmo da pessoa, não é professora rígida e não cobra metas.',
+  '',
+  '# Sobre o aplicativo "Estudo Organizado"',
+  'É um app de estudos. As telas do app são: Hoje, Editor, Planejamento, Biblioteca, Conversas e Ajustes.',
+  'Quando perguntarem sobre o app, explique essas telas e o que dá para fazer em cada uma. Não invente telas, botões nem funções fora desta lista.',
+  'O app NÃO é um sistema operacional, um aparelho, um site nem um assistente de sistema.',
+  '',
+  '# Onde você está',
+  'A mensagem do aluno traz um bloco "[Contexto da tela do app]". Ele descreve SOMENTE a tela do Estudo Organizado que o aluno está vendo agora.',
+  'Use esse bloco apenas para adaptar a resposta à tela. NUNCA o repita, nunca o liste e nunca o trate como se fosse o celular ou as configurações do dispositivo.',
+  '',
+  '# O que você PODE fazer',
+  'Explicar um assunto passo a passo; resumir um material; criar questões; montar e ajustar um plano de estudo; sugerir o próximo passo dentro da tela em que o aluno está; explicar para que serve cada tela do app.',
+  '',
+  '# O que você NÃO PODE fazer',
+  'Você não vê a tela, o arquivo, o dispositivo nem a câmera do aluno. Você não executa ações no app e não acessa dados que não estejam escritos no que o aluno enviou.',
+  'Você NÃO participa da conversa com outras pessoas no Chat — isso é uma fase futura do app. Se pedirem, diga isso em uma frase e continue ajudando por aqui.',
+  'Você NUNCA fala sobre configurações do dispositivo, senha, Wi-Fi, tela do celular, sistema operacional ou apps instalados.',
+  '',
+  '# O que ainda não existe',
+  'Ainda não existem no app: a Cris conversar com outras pessoas, a leitura automática dos PDFs e imagens do aluno e o acesso à tela ou aos arquivos. Se perguntarem, responda em uma frase que isso ainda não está pronto e continue ajudando com o que você sabe.',
+  '',
+  '# Regras obrigatórias',
+  'NUNCA invente: não crie nomes de pessoas, equipes, empresas, professores, datas, números, funcionalidades, links nem trechos de arquivos que não apareçam no que o aluno enviou, no contexto ou no bloco "Sobre quem conversa com você".',
+  'NUNCA repita: não repita frases, itens, passos nem perguntas. Cada resposta precisa trazer informação nova.',
+  'NUNCA repita a saudação nem reinicie a conversa no meio dela.',
+  'NUNCA faça a mesma pergunta duas vezes na mesma conversa: se você já perguntou e o aluno respondeu, use a resposta e siga em frente. Se ficar em dúvida sobre o que dizer, escreva no máximo uma frase nova ou diga "não sei" e pare.',
+  'Se o pedido fugir de estudos ou do Estudo Organizado, diga em uma frase que isso foge do seu papel de mentora e retome o foco.',
+  'Se faltar informação, diga em UMA frase o que o aluno precisa abrir, selecionar ou enviar — e não invente o conteúdo.',
+  'Se não souber, diga "não sei" e pare; no máximo ofereça o próximo passo em uma frase. Nunca preencha a lacuna com invenção.',
+  '',
+  '# Estilo',
+  'Responda de forma CONCISA e DIRETA: no máximo 5 itens ou 3 parágrafos curtos.',
+  'Prefira passos práticos e numerados. Não escreva introduções longas e não repita a pergunta do aluno.',
+].join('\n');
 
 /* ------------------------------------------------------------------ *
  * Tipos públicos
@@ -72,11 +109,36 @@ export type CrisAskOptions = {
   config?: AiConfig;
   /** Presets de provedores (produção usa API_PROVIDERS). */
   presets?: Record<ApiProviderId, ApiProviderPreset>;
+  /** Apelido "vivo" por provedor (produção usa PROVIDER_LIVE_MODEL; usado no hot-swap). */
+  liveModel?: Record<ApiProviderId, string>;
   /** Histórico da sessão, do mais antigo para o mais recente. */
   history?: CrisHistoryTurn[];
+  /** Memória do usuário (opcional; a interface lê de `lib/cris-memory`). */
+  memory?: CrisUserMemory;
   timeoutMs?: number;
   maxTokens?: number;
   signal?: AbortSignal;
+};
+
+/** Tipo de falha da IA, já classificado, para a interface reagir sem reler o texto. */
+export type CrisFailureKind =
+  | 'retired-model'
+  | 'invalid-key'
+  | 'rate-limit'
+  | 'timeout'
+  | 'offline'
+  | 'empty'
+  | 'other';
+
+/** Detalhes de uma falha da IA (ex.: modelo aposentado), mostrados com ação ao usuário. */
+export type CrisFailure = {
+  kind: CrisFailureKind;
+  /** Modelo que falhou (quando conhecido). */
+  model?: string;
+  /** Mensagem pronta para o aluno (nunca "erro desconhecido"). */
+  message: string;
+  /** No hot-swap: o modelo vivo que passou a ser usado no lugar do aposentado. */
+  switchedTo?: string;
 };
 
 export type CrisReply = {
@@ -86,14 +148,20 @@ export type CrisReply = {
   /** Por que a resposta não veio de uma IA (mensagem amigável) — ou null. */
   fallbackReason: string | null;
   suggestions: string[];
+  /** Detalhes da falha quando a IA esperada não respondeu (ex.: modelo aposentado). */
+  failure?: CrisFailure | null;
 };
 
 /* ------------------------------------------------------------------ *
  * Internos
  * ------------------------------------------------------------------ */
 
-/** Plano de chamada: alvo público (sem chave) + a chave usada só no fetch. */
-type CrisCallPlan = { target: CrisTarget; apiKey: string };
+/**
+ * Plano de chamada: alvo público (sem chave) + a chave usada só no fetch.
+ * `providerId` identifica o provedor (para o hot-swap) e `swapModel` guarda o
+ * modelo vivo alternativo a tentar quando o modelo salvo dá 404.
+ */
+type CrisCallPlan = { target: CrisTarget; apiKey: string; providerId?: ApiProviderId; swapModel?: string };
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
 
@@ -102,10 +170,11 @@ type ApiConfigModule = typeof import('@/lib/api-config');
 type RuntimeConfig = {
   config: AiConfig | null;
   presets: Record<ApiProviderId, ApiProviderPreset> | null;
+  liveModel: Record<ApiProviderId, string> | null;
 };
 
 /** Erro de chamada já classificado. Nunca carrega a chave nem o corpo da resposta. */
-class CrisCallError extends Error {
+export class CrisCallError extends Error {
   readonly kind: 'local' | 'provider';
   readonly status: number | null;
   readonly timedOut: boolean;
@@ -152,7 +221,8 @@ async function resolveRuntime(options: CrisAskOptions): Promise<RuntimeConfig> {
   let config = options.config ?? null;
   if (!config && module) config = await module.getAiConfig().catch(() => null);
   const presets = options.presets ?? module?.API_PROVIDERS ?? null;
-  return { config, presets };
+  const liveModel = options.liveModel ?? module?.PROVIDER_LIVE_MODEL ?? null;
+  return { config, presets, liveModel };
 }
 
 function hasLocal(local: LocalAiConfig): boolean {
@@ -179,18 +249,28 @@ function localPlan(local: LocalAiConfig): CrisCallPlan {
   };
 }
 
-function providerPlan(provider: ProviderAiConfig, presets: RuntimeConfig['presets']): CrisCallPlan {
+function providerPlan(
+  provider: ProviderAiConfig,
+  presets: RuntimeConfig['presets'],
+  liveModel: RuntimeConfig['liveModel'],
+): CrisCallPlan {
   const preset = presets?.[provider.id] ?? null;
   const base = stripTrailingSlashes(provider.baseUrl || preset?.baseUrl || '');
+  const model = (provider.model || preset?.defaultModel || '').trim();
+  // Modelo vivo alternativo (hot-swap): o apelido do provedor que não envelhece
+  // (ou o defaultModel) — só vale quando é diferente do modelo salvo.
+  const alias = (liveModel?.[provider.id] ?? preset?.defaultModel ?? '').trim();
   return {
     target: {
       kind: 'provider',
       label: preset ? `Provedor ${preset.label}` : 'Provedor de IA',
       endpoint: base ? `${base}/chat/completions` : '',
-      model: (provider.model || preset?.defaultModel || '').trim(),
+      model,
       reason: 'Chave guardada apenas neste dispositivo.',
     },
     apiKey: provider.apiKey.trim(),
+    providerId: provider.id,
+    swapModel: alias && alias !== model ? alias : undefined,
   };
 }
 
@@ -208,14 +288,18 @@ function fallbackPlan(): CrisCallPlan {
 }
 
 /** Fila de alvos: preferido primeiro, resposta pronta sempre por último. */
-function listCrisPlans(config: AiConfig, presets: RuntimeConfig['presets']): CrisCallPlan[] {
+function listCrisPlans(
+  config: AiConfig,
+  presets: RuntimeConfig['presets'],
+  liveModel: RuntimeConfig['liveModel'] = null,
+): CrisCallPlan[] {
   const localOk = hasLocal(config.local);
   const providerOk = hasProvider(config.provider, presets);
   const preferProvider = config.mode === 'provider' && providerOk;
   const plans: CrisCallPlan[] = [];
-  if (preferProvider) plans.push(providerPlan(config.provider, presets));
+  if (preferProvider) plans.push(providerPlan(config.provider, presets, liveModel));
   if (localOk) plans.push(localPlan(config.local));
-  if (!preferProvider && providerOk) plans.push(providerPlan(config.provider, presets));
+  if (!preferProvider && providerOk) plans.push(providerPlan(config.provider, presets, liveModel));
   plans.push(fallbackPlan());
   return plans;
 }
@@ -275,10 +359,31 @@ export function describeScreen(ctx: CrisContext): string {
   return parts.join(' · ');
 }
 
-/** Monta a mensagem do usuário: a pergunta primeiro, o contexto da tela depois. */
+/**
+ * System do turno: regras fixas + contexto dinâmico da tela.
+ * O contexto vai no papel de sistema (maior peso em modelos pequenos) para a
+ * Cris saber onde está sem precisar adivinhar nem falar do dispositivo.
+ */
+export function buildSystemPrompt(ctx: CrisContext, memory?: Partial<CrisUserMemory> | null): string {
+  return `${CRIS_SYSTEM_PROMPT}\n\n${describeUserMemory(memory)}\n\n[Contexto da tela do app]\n${describeScreen(ctx)}`;
+}
+
+/**
+ * Monta a mensagem do usuário. Ordem corrigida: contexto PRIMEIRO e a pergunta
+ * por ÚLTIMO — modelos pequenos respondem ao último bloco recebido, e antes o
+ * último bloco era o contexto da tela (origem do delírio sobre "Configurações").
+ */
 export function buildUserPrompt(message: string, ctx: CrisContext): string {
-  const question = (message ?? '').trim();
-  return `${question}\n\n[Contexto da tela]\n${describeScreen(ctx)}`;
+  const question = (message ?? '').trim() || 'Apresente-se em uma frase e diga como você pode ajudar nesta tela.';
+  return [
+    '[Lembrete do contexto da tela do app]',
+    describeScreen(ctx),
+    '',
+    '[Pergunta do aluno]',
+    question,
+    '',
+    'Responda à pergunta do aluno em português do Brasil, de forma concisa.',
+  ].join('\n');
 }
 
 /** Atalhos mostrados no popup, escolhidos pela tela em que o aluno está. */
@@ -356,12 +461,54 @@ export function readableCrisError(error: unknown): string {
   return 'Não foi possível falar com a IA agora.';
 }
 
+/**
+ * Classifica uma falha de chamada em um `CrisFailure` pronto para a interface
+ * (tipo + mensagem). Troca o texto genérico por mensagens acionáveis —
+ * "modelo aposentado", "chave inválida", "limite atingido" etc. — conforme
+ * pedido da usuária. Nunca devolve "erro desconhecido".
+ */
+export function describeCrisFailure(error: unknown, target?: CrisTarget): CrisFailure {
+  const model = target?.model?.trim() || undefined;
+  if (error instanceof CrisCallError) {
+    if (error.canceled) return { kind: 'other', message: 'Chamada cancelada.', model };
+    if (error.status === 401 || error.status === 403) {
+      return { kind: 'invalid-key', message: 'Chave inválida ou expirada. Gere uma nova no provedor.', model };
+    }
+    if (error.status === 404) {
+      return {
+        kind: 'retired-model',
+        model,
+        message: model
+          ? `Seu modelo "${model}" não funciona mais. Ele pode ter sido aposentado pelo provedor — escolha um modelo vivo.`
+          : 'Seu modelo não funciona mais. Ele pode ter sido aposentado pelo provedor — escolha um modelo vivo.',
+      };
+    }
+    if (error.status === 429) {
+      return { kind: 'rate-limit', message: 'Limite atingido. Aguarde um pouco ou troque de modelo.', model };
+    }
+    if (error.timedOut) return { kind: 'timeout', message: 'A IA não respondeu a tempo. Verifique se está ligada.', model };
+    if (error.empty) return { kind: 'empty', message: 'A IA respondeu sem texto. Tente novamente.', model };
+    if (error.offline) {
+      return {
+        kind: 'offline',
+        model,
+        message: error.kind === 'local'
+          ? 'Não foi possível alcançar a IA local. No navegador, pode ser bloqueio de CORS. Tente no app (Android).'
+          : 'Falha de rede ao contatar o provedor. Verifique a conexão.',
+      };
+    }
+    if (error.status) return { kind: 'other', message: `A IA respondeu ${error.status}. Tente novamente em instantes.`, model };
+    return { kind: 'other', message: 'Não foi possível falar com a IA agora.', model };
+  }
+  return { kind: 'other', message: readableCrisError(error), model };
+}
+
 /* ------------------------------------------------------------------ *
  * Camada de rede (sempre direto do dispositivo — nunca pelo servidor)
  * ------------------------------------------------------------------ */
 
-function buildMessages(question: string, ctx: CrisContext, history: CrisHistoryTurn[] | undefined): ChatMessage[] {
-  const messages: ChatMessage[] = [{ role: 'system', content: CRIS_SYSTEM_PROMPT }];
+function buildMessages(question: string, ctx: CrisContext, history: CrisHistoryTurn[] | undefined, memory?: Partial<CrisUserMemory> | null): ChatMessage[] {
+  const messages: ChatMessage[] = [{ role: 'system', content: buildSystemPrompt(ctx, memory) }];
   for (const turn of (history ?? []).slice(-HISTORY_LIMIT)) {
     const content = (turn?.content ?? '').trim();
     if (!content) continue;
@@ -379,25 +526,36 @@ function tryParseJson(value: string): unknown {
   }
 }
 
-/** Lê o texto de uma resposta compatível com a API OpenAI (chat, streaming ou legacy). */
-function extractChatText(payload: unknown): string {
+/**
+ * Lê o texto de uma resposta compatível com a API OpenAI (chat, streaming ou legacy).
+ * `preserveWhitespace` é obrigatório no caminho de streaming: cada delta do SSE é um
+ * pedaço do texto e o espaço que separa duas palavras costuma vir na borda do pedaço —
+ * um `trim()` por delta cola as palavras ("Sim,eutenhoacesso" no lugar de "Sim, eu tenho
+ * acesso"). Fora do streaming o `trim()` continua valendo, pois o JSON traz a mensagem
+ * inteira.
+ */
+function extractChatText(payload: unknown, preserveWhitespace = false): string {
   if (!payload || typeof payload !== 'object') return '';
   const source = payload as {
     choices?: Array<{ message?: { content?: unknown }; delta?: { content?: unknown }; text?: unknown }>;
     message?: { content?: unknown };
     response?: unknown;
   };
+  const pick = (candidate: unknown): string | null => {
+    if (typeof candidate !== 'string') return null;
+    if (preserveWhitespace) return candidate.length ? candidate : null;
+    const clean = candidate.trim();
+    return clean ? clean : null;
+  };
   if (Array.isArray(source.choices)) {
     for (const choice of source.choices) {
       for (const candidate of [choice?.message?.content, choice?.delta?.content, choice?.text]) {
-        if (typeof candidate === 'string' && candidate.trim()) return candidate.trim();
+        const text = pick(candidate);
+        if (text !== null) return text;
       }
     }
   }
-  if (typeof source.response === 'string' && source.response.trim()) return source.response.trim();
-  const native = source.message?.content;
-  if (typeof native === 'string' && native.trim()) return native.trim();
-  return '';
+  return pick(source.response) ?? pick(source.message?.content) ?? '';
 }
 
 /** Uma linha de SSE → texto do delta, `SSE_DONE`, '' (sem conteúdo) ou null (ignorar). */
@@ -407,7 +565,8 @@ function parseSseFrame(line: string): string | null {
   const payload = trimmed.slice(5).trim();
   if (!payload) return null;
   if (payload === '[DONE]') return SSE_DONE;
-  return extractChatText(tryParseJson(payload));
+  // Streaming: NUNCA aparar o delta — o espaço entre palavras vive na borda do pedaço.
+  return extractChatText(tryParseJson(payload), true);
 }
 
 function buildRequestBody(plan: CrisCallPlan, messages: ChatMessage[], stream: boolean, maxTokens: number | undefined): string {
@@ -511,7 +670,8 @@ async function consumeStreamed(response: Response, onChunk: (chunk: string) => v
     const delta = parseSseFrame(buffer);
     if (delta && delta !== SSE_DONE) { streamed += delta; onChunk(delta); }
   }
-  if (streamed) return streamed;
+  // Apara apenas as pontas do texto inteiro (o miolo fica intacto, com os espaços).
+  if (streamed) return streamed.trim();
   // Servidor respondeu JSON apesar de stream=true → entrega o texto de uma vez.
   const degraded = extractChatText(tryParseJson(raw));
   if (degraded) onChunk(degraded);
@@ -522,19 +682,59 @@ async function consumeStreamed(response: Response, onChunk: (chunk: string) => v
  * API pública
  * ------------------------------------------------------------------ */
 
-function finishReply(text: string, target: CrisTarget, startedAt: number, fallbackReason: string | null, ctx: CrisContext): CrisReply {
+function finishReply(
+  text: string,
+  target: CrisTarget,
+  startedAt: number,
+  fallbackReason: string | null,
+  ctx: CrisContext,
+  failure: CrisFailure | null = null,
+): CrisReply {
   return {
     text,
     target,
     latencyMs: Date.now() - startedAt,
     fallbackReason,
     suggestions: buildSuggestions(ctx),
+    failure,
   };
 }
 
 function joinFailures(failures: string[]): string | null {
   if (!failures.length) return null;
   return Array.from(new Set(failures)).join(' ');
+}
+
+/**
+ * Hot-swap: quando o modelo salvo do provedor dá 404 (aposentado) e existe um
+ * modelo vivo alternativo, tenta-o uma vez. Se responder, devolve a resposta já
+ * com o aviso "usei o modelo X porque o seu não funciona mais"; se também falhar,
+ * devolve null e o fluxo normal segue (empilha a falha e cai no próximo alvo /
+ * resposta pronta). Assim a usuária NUNCA fica travada sem perceber o motivo.
+ */
+async function hotSwap(
+  plan: CrisCallPlan,
+  descriptor: CrisFailure,
+  run: (plan: CrisCallPlan) => Promise<string>,
+  failures: string[],
+  startedAt: number,
+  ctx: CrisContext,
+): Promise<CrisReply | null> {
+  if (descriptor.kind !== 'retired-model' || !plan.swapModel || plan.swapModel === plan.target.model) return null;
+  const swappedPlan: CrisCallPlan = { ...plan, target: { ...plan.target, model: plan.swapModel } };
+  try {
+    const text = await run(swappedPlan);
+    const notice: CrisFailure = {
+      kind: 'retired-model',
+      model: plan.target.model,
+      switchedTo: plan.swapModel,
+      message: `Usei o modelo "${plan.swapModel}" porque o seu ("${plan.target.model}") não funciona mais. Toque em "Corrigir agora" para fixar o novo modelo.`,
+    };
+    return finishReply(text, swappedPlan.target, startedAt, joinFailures(failures.concat(notice.message)), ctx, notice);
+  } catch (error) {
+    failures.push(describeCrisFailure(error, plan.target).message);
+    return null;
+  }
 }
 
 /** Fila de alvos pronta para uso (cai em resposta pronta se a config não puder ser lida). */
@@ -556,23 +756,26 @@ export async function askCris(message: string, ctx: CrisContext, options: CrisAs
   const { plans, configUnavailable } = await preparePlans(options);
   const last = plans[plans.length - 1].target;
   if (!question) return finishReply('Escreva sua dúvida e eu te ajudo.', last, startedAt, null, ctx);
-  const messages = buildMessages(question, ctx, options.history);
+  const messages = buildMessages(question, ctx, options.history, options.memory);
   const failures: string[] = [];
+  let failure: CrisFailure | null = null;
+  const run = (plan: CrisCallPlan) =>
+    requestCompletion(plan, messages, { timeoutMs: options.timeoutMs, maxTokens: options.maxTokens, signal: options.signal });
   for (const plan of plans) {
     if (plan.target.kind === 'fallback') break;
     try {
-      const text = await requestCompletion(plan, messages, {
-        timeoutMs: options.timeoutMs,
-        maxTokens: options.maxTokens,
-        signal: options.signal,
-      });
-      return finishReply(text, plan.target, startedAt, joinFailures(failures), ctx);
+      const text = await run(plan);
+      return finishReply(text, plan.target, startedAt, joinFailures(failures), ctx, failure);
     } catch (error) {
-      failures.push(readableCrisError(error));
+      const descriptor = describeCrisFailure(error, plan.target);
+      if (plan.target.kind === 'provider') failure = descriptor;
+      const swapped = await hotSwap(plan, descriptor, run, failures, startedAt, ctx);
+      if (swapped) return swapped;
+      failures.push(descriptor.message);
     }
   }
   const reason = configUnavailable ? CONFIG_UNAVAILABLE : joinFailures(failures);
-  return finishReply(buildFallbackReply(question, ctx), last, startedAt, reason, ctx);
+  return finishReply(buildFallbackReply(question, ctx), last, startedAt, reason, ctx, failure);
 }
 
 /**
@@ -596,33 +799,42 @@ export async function streamCris(
     emit(text);
     return finishReply(text, last, startedAt, null, ctx);
   }
-  const messages = buildMessages(question, ctx, options.history);
+  const messages = buildMessages(question, ctx, options.history, options.memory);
   const failures: string[] = [];
+  let failure: CrisFailure | null = null;
+  const run = async (plan: CrisCallPlan): Promise<string> => {
+    let text = '';
+    if (typeof TextDecoder !== 'undefined') {
+      const body = buildRequestBody(plan, messages, true, options.maxTokens);
+      const response = await fetchCris(plan, body, true, options.timeoutMs, options.signal);
+      text = await consumeStreamed(response, emit);
+    }
+    if (!text) {
+      text = await requestCompletion(plan, messages, {
+        timeoutMs: options.timeoutMs,
+        maxTokens: options.maxTokens,
+        signal: options.signal,
+      });
+      emit(text);
+    }
+    return text;
+  };
   for (const plan of plans) {
     if (plan.target.kind === 'fallback') break;
     try {
-      let text = '';
-      if (typeof TextDecoder !== 'undefined') {
-        const body = buildRequestBody(plan, messages, true, options.maxTokens);
-        const response = await fetchCris(plan, body, true, options.timeoutMs, options.signal);
-        text = await consumeStreamed(response, emit);
-      }
-      if (!text) {
-        text = await requestCompletion(plan, messages, {
-          timeoutMs: options.timeoutMs,
-          maxTokens: options.maxTokens,
-          signal: options.signal,
-        });
-        emit(text);
-      }
-      return finishReply(text, plan.target, startedAt, joinFailures(failures), ctx);
+      const text = await run(plan);
+      return finishReply(text, plan.target, startedAt, joinFailures(failures), ctx, failure);
     } catch (error) {
-      failures.push(readableCrisError(error));
+      const descriptor = describeCrisFailure(error, plan.target);
+      if (plan.target.kind === 'provider') failure = descriptor;
+      const swapped = await hotSwap(plan, descriptor, run, failures, startedAt, ctx);
+      if (swapped) return swapped;
+      failures.push(descriptor.message);
     }
   }
   const fallbackText = buildFallbackReply(question, ctx);
   emit(fallbackText);
-  return finishReply(fallbackText, last, startedAt, configUnavailable ? CONFIG_UNAVAILABLE : joinFailures(failures), ctx);
+  return finishReply(fallbackText, last, startedAt, configUnavailable ? CONFIG_UNAVAILABLE : joinFailures(failures), ctx, failure);
 }
 
 

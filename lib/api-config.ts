@@ -32,7 +32,7 @@ export const API_PROVIDERS: Record<ApiProviderId, ApiProviderPreset> = {
     id: 'gemini',
     label: 'Gemini',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    defaultModel: 'gemini-2.5-pro',
+    defaultModel: 'gemini-3.8-flash',
     keyUrl: 'https://aistudio.google.com/app/apikey',
     accent: '#4285F4',
     hint: 'Camada gratuita do Google AI Studio (endpoint compatível com OpenAI).',
@@ -67,6 +67,63 @@ export const API_PROVIDERS: Record<ApiProviderId, ApiProviderPreset> = {
 };
 
 export const PROVIDER_ORDER: ApiProviderId[] = ['groq', 'gemini', 'openai', 'openrouter', 'custom'];
+
+/* ------------------------------------------------------------------ *
+ * Modelo "vivo" (aponta sempre para a geração atual do provedor)
+ *
+ * Modelos aposentados (ex.: `gemini-2.5-*`) fazem a Cris falhar com
+ * 404 ("Modelo ou endpoint não encontrado"). O app deve preferir a lista
+ * real devolvida por `/models` e, como rede de segurança, um apelido que
+ * o provedor troca por trás do nome sem aviso ("hot-swap").
+ * ------------------------------------------------------------------ */
+
+/**
+ * Apelido "vivo" por provedor: nunca envelhece como um nome fixo.
+ * No Gemini, `gemini-flash-latest` é o "hot-swap" do Google; nos demais,
+ * o próprio `defaultModel` já é o nome atual.
+ */
+export const PROVIDER_LIVE_MODEL: Record<ApiProviderId, string> = {
+  groq: API_PROVIDERS.groq.defaultModel,
+  gemini: 'gemini-flash-latest',
+  openai: API_PROVIDERS.openai.defaultModel,
+  openrouter: API_PROVIDERS.openrouter.defaultModel,
+  custom: '',
+};
+
+/** Remove o prefixo `models/` (formato do Gemini) de um id de modelo. */
+export function normalizeModelId(id: string): string {
+  return (id ?? '').trim().replace(/^models\//, '');
+}
+
+/**
+ * O modelo está na lista devolvida pelo provedor em `/models`?
+ * Aceita id com ou sem o prefixo `models/`. Uma lista vazia NÃO reprova
+ * (provedores que não listam modelos não podem ser validados por aqui).
+ */
+export function isModelInList(models: string[], model: string): boolean {
+  if (!models.length) return true;
+  const target = normalizeModelId(model);
+  return models.some(id => normalizeModelId(id) === target);
+}
+
+/**
+ * Sugere o modelo "vivo" a partir da lista real do provedor. Ordem de escolha:
+ * (1) no Gemini, o primeiro da geração atual (`gemini-3*`); (2) o `defaultModel`
+ * do provedor quando ele está na lista; (3) o PRIMEIRO modelo da lista (pedido
+ * da usuária: se o modelo salvo não estiver na lista, sugerir o primeiro dela);
+ * (4) o apelido vivo (`gemini-flash-latest`); (5) o `defaultModel` do provedor.
+ */
+export function suggestLiveModel(id: ApiProviderId, models: string[]): string {
+  const clean = models.map(normalizeModelId).filter(Boolean);
+  if (id === 'gemini') {
+    const currentGen = clean.find(model => /^gemini-3/.test(model));
+    if (currentGen) return currentGen;
+  }
+  const preset = API_PROVIDERS[id];
+  if (preset && clean.includes(preset.defaultModel)) return preset.defaultModel;
+  if (clean.length) return clean[0];
+  return PROVIDER_LIVE_MODEL[id] || preset?.defaultModel || '';
+}
 
 /* ------------------------------------------------------------------ *
  * Detecção de IA local (best-effort, sem fixar um backend)
@@ -297,6 +354,21 @@ export async function getAiConfig(): Promise<AiConfig> {
   return ensureLoaded();
 }
 
+/**
+ * Observa mudanças na configuração sem depender de React (ex.: o popup da Cris,
+ * que fica montado a vida toda e precisa saber na hora quando a IA é ligada ou
+ * desligada em Ajustes → IA). Devolve a função para cancelar a inscrição.
+ */
+export function subscribeAiConfig(listener: (config: AiConfig) => void): () => void {
+  listeners.add(listener);
+  void ensureLoaded().then(next => {
+    if (listeners.has(listener)) listener(next);
+  });
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 /** Um provedor de terceiros está pronto para uso direto pelo dispositivo? (chave + URL base) */
 export function isProviderConfigured(provider: ProviderAiConfig): boolean {
   const baseUrl = (provider.baseUrl || API_PROVIDERS[provider.id].baseUrl).trim();
@@ -398,6 +470,9 @@ export function parseLocalUrl(url: string): { protocol: 'http' | 'https'; host: 
  * Testes de conexão
  * ------------------------------------------------------------------ */
 
+/** Motivo classificado de um teste que falhou (a tela reage sem reler o texto). */
+export type TestFailureReason = 'auth' | 'model' | 'rate' | 'timeout' | 'offline' | 'server' | 'config';
+
 export type ApiTestResult = {
   ok: boolean;
   status?: number;
@@ -405,6 +480,8 @@ export type ApiTestResult = {
   message: string;
   latencyMs: number;
   url: string;
+  /** Preenchido só quando `ok` é false — permite à interface tratar o caso exato. */
+  reason?: TestFailureReason;
 };
 
 const DEFAULT_TIMEOUT_MS = 6000;
@@ -492,16 +569,16 @@ export async function testLocalAi(
   }
 }
 
-/** Testa GET /models na API do provedor escolhido. */
+/** Testa GET /models na API do provedor escolhido (valida chave + URL base). */
 export async function testProviderApi(config: TestableProviderConfig, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ApiTestResult> {
   const baseUrl = (config.baseUrl || API_PROVIDERS[config.id]?.baseUrl || '').trim().replace(/\/+$/, '');
   const startedAt = Date.now();
   if (!baseUrl) {
-    return { ok: false, models: [], message: 'Informe a URL base do provedor.', latencyMs: 0, url: '' };
+    return { ok: false, models: [], message: 'Informe a URL base do provedor.', latencyMs: 0, url: '', reason: 'config' };
   }
   const endpoint = `${baseUrl}/models`;
   if (!config.apiKey.trim()) {
-    return { ok: false, models: [], message: 'Cole a chave de API para testar.', latencyMs: 0, url: endpoint };
+    return { ok: false, models: [], message: 'Cole a chave de API para testar.', latencyMs: 0, url: endpoint, reason: 'config' };
   }
   try {
     const response = await fetchWithTimeout(
@@ -511,13 +588,13 @@ export async function testProviderApi(config: TestableProviderConfig, timeoutMs 
     );
     const latencyMs = Date.now() - startedAt;
     if (response.status === 401 || response.status === 403) {
-      return { ok: false, status: response.status, models: [], message: 'A chave foi recusada pelo provedor. Confira se copiou por completo.', latencyMs, url: endpoint };
+      return { ok: false, status: response.status, models: [], message: 'Chave inválida. Gere uma nova no provedor.', latencyMs, url: endpoint, reason: 'auth' };
     }
     if (response.status === 404) {
-      return { ok: false, status: response.status, models: [], message: 'Endpoint /models não encontrado. Confira a URL base.', latencyMs, url: endpoint };
+      return { ok: false, status: response.status, models: [], message: 'Endpoint /models não encontrado. Confira a URL base.', latencyMs, url: endpoint, reason: 'config' };
     }
     if (!response.ok) {
-      return { ok: false, status: response.status, models: [], message: `O provedor respondeu ${response.status}.`, latencyMs, url: endpoint };
+      return { ok: false, status: response.status, models: [], message: `O provedor respondeu ${response.status}.`, latencyMs, url: endpoint, reason: 'server' };
     }
     let models: string[] = [];
     try {
@@ -542,6 +619,69 @@ export async function testProviderApi(config: TestableProviderConfig, timeoutMs 
       message: aborted ? 'Tempo esgotado ao contatar o provedor.' : 'Falha de rede ao contatar o provedor. Verifique a conexão.',
       latencyMs,
       url: endpoint,
+      reason: aborted ? 'timeout' : 'offline',
+    };
+  }
+}
+
+/**
+ * Testa o MODELO de verdade: POST /chat/completions com a menor requisição
+ * possível (`max_tokens: 1`). O GET /models valida chave e URL, mas NÃO valida
+ * o modelo — só o envio revela um modelo aposentado (404). A chave sai apenas no
+ * cabeçalho `Authorization` do fetch e nunca é registrada em log.
+ */
+export async function testProviderModel(config: TestableProviderConfig, timeoutMs = DEFAULT_TIMEOUT_MS): Promise<ApiTestResult> {
+  const baseUrl = (config.baseUrl || API_PROVIDERS[config.id]?.baseUrl || '').trim().replace(/\/+$/, '');
+  const startedAt = Date.now();
+  if (!baseUrl) {
+    return { ok: false, models: [], message: 'Informe a URL base do provedor.', latencyMs: 0, url: '', reason: 'config' };
+  }
+  const endpoint = `${baseUrl}/chat/completions`;
+  if (!config.apiKey.trim()) {
+    return { ok: false, models: [], message: 'Cole a chave de API para testar.', latencyMs: 0, url: endpoint, reason: 'config' };
+  }
+  const model = (config.model || API_PROVIDERS[config.id]?.defaultModel || '').trim();
+  try {
+    const response = await fetchWithTimeout(
+      endpoint,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', Authorization: `Bearer ${config.apiKey.trim()}` },
+        body: JSON.stringify({ model, messages: [{ role: 'user', content: 'ping' }], max_tokens: 1, temperature: 0 }),
+      },
+      timeoutMs,
+    );
+    const latencyMs = Date.now() - startedAt;
+    if (response.status === 401 || response.status === 403) {
+      return { ok: false, status: response.status, models: [], message: 'Chave inválida. Gere uma nova no provedor.', latencyMs, url: endpoint, reason: 'auth' };
+    }
+    if (response.status === 404) {
+      return { ok: false, status: response.status, models: [], message: `Modelo "${model}" indisponível. Ele pode ter sido aposentado pelo provedor.`, latencyMs, url: endpoint, reason: 'model' };
+    }
+    if (response.status === 429) {
+      return { ok: false, status: response.status, models: [], message: 'Limite atingido. Aguarde alguns instantes ou troque de modelo.', latencyMs, url: endpoint, reason: 'rate' };
+    }
+    if (!response.ok) {
+      return { ok: false, status: response.status, models: [], message: `O provedor respondeu ${response.status} ao testar o modelo.`, latencyMs, url: endpoint, reason: 'server' };
+    }
+    return {
+      ok: true,
+      status: response.status,
+      models: [],
+      message: `Modelo "${model}" respondeu — a Cris vai funcionar.`,
+      latencyMs,
+      url: endpoint,
+    };
+  } catch (error) {
+    const latencyMs = Date.now() - startedAt;
+    const aborted = error instanceof Error && error.name === 'AbortError';
+    return {
+      ok: false,
+      models: [],
+      message: aborted ? 'Tempo esgotado ao testar o modelo.' : 'Falha de rede ao testar o modelo. Verifique a conexão.',
+      latencyMs,
+      url: endpoint,
+      reason: aborted ? 'timeout' : 'offline',
     };
   }
 }

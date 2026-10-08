@@ -5,16 +5,21 @@ import { AcademicButton, AcademicPill, academicColors, type AcademicTone } from 
 import { ScreenContainer } from '@/components/screen-container';
 import {
   API_PROVIDERS,
+  PROVIDER_LIVE_MODEL,
   PROVIDER_ORDER,
   buildLocalUrl,
   isLocalAiReady,
+  isModelInList,
   isProviderAiReady,
   localTestState,
+  normalizeModelId,
   parseLocalUrl,
   providerTestState,
   providerTestTarget,
+  suggestLiveModel,
   testLocalAi,
   testProviderApi,
+  testProviderModel,
   useApiConfig,
   useLocalAiDetection,
   type AiTestStatus,
@@ -99,6 +104,32 @@ export default function ApiSettingsScreen() {
   const localChanged = localUrl !== config.local.url;
   const providerChanged = providerFormTarget !== providerTestTarget(config.provider);
 
+  // "Modelo vivo": a lista real de modelos só existe depois de testar (/models).
+  // Se o modelo preenchido não estiver nela, a Cris falha com 404 ao enviar.
+  const providerFormModel = providerForm.model.trim() || providerPreset.defaultModel;
+  const testedModels = providerResult?.models?.length ? providerResult.models.map(normalizeModelId) : [];
+  const modelListKnown = testedModels.length > 0;
+  const modelRetired = modelListKnown && !isModelInList(testedModels, providerFormModel);
+  const liveModelAlias = PROVIDER_LIVE_MODEL[providerForm.id];
+  const suggestedModel = suggestLiveModel(providerForm.id, testedModels);
+  const modelOptions = modelListKnown
+    ? Array.from(new Set([suggestedModel, liveModelAlias, ...testedModels.slice(0, 3)].filter(Boolean)))
+    : [];
+
+  /** Qual fonte a Cris realmente usa agora (o modo escolhido, se operante; senão, a outra; senão, nenhuma). */
+  const activeSource =
+    config.mode === 'local'
+      ? localActive
+        ? 'IA local'
+        : providerActive
+          ? 'API de terceiros (o modo escolhido não está operante)'
+          : null
+      : providerActive
+        ? 'API de terceiros'
+        : localActive
+          ? 'IA local (o modo escolhido não está operante)'
+          : null;
+
   const modeWarning =
     config.mode === 'local'
       ? localActive
@@ -116,39 +147,87 @@ export default function ApiSettingsScreen() {
     setLocalResult(result);
     setStatus(result.message);
     setTestingLocal(false);
+    // No sucesso, salva também o endereço testado ("Conexão OK" = IA local configurada e ativa).
+    // Na falha, mantém o endereço salvo e só registra que o último teste falhou.
     await saveLocal({
       ...config.local,
+      ...(result.ok
+        ? {
+            url: localUrl,
+            backend: selectedServer?.name ?? config.local.backend,
+            model: selectedServer?.models[0] ?? config.local.model,
+          }
+        : {}),
       lastTestStatus: result.ok ? 'success' : 'error',
       lastTestedAt: new Date().toISOString(),
       lastTestedTarget: localUrl,
     });
-  }, [config.local, localUrl, saveLocal]);
+  }, [config.local, localUrl, saveLocal, selectedServer]);
 
   const runProviderTest = useCallback(async () => {
     setTestingProvider(true);
     setProviderResult(null);
-    const payload: TestableProviderConfig = {
+    // Mesma configuração que será salva (usa os padrões do provedor quando o campo está vazio),
+    // para que o alvo testado seja exatamente o alvo salvo.
+    const tested: ProviderAiConfig = {
+      ...config.provider,
       id: providerForm.id,
-      apiKey: providerForm.apiKey,
-      baseUrl: providerForm.baseUrl,
-      model: providerForm.model,
+      apiKey: providerForm.apiKey.trim(),
+      baseUrl: providerForm.baseUrl.trim() || providerPreset.baseUrl,
+      model: providerForm.model.trim() || providerPreset.defaultModel,
     };
-    const result = await testProviderApi(payload);
-    setProviderResult(result);
-    setStatus(result.message);
+    const payload: TestableProviderConfig = {
+      id: tested.id,
+      apiKey: tested.apiKey,
+      baseUrl: tested.baseUrl,
+      model: tested.model,
+    };
+    // Passo 1 — GET /models: valida chave + URL base (e traz a lista real de modelos).
+    const connection = await testProviderApi(payload);
+    // Passo 2 — POST /chat/completions: valida o MODELO de verdade. O GET /models
+    // pode passar enquanto o envio dá 404 ("modelo aposentado"), então o badge só
+    // fica verde se ESTE passo também responder. Mantém a lista do passo 1 para
+    // os chips de modelos vivos continuarem aparecendo.
+    let effective: ApiTestResult = connection;
+    if (connection.ok) {
+      const modelTest = await testProviderModel(payload);
+      effective = { ...modelTest, models: connection.models };
+    }
+    setProviderResult(effective);
+    setStatus(effective.message);
     setTestingProvider(false);
+    // Com a conexão OK, a chave é gravada (mesmo com o modelo aposentado, para
+    // não obrigar a colar de novo) — mas o status fica "falha", então o app
+    // sabe que ainda NÃO está ativo e a Cris mostra o aviso. Na falha de rede,
+    // mantém o que já estava salvo e só registra o resultado do teste.
+    const connectionOk = connection.ok;
     await saveProvider({
       ...config.provider,
-      lastTestStatus: result.ok ? 'success' : 'error',
+      ...(connectionOk
+        ? { id: tested.id, apiKey: tested.apiKey, baseUrl: tested.baseUrl, model: tested.model }
+        : {}),
+      lastTestStatus: effective.ok ? 'success' : 'error',
       lastTestedAt: new Date().toISOString(),
-      lastTestedTarget: providerTestTarget({
-        id: providerForm.id,
-        apiKey: providerForm.apiKey.trim(),
-        baseUrl: providerForm.baseUrl.trim(),
-        model: providerForm.model.trim(),
-      }),
+      lastTestedTarget: providerTestTarget(payload),
     });
-  }, [config.provider, providerForm, saveProvider]);
+  }, [config.provider, providerPreset, providerForm, saveProvider]);
+
+  // "Testar modelo": envia APENAS o POST /chat/completions (não salva nada).
+  // Serve para confirmar se o modelo escolhido responde, mostrando o erro exato.
+  const runProviderModelTest = useCallback(async () => {
+    setTestingProvider(true);
+    const payload: TestableProviderConfig = {
+      id: providerForm.id,
+      apiKey: providerForm.apiKey.trim(),
+      baseUrl: providerForm.baseUrl.trim() || providerPreset.baseUrl,
+      model: providerForm.model.trim() || providerPreset.defaultModel,
+    };
+    const result = await testProviderModel(payload);
+    // Preserva a lista de modelos já conhecida (do teste de conexão) para os chips.
+    setProviderResult(previous => ({ ...result, models: previous?.models?.length ? previous.models : [] }));
+    setStatus(result.message);
+    setTestingProvider(false);
+  }, [providerForm, providerPreset]);
 
   const persistLocal = useCallback(async () => {
     const next: LocalAiConfig = {
@@ -189,6 +268,11 @@ export default function ApiSettingsScreen() {
     const preset = API_PROVIDERS[id];
     setProviderForm(prev => ({ ...prev, id, baseUrl: preset.baseUrl, model: preset.defaultModel }));
     setProviderResult(null);
+  }, []);
+
+  /** Troca só o campo Modelo (mantém a lista de /models para o usuário escolher). */
+  const applyProviderModel = useCallback((model: string) => {
+    setProviderForm(prev => ({ ...prev, model }));
   }, []);
 
   const openKeyPage = useCallback(() => {
@@ -251,6 +335,9 @@ export default function ApiSettingsScreen() {
               );
             })}
           </View>
+          <Text style={styles.modeActiveNote}>
+            {activeSource ? `Fonte ativa agora: ${activeSource}.` : 'Nenhuma IA ativa agora — a Cris usa a resposta pronta do app.'}
+          </Text>
           {modeWarning ? (
             <View style={styles.warn}>
               <Text style={styles.warnTitle}>Modo escolhido ainda não está operante</Text>
@@ -444,9 +531,62 @@ export default function ApiSettingsScreen() {
 
           <View style={styles.buttonRow}>
             <AcademicButton
+              label="Usar modelo recomendado"
+              tone="ghost"
+              compact
+              onPress={() => applyProviderModel(modelListKnown ? suggestedModel : providerPreset.defaultModel)}
+            />
+          </View>
+
+          {modelOptions.length ? (
+            <View>
+              <Text style={styles.helper}>Modelos disponíveis no {providerPreset.label} (toque para usar):</Text>
+              <View style={styles.providerGrid}>
+                {modelOptions.map(model => (
+                  <TouchableOpacity
+                    key={model}
+                    onPress={() => applyProviderModel(model)}
+                    style={styles.providerChip}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Usar modelo ${model}`}
+                  >
+                    <View style={[styles.providerDot, { backgroundColor: academicColors.indigo }]} />
+                    <Text style={styles.providerChipText}>{model}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+              <Text style={styles.helper}>
+                Recomendado: {providerPreset.defaultModel}
+                {liveModelAlias && liveModelAlias !== providerPreset.defaultModel
+                  ? ` · reserva que nunca envelhece: ${liveModelAlias}`
+                  : ''}
+              </Text>
+            </View>
+          ) : null}
+
+          {modelRetired || providerResult?.reason === 'model' ? (
+            <View style={styles.warn}>
+              <Text style={styles.warnTitle}>❌ O modelo “{providerFormModel}” não funciona mais</Text>
+              <Text style={styles.warnText}>
+                Ele pode ter sido aposentado pelo {providerPreset.label}. Modelos disponíveis:{' '}
+                {modelOptions.length ? modelOptions.join(' · ') : 'teste a conexão para ver a lista'}.
+                Toque em “Usar modelo recomendado”{suggestedModel ? ` (${suggestedModel})` : ''} para corrigir — a Cris
+                volta a responder na hora.
+              </Text>
+            </View>
+          ) : null}
+
+          <View style={styles.buttonRow}>
+            <AcademicButton
               label="Testar"
               tone="ghost"
               onPress={() => void runProviderTest()}
+              disabled={testingProvider || !providerForm.baseUrl.trim() || !providerForm.apiKey.trim()}
+            />
+            <AcademicButton
+              label="Testar modelo"
+              tone="ghost"
+              onPress={() => void runProviderModelTest()}
               disabled={testingProvider || !providerForm.baseUrl.trim() || !providerForm.apiKey.trim()}
             />
             <AcademicButton
@@ -463,13 +603,14 @@ export default function ApiSettingsScreen() {
               {providerChanged ? ' · alterações não salvas' : ''}
             </Text>
           ) : null}
-          <Text style={styles.helper}>A chave não é gravada pelo botão “Testar” — só pelo “Salvar”.</Text>
+          <Text style={styles.helper}>Quando o teste dá certo, a configuração é salva neste dispositivo.</Text>
 
           <View style={styles.warn}>
             <Text style={styles.warnTitle}>Segurança</Text>
             <Text style={styles.warnText}>
               A chave nunca é enviada ao Estudo Organizado. Evite chaves com permissões amplas e revogue no provedor se
-              desconfiar de exposição. O teste consulta apenas /models para validar a conexão.
+              desconfiar de exposição. O teste valida a conexão (/models) e faz uma chamada mínima (1 token) para
+              confirmar que o modelo responde — a chave continua saindo só no cabeçalho da sua própria requisição.
             </Text>
           </View>
         </View>
@@ -536,6 +677,7 @@ const styles = StyleSheet.create({
   modeTitleActive: { color: academicColors.violet },
   modeDetail: { color: academicColors.muted, fontSize: 11, lineHeight: 16, marginTop: 3 },
   modeState: { fontSize: 11, fontWeight: '800', marginTop: 6 },
+  modeActiveNote: { color: academicColors.ink, fontSize: 12, fontWeight: '800', marginTop: 2 },
   modeStateOk: { color: academicColors.success },
   modeStateWarn: { color: academicColors.warning },
   buttonRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginTop: 6 },

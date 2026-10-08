@@ -1,4 +1,15 @@
-import { ENV } from "./env";
+/**
+ * Camada de LLM do SERVIDOR.
+ *
+ * O aplicativo não guarda chave de IA no servidor: a Cris real roda no
+ * dispositivo (`lib/cris-client.ts`) com a configuração de IA escolhida pela
+ * estudante (`lib/api-config.ts`). A integração antiga com o serviço de nuvem do
+ * antigo ambiente de edição foi removida — ver `ATUALIZACOES.md`.
+ *
+ * `invokeLLM` e `listLLMModels` continuam existindo para o dia em que o
+ * servidor tiver uma IA própria: basta registrar a fonte de configuração com
+ * `setServerLlmConfigResolver`. Sem registro, não há IA no servidor.
+ */
 
 export type Role = "system" | "user" | "assistant" | "tool" | "function";
 
@@ -204,15 +215,61 @@ const normalizeToolChoice = (
   return toolChoice;
 };
 
-const resolveApiUrl = () =>
-  ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-    ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/chat/completions`
-    : "https://forge.manus.im/v1/chat/completions";
+/** Mensagem única para "o servidor não tem IA". */
+export const NO_SERVER_AI_MESSAGE =
+  "Nenhuma IA configurada no servidor. A Cris usa a IA do dispositivo (cliente).";
 
-const assertApiKey = () => {
-  if (!ENV.forgeApiKey) {
-    throw new Error("OPENAI_API_KEY is not configured");
+/**
+ * Configuração de IA própria do servidor. Hoje inexistente: a estudante
+ * configura a IA no dispositivo e o servidor não recebe essas chaves.
+ */
+export type ServerLlmConfig = {
+  /** URL base compatível com OpenAI, sem barra final. Ex.: http://127.0.0.1:11434/v1 */
+  baseUrl: string;
+  /** Chave de acesso da IA do servidor (nunca é registrada em log). */
+  apiKey: string;
+  /** Modelo padrão quando o chamador não informa um. */
+  model?: string;
+};
+
+type ServerLlmConfigResolver = () => ServerLlmConfig | null;
+
+let serverLlmConfigResolver: ServerLlmConfigResolver | null = null;
+
+/**
+ * Ponto de extensão para uma futura IA do servidor. Sem registro,
+ * `invokeLLM` responde com `NO_SERVER_AI_MESSAGE`.
+ */
+export function setServerLlmConfigResolver(
+  resolver: ServerLlmConfigResolver | null,
+): void {
+  serverLlmConfigResolver = resolver;
+}
+
+/** Devolve a config do servidor saneada, ou `null` quando não há IA configurada. */
+const tryResolveServerLlmConfig = (): ServerLlmConfig | null => {
+  if (!serverLlmConfigResolver) return null;
+
+  let resolved: ServerLlmConfig | null = null;
+  try {
+    resolved = serverLlmConfigResolver();
+  } catch {
+    resolved = null;
   }
+
+  const baseUrl = (resolved?.baseUrl ?? "").trim().replace(/\/+$/, "");
+  const apiKey = (resolved?.apiKey ?? "").trim();
+  if (!baseUrl || !apiKey) return null;
+
+  const model = (resolved?.model ?? "").trim();
+  return model ? { baseUrl, apiKey, model } : { baseUrl, apiKey };
+};
+
+/** Igual a `tryResolveServerLlmConfig`, mas falha com uma mensagem clara. */
+const requireServerLlmConfig = (): ServerLlmConfig => {
+  const config = tryResolveServerLlmConfig();
+  if (!config) throw new Error(NO_SERVER_AI_MESSAGE);
+  return config;
 };
 
 const normalizeResponseFormat = ({
@@ -318,7 +375,7 @@ const fetchWithBackoff = async (url: string, init: FetchInit): Promise<Response>
 };
 
 export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
-  assertApiKey();
+  const { baseUrl, apiKey, model: defaultModel } = requireServerLlmConfig();
 
   const {
     messages,
@@ -340,8 +397,9 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     messages: messages.map(normalizeMessage),
   };
 
-  if (model) {
-    payload.model = model;
+  const resolvedModel = model ?? defaultModel;
+  if (resolvedModel) {
+    payload.model = resolvedModel;
   }
 
   if (tools && tools.length > 0) {
@@ -376,11 +434,11 @@ export async function invokeLLM(params: InvokeParams): Promise<InvokeResult> {
     payload.response_format = normalizedResponseFormat;
   }
 
-  const response = await fetchWithBackoff(resolveApiUrl(), {
+  const response = await fetchWithBackoff(`${baseUrl}/chat/completions`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
-      authorization: `Bearer ${ENV.forgeApiKey}`,
+      authorization: `Bearer ${apiKey}`,
     },
     body: JSON.stringify(payload),
   });
@@ -406,15 +464,14 @@ export type ModelsResponse = {
 };
 
 export async function listLLMModels(): Promise<ModelsResponse> {
-  assertApiKey();
+  const config = tryResolveServerLlmConfig();
 
-  const url =
-    ENV.forgeApiUrl && ENV.forgeApiUrl.trim().length > 0
-      ? `${ENV.forgeApiUrl.replace(/\/$/, "")}/v1/models`
-      : "https://forge.manus.im/v1/models";
+  // Sem IA no servidor: devolve catálogo vazio em vez de tentar a rede.
+  // A Cris usa a IA do dispositivo (ver lib/cris-client.ts).
+  if (!config) return { object: "list", data: [] };
 
-  const response = await fetchWithBackoff(url, {
-    headers: { authorization: `Bearer ${ENV.forgeApiKey}` },
+  const response = await fetchWithBackoff(`${config.baseUrl}/models`, {
+    headers: { authorization: `Bearer ${config.apiKey}` },
   });
 
   if (!response.ok) {

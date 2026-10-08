@@ -13,7 +13,7 @@ import { trpc } from '@/lib/trpc';
 import * as WebBrowser from 'expo-web-browser';
 import { clearAcademicToken, readAcademicToken, saveAcademicToken } from '@/lib/academic-credentials';
 
-type SettingsKey = 'profile' | 'account' | 'appearance' | 'notifications' | 'connections' | 'editor' | 'studies' | 'privacy' | 'data' | 'about';
+type SettingsKey = 'profile' | 'account' | 'appearance' | 'notifications' | 'connections' | 'ai' | 'editor' | 'studies' | 'privacy' | 'data' | 'about';
 
 type SettingsItem = { key: SettingsKey; label: string; icon: string };
 type MoodleContentItem = { courseId: number; courseTitle: string; section: string; title: string; description: string; url: string; type: string; files: { name: string; url: string; mime: string; type: string }[]; youtubeUrl: string };
@@ -25,6 +25,7 @@ const settingsItems: SettingsItem[] = [
   { key: 'appearance', label: 'Aparência', icon: '◐' },
   { key: 'notifications', label: 'Notificações', icon: '◌' },
   { key: 'connections', label: 'Conexões', icon: '⇄' },
+  { key: 'ai', label: 'APIs de IA', icon: '✦' },
   { key: 'editor', label: 'Editor', icon: '▤' },
   { key: 'studies', label: 'Estudos', icon: '✓' },
   { key: 'privacy', label: 'Privacidade', icon: '◇' },
@@ -38,7 +39,7 @@ export default function SettingsScreen() {
   const { themePreference, setThemePreference } = useThemeContext();
   const { notes, goals, subjects, events } = useStudy();
   const params = useLocalSearchParams<{ section?: string }>();
-  const [activeKey, setActiveKey] = useState<SettingsKey>(params.section === 'connections' ? 'connections' : 'profile');
+  const [activeKey, setActiveKey] = useState<SettingsKey>(settingsItems.find(item => item.key === params.section)?.key ?? 'profile');
   const isWide = width >= 780;
   const activeItem = useMemo(() => settingsItems.find(item => item.key === activeKey) ?? settingsItems[0], [activeKey]);
 
@@ -73,6 +74,7 @@ export default function SettingsScreen() {
             {activeKey === 'appearance' ? <AppearanceContent colors={colors} preference={themePreference} onChange={setThemePreference} /> : null}
             {activeKey === 'notifications' ? <NotificationsContent colors={colors} /> : null}
             {activeKey === 'connections' ? <ConnectionsContent colors={colors} /> : null}
+            {activeKey === 'ai' ? <AiContent colors={colors} onOpen={() => router.push('/api-settings')} /> : null}
             {activeKey === 'editor' ? <EditorContent colors={colors} /> : null}
             {activeKey === 'studies' ? <StudiesContent colors={colors} notes={notes.length} goals={goals.length} subjects={subjects.length} events={events.length} /> : null}
             {activeKey === 'privacy' ? <InfoContent colors={colors} title="Privacidade em primeiro lugar" description="O conteúdo de estudos permanece no armazenamento do aplicativo e só é sincronizado com a conta conectada quando esse recurso está disponível. O Chat permanece separado desta central." /> : null}
@@ -87,6 +89,10 @@ export default function SettingsScreen() {
 
 function ProfileContent({ colors, onOpen }: { colors: ReturnType<typeof useColors>; onOpen: () => void }) {
   return <View style={styles.contentStack}><View style={styles.profileLine}><View style={[styles.largeAvatar, { backgroundColor: academicColors.violetSoft }]}><Text style={styles.largeAvatarText}>C</Text></View><View style={styles.profileCopy}><Text style={[styles.profileName, { color: colors.foreground }]}>Cris O. Santos</Text><Text style={[styles.profileDescription, { color: colors.muted }]}>Organizadora deste espaço de estudos</Text></View></View><Text style={[styles.body, { color: colors.muted }]}>Edite seu nome de exibição, apresentação e informações da conta em uma tela própria.</Text><AcademicButton label="Editar meu perfil" onPress={onOpen} compact /></View>;
+}
+
+function AiContent({ colors, onOpen }: { colors: ReturnType<typeof useColors>; onOpen: () => void }) {
+  return <View style={styles.contentStack}><Text style={[styles.body, { color: colors.muted }]}>A Cris responde pela IA local do seu computador (Ollama, LM Studio e outras) ou por uma API de terceiros (Groq, Gemini, OpenAI, OpenRouter ou um endereço personalizado). A chave fica somente neste dispositivo e nunca é enviada aos servidores do aplicativo.</Text><AcademicButton label="Abrir configurações de IA" onPress={onOpen} compact /></View>;
 }
 
 function AccountContent({ colors }: { colors: ReturnType<typeof useColors> }) {

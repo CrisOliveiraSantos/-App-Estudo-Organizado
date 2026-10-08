@@ -8,8 +8,9 @@
  *      e ajuda com aquilo (planejamento, PDF, conversa, ajustes…).
  *   3. Sugestões: com moderação e sempre a partir de dados reais do app
  *      (nada inventado). Podem ser desligadas no cabeçalho do popup.
- *   4. Memória: apenas da sessão — a conversa vive em memória enquanto o
- *      app está aberto, com o botão "Limpar histórico" ao lado.
+ *   4. Memória: a conversa (histórico) vive em memória enquanto o app está
+ *      aberto, com o botão "Limpar histórico" ao lado; o perfil de quem usa
+ *      ("Sobre mim" → `lib/cris-memory.ts`) é persistente entre sessões.
  *   5. Chat humano: a Cris NÃO participa da conversa com outras pessoas
  *      (fica para a Fase 1D, com @Cris e silenciar).
  *
@@ -44,8 +45,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { academicColors } from '@/components/academic/design-system';
 import { useColors } from '@/hooks/use-colors';
+import type { AiConfig } from '@/lib/api-config';
 import { shouldSendChatOnEnter } from '@/lib/chat-utils';
-import { describeScreen, streamCris, type CrisContext, type CrisReply } from '@/lib/cris-client';
+import { describeScreen, streamCris, type CrisContext, type CrisFailure, type CrisReply } from '@/lib/cris-client';
+import { EMPTY_CRIS_MEMORY, getCrisMemory, isCrisMemoryEmpty, type CrisUserMemory } from '@/lib/cris-memory';
 import { useStudy } from '@/lib/study-store';
 
 /* ------------------------------------------------------------------ *
@@ -57,7 +60,7 @@ const PREFS_KEY = '@estudo-organizado/cris-popup-v1';
 const TAB_BAR_BASE = 56;
 const MAX_QUESTION = 1200;
 const HINT_WINDOW_DAYS = 7;
-const GREETING = 'Oi! Sou a Cris, sua mentora de estudos. Posso explicar um assunto, resumir um material, montar um plano ou destravar algo da tela em que você está. Por onde começamos?';
+const GREETING_BASE = 'Sou a Cris, sua mentora de estudos. Posso explicar um assunto, resumir um material, montar um plano ou destravar algo da tela em que você está. Por onde começamos?';
 
 /** Telas que vivem dentro das abas (o FAB precisa ficar acima da barra). */
 const TAB_ROUTES = ['/', '/editor', '/planning', '/library', '/chat', '/settings'];
@@ -75,6 +78,7 @@ type PopupTurn = {
   target?: CrisReply['target'];
   latencyMs?: number;
   fallbackReason?: string | null;
+  failure?: CrisFailure | null;
   suggestions?: string[];
 };
 
@@ -191,6 +195,7 @@ export default function CrisPopup() {
   const [hintDismissed, setHintDismissed] = useState(false);
 
   const scrollRef = useRef<ScrollView | null>(null);
+  const [memory, setMemory] = useState<CrisUserMemory>(EMPTY_CRIS_MEMORY);
   const abortRef = useRef<AbortController | null>(null);
   const turnsRef = useRef<PopupTurn[]>([]);
   const idRef = useRef(0);
@@ -200,6 +205,16 @@ export default function CrisPopup() {
   useEffect(() => {
     turnsRef.current = turns;
   }, [turns]);
+
+  // Memória persistente ("Sobre mim"): lida ao montar e de novo a cada
+  // abertura, para refletir o que foi salvo em /cris-profile.
+  const refreshMemory = useCallback(() => {
+    void getCrisMemory().then(setMemory).catch(() => undefined);
+  }, []);
+
+  useEffect(() => {
+    refreshMemory();
+  }, [refreshMemory]);
 
   // Preferência de sugestões (persistida) — o histórico NÃO é persistido.
   useEffect(() => {
@@ -236,8 +251,44 @@ export default function CrisPopup() {
     void AsyncStorage.setItem(PREFS_KEY, JSON.stringify(next)).catch(() => undefined);
   }, [prefs.suggestionsEnabled]);
 
-  const openPopup = useCallback(() => setOpen(true), []);
+  // Aviso honesto na saudação: só aparece quando a config foi lida E nenhuma IA está pronta.
+  // A leitura é tardia (import dinâmico) e nunca falha em voz alta — se der erro, não afirmamos nada.
+  const [aiReady, setAiReady] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    let alive = true;
+    let unsubscribe: (() => void) | undefined;
+    void (async () => {
+      try {
+        const apiConfig = await import('@/lib/api-config');
+        // Relê a cada abertura e assina mudanças (ex.: ligar a IA em Ajustes -> IA).
+        const apply = (config: AiConfig) => {
+          if (!alive) return;
+          setAiReady(apiConfig.isLocalAiReady(config.local) || apiConfig.isProviderAiReady(config.provider));
+        };
+        apply(await apiConfig.getAiConfig());
+        unsubscribe = apiConfig.subscribeAiConfig(apply);
+      } catch {
+        if (alive) setAiReady(true);
+      }
+    })();
+    return () => {
+      alive = false;
+      unsubscribe?.();
+    };
+  }, [open]);
+
+  const openPopup = useCallback(() => {
+    refreshMemory();
+    setOpen(true);
+  }, [refreshMemory]);
   const closePopup = useCallback(() => setOpen(false), []);
+
+  const openAboutMe = useCallback(() => {
+    setOpen(false);
+    router.push('/cris-profile');
+  }, []);
 
   const openAiSettings = useCallback(() => {
     setOpen(false);
@@ -290,7 +341,7 @@ export default function CrisPopup() {
           if (aborted() || !chunk) return;
           setTurns(current => current.map(turn => (turn.id === assistantId ? { ...turn, text: `${turn.text}${chunk}` } : turn)));
         },
-        { history, signal: controller.signal },
+        { history, signal: controller.signal, memory },
       );
       if (aborted()) {
         // Cancelado: mantém o que já chegou e descarta a resposta pronta do cliente.
@@ -302,6 +353,7 @@ export default function CrisPopup() {
           target: reply.target,
           latencyMs: reply.latencyMs,
           fallbackReason: reply.fallbackReason,
+          failure: reply.failure ?? null,
           suggestions: reply.suggestions,
         });
       }
@@ -313,12 +365,14 @@ export default function CrisPopup() {
       abortRef.current = null;
       setBusy(false);
     }
-  }, [busy, context, draft]);
+  }, [busy, context, draft, memory]);
 
   const wide = width >= 900;
   const lastAssistant = [...turns].reverse().find(turn => turn.role === 'assistant' && !turn.pending);
   const chips = prefs.suggestionsEnabled && !busy ? (lastAssistant?.suggestions ?? []) : [];
   const showHint = Boolean(hint) && prefs.suggestionsEnabled && !hintDismissed && turns.length === 0;
+  const greeting = memory.name ? `Oi, ${memory.name}! ${GREETING_BASE}` : `Oi! ${GREETING_BASE}`;
+  const knowsMe = !isCrisMemoryEmpty(memory);
 
   return (
     <>
@@ -370,6 +424,22 @@ export default function CrisPopup() {
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
+                  accessibilityLabel="Sobre mim: o que a Cris sabe sobre você"
+                  onPress={openAboutMe}
+                  style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+                >
+                  <MaterialIcons name="person-outline" size={20} color={memory.name ? colors.primary : colors.muted} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel="Configurar a IA da Cris"
+                  onPress={openAiSettings}
+                  style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
+                >
+                  <MaterialIcons name="settings" size={20} color={colors.muted} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
                   accessibilityLabel="Limpar histórico da conversa"
                   onPress={clearHistory}
                   style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
@@ -396,8 +466,34 @@ export default function CrisPopup() {
                   <View style={styles.introMark}>
                     <Text style={styles.introMarkText}>✦</Text>
                   </View>
-                  <Text style={[styles.introText, { color: colors.foreground }]}>{GREETING}</Text>
+                  <Text style={[styles.introText, { color: colors.foreground }]}>{greeting}</Text>
                 </View>
+                {!knowsMe ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Contar para a Cris quem eu sou"
+                    onPress={openAboutMe}
+                    style={({ pressed }) => [styles.fallbackRow, pressed && styles.pressed]}
+                  >
+                    <MaterialIcons name="person-outline" size={14} color={colors.primary} />
+                    <Text style={[styles.fallbackText, { color: colors.primary }]}>
+                      Ainda não sei quem você é nem o que você estuda. Toque aqui e me conte — eu uso isso para te ajudar melhor.
+                    </Text>
+                  </Pressable>
+                ) : null}
+                {aiReady === false ? (
+                  <Pressable
+                    accessibilityRole="button"
+                    accessibilityLabel="Configurar a IA da Cris"
+                    onPress={openAiSettings}
+                    style={({ pressed }) => [styles.fallbackRow, pressed && styles.pressed]}
+                  >
+                    <MaterialIcons name="settings" size={14} color={academicColors.warning} />
+                    <Text style={[styles.fallbackText, { color: academicColors.warning }]}>
+                      Nenhuma IA conectada ainda. Toque aqui para conectar a Cris — sem isso eu respondo com o conteúdo pronto do app.
+                    </Text>
+                  </Pressable>
+                ) : null}
 
                 {showHint && hint ? (
                   <View style={styles.hint}>
@@ -458,10 +554,28 @@ export default function CrisPopup() {
                             : `${turn.target?.label ?? 'Resposta do app'}${turn.latencyMs ? ` · ${turn.latencyMs} ms` : ''}${turn.target?.kind === 'fallback' ? ' · sem IA conectada' : ''}`}
                         </Text>
                       ) : null}
-                      {!isUser && turn.fallbackReason ? (
+                      {!isUser && turn.fallbackReason && !turn.failure ? (
                         <View style={styles.fallbackRow}>
                           <MaterialIcons name="info-outline" size={14} color={academicColors.warning} />
                           <Text style={[styles.fallbackText, { color: academicColors.warning }]}>{turn.fallbackReason}</Text>
+                        </View>
+                      ) : null}
+                      {!isUser && turn.failure ? (
+                        <View style={styles.failureCard}>
+                          <View style={styles.fallbackRow}>
+                            <MaterialIcons name="error-outline" size={14} color={academicColors.warning} />
+                            <Text style={[styles.fallbackText, { color: academicColors.warning }]}>{turn.failure.message}</Text>
+                          </View>
+                          {turn.failure.kind === 'retired-model' || turn.failure.kind === 'invalid-key' || turn.failure.kind === 'rate-limit' ? (
+                            <Pressable
+                              accessibilityRole="button"
+                              accessibilityLabel="Corrigir as configurações de IA agora"
+                              onPress={openAiSettings}
+                              style={({ pressed }) => [styles.inlineAction, { borderColor: colors.border }, pressed && styles.pressed]}
+                            >
+                              <Text style={[styles.inlineActionText, { color: colors.primary }]}>Corrigir agora</Text>
+                            </Pressable>
+                          ) : null}
                         </View>
                       ) : null}
                       {!isUser && !turn.pending && turn.target?.kind === 'fallback' ? (
@@ -536,7 +650,7 @@ export default function CrisPopup() {
               </View>
 
               <Text style={[styles.note, { color: colors.muted }]}>
-                Sua pergunta vai direto para a IA local ou para o provedor que você configurou — nada passa pelos servidores do app.
+                Sua pergunta vai direto para a IA local ou para o provedor que você configurou — nada passa pelos servidores do app. Se a Cris repetir uma resposta, tente um modelo maior (Groq ou Gemini) em Configurar IA.
               </Text>
             </View>
           </View>
@@ -562,6 +676,7 @@ const styles = StyleSheet.create({
   fab: { alignItems: 'center', borderRadius: 28, elevation: 6, height: 56, justifyContent: 'center', position: 'absolute', right: 18, shadowColor: '#111827', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.24, shadowRadius: 14, width: 56, zIndex: 40 },
   fallbackRow: { alignItems: 'flex-start', flexDirection: 'row', marginTop: 6 },
   fallbackText: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 16, marginLeft: 6 },
+  failureCard: { borderTopColor: academicColors.warning, borderTopWidth: 2, marginTop: 6, paddingTop: 4 },
   header: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', paddingHorizontal: 14, paddingVertical: 12 },
   headerSubtitle: { fontSize: 11, marginTop: 1 },
   headerText: { flex: 1, paddingRight: 8 },
