@@ -9,6 +9,13 @@ const themeColors = {
   success: { light: '#1F9D68', dark: '#61D39A' },
   warning: { light: '#C98200', dark: '#F1BE55' },
   error: { light: '#C2414B', dark: '#FF8B91' },
+  accentPink: { light: '#C23BDF', dark: '#E34BFF' },
+  accentGold: { light: '#B98A00', dark: '#FFD166' },
+  accentGreen: { light: '#18865B', dark: '#49E5B1' },
+  accentOrange: { light: '#C85A00', dark: '#FF9F43' },
+  accentRose: { light: '#C2417A', dark: '#FF6B9D' },
+  accentPurple: { light: '#7C3AED', dark: '#9333EA' },
+  surfaceAlt: { light: '#EEF2F8', dark: '#0C111E' },
   lavender: { light: '#EEF0FF', dark: '#252B52' },
 };
 module.exports = { themeColors };

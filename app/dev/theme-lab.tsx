@@ -55,6 +55,9 @@ export default function ThemeLabScreen() {
       violet: build("violet"),
       ocean: build("ocean"),
       contrast: build("contrast"),
+      sunrise: build("sunrise"),
+      sunset: build("sunset"),
+      neon: build("neon"),
     } satisfies Record<ColorScheme, TileStyle>;
   }, []);
 
@@ -63,7 +66,7 @@ export default function ThemeLabScreen() {
       <ScrollView className="flex-1">
         <View className="gap-4 pb-8">
           <View className="flex-row gap-2">
-            {(["light", "dark", "violet", "ocean", "contrast"] as ColorScheme[]).map((scheme) => (
+            {(["light", "dark", "violet", "ocean", "contrast", "sunrise", "sunset", "neon"] as ColorScheme[]).map((scheme) => (
               <Pressable
                 key={scheme}
                 style={[
@@ -95,7 +98,7 @@ export default function ThemeLabScreen() {
                     },
                   ]}
                 >
-                  {scheme === "light" ? "Claro" : scheme === "dark" ? "Escuro" : scheme === "violet" ? "Violeta" : scheme === "ocean" ? "Oceano" : "Alto contraste"}
+                  {scheme === "light" ? "Claro" : scheme === "dark" ? "Escuro" : scheme === "violet" ? "Violeta" : scheme === "ocean" ? "Oceano" : scheme === "contrast" ? "Alto contraste" : scheme === "sunrise" ? "Amanhecer" : scheme === "sunset" ? "Entardecer" : "Neon"}
                 </Text>
                 <Text
                   style={[

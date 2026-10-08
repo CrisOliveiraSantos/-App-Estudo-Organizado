@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Alert, ActivityIndicator, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
@@ -6,9 +6,25 @@ import { useColors } from '@/hooks/use-colors';
 import { AcademicButton, AcademicCard, AcademicPill, academicColors } from '@/components/academic/design-system';
 import { getCurrentAccountProfile, readableSupabaseError, signOutFromSupabase, updateCurrentAccountProfile, type AccountProfile } from '@/lib/supabase-chat';
 import { isSupabaseConfigured } from '@/lib/supabase';
+import { useStudy } from '@/lib/study-store';
 
 export default function ProfileScreen() {
   const colors = useColors();
+  const { subjects, goals, events, notes } = useStudy();
+  const openTasks = useMemo(() => goals.flatMap(goal => goal.tasks).filter(task => !task.done).length, [goals]);
+  const stats = [
+    { label: 'Matérias', value: subjects.length },
+    { label: 'Tarefas abertas', value: openTasks },
+    { label: 'Metas', value: goals.length },
+    { label: 'Eventos', value: events.length },
+    { label: 'Documentos', value: notes.length },
+  ];
+  const quickLinks = [
+    { section: 'appearance', label: 'Temas e aparência' },
+    { section: 'ai', label: 'APIs de IA' },
+    { section: 'notifications', label: 'Notificações' },
+    { section: 'connections', label: 'Conexões (Moodle/SIGAA)' },
+  ];
   const [profile, setProfile] = useState<AccountProfile | null>(null);
   const [name, setName] = useState('');
   const [bio, setBio] = useState('');
@@ -22,7 +38,9 @@ export default function ProfileScreen() {
   return <ScreenContainer edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: colors.background }]}><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Voltar para Configurações" style={styles.back}><Text style={[styles.backText, { color: colors.primary }]}>← Voltar para Ajustes</Text></TouchableOpacity>
     <Text style={styles.overline}>CONTA E PERFIL</Text><Text style={[styles.title, { color: colors.foreground }]}>Meu perfil</Text><Text style={[styles.subtitle, { color: colors.muted }]}>Cuide de como seu nome aparece e mantenha as informações da sua conta organizadas.</Text>
-    {loading ? <ActivityIndicator color={colors.primary} style={styles.spinner} /> : !isSupabaseConfigured || !profile ? <AcademicCard style={[styles.signInCard, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={styles.signInMark}><Text style={styles.signInMarkText}>C</Text></View><Text style={[styles.cardTitle, { color: colors.foreground }]}>Entre para personalizar seu perfil</Text><Text style={[styles.cardDescription, { color: colors.muted }]}>O perfil usa a conta já criada na área de Conversas. Depois de entrar, o e-mail da sua própria conta aparecerá apenas aqui.</Text><AcademicButton label="Entrar na área de Conversas" onPress={() => router.replace('/chat')} /></AcademicCard> : <>
+    {loading ? <ActivityIndicator color={colors.primary} style={styles.spinner} /> : !isSupabaseConfigured || !profile ? <><AcademicCard style={[styles.signInCard, { backgroundColor: colors.surface, borderColor: colors.border }]}><View style={styles.signInMark}><Text style={styles.signInMarkText}>C</Text></View><Text style={[styles.cardTitle, { color: colors.foreground }]}>Você está como visitante</Text><Text style={[styles.cardDescription, { color: colors.muted }]}>Tudo funciona sem conta: planejamento, editor, biblioteca e a Cris. Com uma conta você ganha um nome de exibição e mantém suas conversas salvas.</Text><AcademicButton label="Entrar ou criar conta" onPress={() => router.replace('/chat')} /></AcademicCard>
+      <AcademicCard style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}><Text style={[styles.cardTitle, { color: colors.foreground }]}>Resumo do seu estudo</Text><Text style={[styles.cardDescription, { color: colors.muted }]}>Um retrato rápido do que você já organizou neste dispositivo.</Text><View style={styles.statsGrid}>{stats.map(stat => <View key={stat.label} style={[styles.statBox, { borderColor: colors.border, backgroundColor: colors.background }]}><Text style={[styles.statValue, { color: colors.foreground }]}>{stat.value}</Text><Text style={[styles.statLabel, { color: colors.muted }]}>{stat.label}</Text></View>)}</View></AcademicCard>
+      <AcademicCard style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}><Text style={[styles.cardTitle, { color: colors.foreground }]}>Ajustes rápidos</Text><Text style={[styles.cardDescription, { color: colors.muted }]}>Deixe o espaço com a sua cara antes mesmo de entrar.</Text>{quickLinks.map(link => <TouchableOpacity key={link.section} onPress={() => router.push({ pathname: '/settings', params: { section: link.section } })} accessibilityRole="button" style={[styles.outlineButton, { borderColor: colors.border }]}><Text style={[styles.outlineButtonText, { color: colors.primary }]}>{link.label}</Text><Text style={[styles.outlineButtonArrow, { color: colors.primary }]}>›</Text></TouchableOpacity>)}</AcademicCard></> : <>
       <View style={styles.profileHero}><View style={styles.avatar}><Text style={styles.avatarText}>{profile.displayName.slice(0, 1).toUpperCase()}</Text></View><View style={styles.profileHeroCopy}><Text style={styles.profileHeroName}>{profile.displayName}</Text><Text numberOfLines={1} style={styles.profileHeroEmail}>{profile.email}</Text><AcademicPill label="Conta conectada" tone="success" /></View></View>
       <AcademicCard style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}><Text style={[styles.cardTitle, { color: colors.foreground }]}>Sua apresentação</Text><Text style={[styles.cardDescription, { color: colors.muted }]}>Esse nome é usado para identificar sua participação nas áreas conectadas.</Text><Text style={[styles.inputLabel, { color: colors.muted }]}>Nome de exibição</Text><TextInput value={name} onChangeText={setName} placeholder="Como quer ser chamada?" placeholderTextColor={colors.muted} style={[styles.input, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]} /><Text style={[styles.inputLabel, { color: colors.muted }]}>Sobre você</Text><TextInput value={bio} onChangeText={setBio} placeholder="Ex.: Estudante de Engenharia de Software" placeholderTextColor={colors.muted} multiline textAlignVertical="top" maxLength={240} style={[styles.bioInput, { backgroundColor: colors.background, borderColor: colors.border, color: colors.foreground }]} /><Text style={[styles.counter, { color: colors.muted }]}>{bio.length}/240 caracteres</Text><AcademicButton label={saving ? 'Salvando…' : 'Salvar perfil'} onPress={() => { void saveProfile(); }} disabled={saving} /></AcademicCard>
       {feedback ? <View style={[styles.feedback, { backgroundColor: feedback.startsWith('Perfil atualizado') ? '#E8F6EF' : '#FDECEF' }]}><Text style={[styles.feedbackText, { color: feedback.startsWith('Perfil atualizado') ? academicColors.success : academicColors.danger }]}>{feedback}</Text></View> : null}
@@ -52,6 +70,10 @@ const styles = StyleSheet.create({
   outlineButtonText: { fontSize: 13, fontWeight: '900' },
   overline: { color: academicColors.violet, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
   profileHero: { alignItems: 'center', backgroundColor: '#283989', borderRadius: 20, flexDirection: 'row', marginTop: 20, padding: 17 },
+  statBox: { borderRadius: 12, borderWidth: 1, minWidth: 92, padding: 12 },
+  statLabel: { fontSize: 11, marginTop: 3 },
+  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 9, marginTop: 14 },
+  statValue: { fontSize: 22, fontWeight: '900' },
   profileHeroCopy: { flex: 1, paddingHorizontal: 12 },
   profileHeroEmail: { color: '#DCE3FF', fontSize: 12, marginTop: 3 },
   profileHeroName: { color: '#FFFFFF', fontSize: 18, fontWeight: '900' },

@@ -1,0 +1,1106 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Cris — Estudo Organizado | Completo</title>
+<style>
+:root{
+  --bg:#080a12;--panel:#101522;--panel2:#0c111e;--line:#202b40;--text:#f4f7ff;--muted:#91a0b8;
+  --cyan:#00e5ff;--pink:#e34bff;--gold:#ffd166;--green:#49e5b1;--red:#ff4d6d;--orange:#ff9f43;--rose:#ff6b9d;--purple:#9333ea;
+  --radius:20px;--glow-cyan:0 0 14px #00e5ff55;--glow-pink:0 0 14px #e34bff55;--glow-gold:0 0 14px #ffd16644;--glow-both:0 0 18px #00e5ff44, 0 0 24px #e34bff33;
+  --transition:all .25s cubic-bezier(.4,0,.2,1)
+}
+[data-theme="light"]{
+  --bg:#f0f4f8;--panel:#ffffff;--panel2:#eef2f8;--line:#d0d8e8;--text:#1a2035;--muted:#64748b;
+  --cyan:#00b4cc;--pink:#c23bdf;--gold:#e6b830;--green:#22b880;--glow-cyan:0 0 12px #00e5ff33;--glow-pink:0 0 12px #e34bff33
+}
+[data-time="morning"]{
+  --sun:#ff9f43;--rose:#ff6b9d;--gold:#ffd166;
+  background:linear-gradient(135deg, #fff1e8 0%, #ffd9c822 50%, transparent 100%);
+  --glow-cyan:0 0 14px #ff9f4344;--glow-pink:0 0 14px #ff6b9d44
+}
+[data-time="afternoon"]{
+  --cyan:#00a8cc;--sky:#22d3ee;
+  background:linear-gradient(135deg, #e0f7ff 0%, #bfe9ff33 50%, transparent 100%);
+  --glow-cyan:0 0 14px #00a8cc44;--glow-pink:0 0 14px #22d3ee33
+}
+[data-time="evening"]{
+  --orange:#ff7a30;--purple:#9333ea;
+  background:linear-gradient(135deg, #2a1b35 0%, #3f204f33 50%, #1a1020 100%);
+  --glow-cyan:0 0 14px #ff7a3044;--glow-pink:0 0 14px #9333ea44
+}
+[data-time="midnight"]{
+  --cyan:#00e5ff;--pink:#e34bff;
+  background:radial-gradient(ellipse at top, #0f0a20 0%, #1a0f33 50%, #050510 100%);
+  --glow-cyan:0 0 14px #00e5ff55;--glow-pink:0 0 14px #e34bff55
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;min-height:100vh;transition:background .6s ease, color .3s ease}
+.particles{position:fixed;inset:0;pointer-events:none;overflow:hidden;z-index:0}
+.particle{position:absolute;width:4px;height:4px;border-radius:50%;background:var(--cyan);opacity:.15;animation:float 12s infinite ease-in-out}
+@keyframes float{0%{transform:translateY(100vh) rotate(0deg);opacity:.15}50%{opacity:.4}100%{transform:translateY(-10vh) rotate(360deg);opacity:.15}}
+.particle:nth-child(odd){background:var(--pink)}
+.particle:nth-child(3n){background:var(--gold)}
+.splash-page{display:grid;place-items:center;min-height:100vh;overflow:hidden;position:relative}
+.splash{text-align:center;animation:fadeIn 1s ease-out;position:relative;z-index:1}
+@keyframes fadeIn{from{opacity:0;transform:translateY(15px)}to{opacity:1;transform:none}}
+.splash-icon{width:180px;height:180px;margin:0 auto 26px;border-radius:40px;background:linear-gradient(140deg,var(--cyan),var(--pink));display:grid;place-items:center;font-size:90px;font-weight:900;color:white;box-shadow:var(--glow-both), 0 0 60px #ffd16622;animation:pulseGlow 2.5s infinite ease-in-out}
+@keyframes pulseGlow{0%,100%{box-shadow:0 0 40px #00e5ff55, 0 0 60px #e34bff33, 0 0 80px #ffd16615}50%{box-shadow:0 0 55px #00e5ff77, 0 0 80px #e34bff55, 0 0 100px #ffd16625}}
+.splash h1{font-size:48px;margin:0 0 8px;background:linear-gradient(90deg,var(--cyan),var(--pink),var(--gold));-webkit-background-clip:text;background-clip:text;color:transparent}
+.splash p{font-size:18px;color:var(--muted);margin:0 0 40px}
+.splash-loader{margin:0 auto 30px;width:220px;height:5px;background:var(--line);border-radius:5px;overflow:hidden}
+.splash-loader span{display:block;height:100%;width:0;background:linear-gradient(90deg,var(--cyan),var(--pink),var(--gold));animation:load 2s ease-out forwards}
+@keyframes load{to{width:100%}}
+.btn-primary{border:0;border-radius:12px;padding:14px 28px;background:linear-gradient(100deg,var(--cyan),var(--pink));color:white;font-weight:600;cursor:pointer;transition:var(--transition);font-size:16px;box-shadow:var(--glow-both)}
+.btn-primary:hover{transform:translateY(-3px) scale(1.03);box-shadow:0 0 25px var(--cyan), 0 0 40px var(--pink)}
+.btn-secondary{border:1px solid var(--line);background:transparent;color:var(--text);border-radius:12px;padding:13px 24px;cursor:pointer;transition:var(--transition);font-size:15px}
+.btn-secondary:hover{border-color:var(--cyan);background:#ffffff05;box-shadow:var(--glow-cyan)}
+.btn-group{display:flex;gap:10px;flex-wrap:wrap;margin-top:10px}
+.auth-page{display:grid;place-items:center;min-height:100vh;padding:20px;position:relative}
+.auth-card{background:linear-gradient(145deg,rgba(17,23,38,.96),rgba(9,14,26,.96));border:1px solid var(--line);border-radius:28px;padding:36px;max-width:420px;width:100%;box-shadow:0 15px 50px #000a, var(--glow-both);animation:fadeIn .6s ease-out;position:relative;z-index:1}
+.auth-logo{width:90px;height:90px;margin:0 auto 20px;border-radius:22px;background:linear-gradient(140deg,var(--cyan),var(--pink));display:grid;place-items:center;font-size:48px;font-weight:900;color:white;box-shadow:var(--glow-both);animation:pulseGlow 2.5s infinite ease-in-out}
+.auth-card h1{text-align:center;font-size:28px;margin:0 0 6px}
+.auth-card p{text-align:center;color:var(--muted);margin:0 0 28px}
+.form-group{margin-bottom:16px}
+.form-group label{display:block;font-size:13px;color:var(--muted);margin-bottom:6px}
+.form-group input,.form-group textarea,.form-group select{width:100%;background:#080e1b;border:1px solid #29354a;border-radius:12px;padding:13px 16px;color:var(--text);font:inherit;transition:var(--transition)}
+.form-group input:focus,.form-group textarea:focus,.form-group select:focus{outline:none;border-color:var(--cyan);box-shadow:var(--glow-cyan)}
+.btn-google{width:100%;border:1px solid var(--line);background:transparent;color:var(--text);border-radius:12px;padding:12px;cursor:pointer;transition:var(--transition);display:flex;align-items:center;justify-content:center;gap:10px;margin:10px 0}
+.btn-google:hover{border-color:var(--cyan);background:#ffffff05}
+.auth-links{display:flex;justify-content:space-between;margin-top:18px;font-size:13px}
+.auth-links a{color:var(--cyan);text-decoration:none;transition:var(--transition)}
+.auth-links a:hover{color:var(--pink);text-decoration:underline}
+.divider{display:flex;align-items:center;gap:12px;margin:20px 0}
+.divider span{color:var(--muted);font-size:12px}
+.divider:before,.divider:after{content:"";flex:1;height:1px;background:var(--line)}
+.app{max-width:1480px;margin:auto;padding:26px;display:grid;grid-template-columns:245px minmax(0,1fr);gap:22px;min-height:100vh;position:relative;z-index:1}
+.sidebar,.card,.topbar,.bottomnav,.chat{background:linear-gradient(145deg,rgba(17,23,38,.96),rgba(9,14,26,.96));border:1px solid var(--line);box-shadow:0 12px 40px #0005;transition:var(--transition)}
+.sidebar{border-radius:26px;padding:22px 14px;display:flex;flex-direction:column;gap:24px}
+.brand{display:flex;align-items:center;gap:12px;padding:0 8px}
+.logo{width:45px;height:45px;border-radius:15px;display:grid;place-items:center;background:linear-gradient(140deg,var(--cyan),var(--pink));border:1px solid #67eaff;box-shadow:var(--glow-both);color:white;font-size:24px;font-weight:800}
+.brand strong{display:block;font-size:15px;letter-spacing:-.4px}
+.brand small,.muted{color:var(--muted)}
+.nav{display:grid;gap:7px}
+.nav button{border:0;color:#aeb9cb;background:transparent;text-align:left;padding:12px 13px;border-radius:13px;cursor:pointer;display:flex;gap:12px;align-items:center;font:inherit;transition:var(--transition)}
+.nav button .ico{width:22px;text-align:center;font-size:17px}
+.nav button:hover{background:#ffffff08;color:white;transform:translateX(3px)}
+.nav button.active{background:linear-gradient(100deg,#073342,#271331);color:white;box-shadow:inset 0 0 0 1px var(--cyan), var(--glow-cyan)}
+.nav button.active .ico{color:var(--cyan)}
+.mentor-mini{margin-top:auto;padding:15px;border:1px solid #26354a;border-radius:18px;background:#0a1020}
+.avatar{width:44px;height:44px;flex:0 0 44px;border-radius:50%;display:grid;place-items:center;background:linear-gradient(140deg,var(--cyan),var(--pink));border:2px solid #67eaff;color:white;font-size:20px;box-shadow:var(--glow-both)}
+.mentor-row{display:flex;align-items:center;gap:10px}
+.online{color:var(--green);font-size:11px;animation:blink 2s infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.5}}
+.main{min-width:0;display:flex;flex-direction:column;gap:20px}
+.topbar{border-radius:22px;padding:18px 22px;display:flex;align-items:center;justify-content:space-between;gap:15px}
+.eyebrow{font-size:11px;letter-spacing:1.6px;text-transform:uppercase;color:var(--cyan);font-weight:750}
+.topbar h1{font-size:26px;margin:3px 0 0;letter-spacing:-.8px}
+.top-actions{display:flex;gap:10px;align-items:center}
+.date{color:var(--muted);font-size:12px}
+.icon-btn{width:40px;height:40px;border:1px solid var(--line);background:#0b1120;color:white;border-radius:13px;cursor:pointer;transition:var(--transition)}
+.icon-btn:hover{border-color:var(--cyan);box-shadow:var(--glow-cyan)}
+.content{display:grid;gap:17px}
+.card{border-radius:var(--radius);padding:20px;min-width:0;transition:var(--transition)}
+.card:hover{transform:translateY(-2px);box-shadow:0 15px 40px #0008}
+.card-head{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:17px;flex-wrap:wrap}
+.card-head h3{font-size:15px;margin:0}
+.text-link{background:none;border:0;color:var(--cyan);font:inherit;font-size:13px;cursor:pointer;transition:var(--transition)}
+.text-link:hover{color:var(--pink);text-decoration:underline}
+.two-col{display:grid;grid-template-columns:1fr 1fr;gap:17px}
+.three-col{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:15px}
+.banner{padding:14px 18px;border-radius:12px;margin-bottom:18px;display:flex;align-items:flex-start;gap:12px}
+.banner.red{background:#2a1018;border:1px solid #552030;color:#ffb3bc}
+.banner.yellow{background:#2a2415;border:1px solid #554a20;color:#ffdea0}
+.chip{display:inline-block;padding:7px 14px;border-radius:20px;font-size:12px;margin:4px;border:1px solid transparent;transition:var(--transition)}
+.chip.live{background:#10303b;color:#75edff;border-color:#00e5ff44}
+.chip.live:hover{border-color:var(--cyan);box-shadow:var(--glow-cyan)}
+.chip.retired{background:#2a1520;color:#ffb3bc;border-color:#ff4d6d44}
+.chip.recommended{background:#152a20;color:#b3ffd0;border-color:#49e5b144}
+.toolbar{display:flex;gap:8px;margin-bottom:13px;flex-wrap:wrap}
+.toolbar button{background:#121c2c;border:1px solid #2b3a50;color:#dce7f8;border-radius:8px;padding:8px 12px;cursor:pointer;transition:var(--transition)}
+.toolbar button:hover{border-color:var(--cyan);color:var(--cyan);box-shadow:var(--glow-cyan)}
+.editor-surface{min-height:300px;padding:20px;border-radius:14px;background:#0b1220;border:1px solid #243148;color:var(--text);line-height:1.8}
+.week{display:grid;grid-template-columns:repeat(5,1fr);gap:9px}
+.week div{background:#0b1220;border:1px solid #243148;padding:15px;border-radius:13px;min-height:140px;transition:var(--transition)}
+.week div:hover{border-color:var(--pink);box-shadow:var(--glow-pink)}
+.week strong{display:block;font-size:13px;margin-bottom:10px}
+.week span{display:block;font-size:12px;color:var(--cyan);background:#10303c;padding:6px 10px;border-radius:8px;margin-bottom:6px}
+.list-item{display:flex;gap:12px;align-items:center;padding:13px;border-radius:13px;background:#0b1220;border:1px solid #1e2b40;transition:var(--transition)}
+.list-item:hover{border-color:var(--cyan);transform:translateX(4px)}
+.list-item .file-icon{width:40px;height:40px;border-radius:10px;display:grid;place-items:center;background:linear-gradient(135deg,#35152c,#e34bff44);color:#ff75c9;font-size:18px}
+.conversation{display:flex;gap:12px;align-items:center;padding:14px 0;border-bottom:1px solid #202a3d;transition:var(--transition);cursor:pointer}
+.conversation:hover{padding-left:6px;background:#ffffff03;border-radius:10px}
+.conversation:last-child{border-bottom:0}
+.conversation .avatar{width:40px;height:40px;flex-basis:40px}
+.conversation p{margin:4px 0 0;color:var(--muted);font-size:13px}
+.conversation time{margin-left:auto;color:var(--muted);font-size:11px}
+.tabs{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.tab{padding:9px 16px;border-radius:10px;border:0;background:transparent;color:var(--muted);cursor:pointer;transition:var(--transition);font-size:14px}
+.tab.active{background:#122035;color:var(--cyan);box-shadow:var(--glow-cyan)}
+.transparency-card{background:#0a1020;border:1px solid #243148;border-radius:14px;padding:20px;margin-top:20px}
+.transparency-card h4{margin:0 0 12px;font-size:15px;color:var(--cyan)}
+.transparency-card p{margin:6px 0;font-size:13px;color:var(--muted)}
+.status-ok{color:var(--green)}
+.status-warn{color:var(--gold)}
+.status-error{color:var(--red)}
+.progress{height:10px;border-radius:20px;background:var(--line);overflow:hidden;margin:10px 0}
+.progress span{height:100%;display:block;width:0;border-radius:20px;background:linear-gradient(90deg,var(--cyan),var(--pink));box-shadow:var(--glow-cyan);transition:width 1s ease-out}
+.toggle-row{display:flex;justify-content:space-between;align-items:center;padding:16px 0;border-bottom:1px solid var(--line)}
+.toggle{width:48px;height:26px;border-radius:13px;background:var(--line);position:relative;cursor:pointer;transition:var(--transition)}
+.toggle.on{background:linear-gradient(90deg,var(--cyan),var(--pink))}
+.toggle::after{content:"";position:absolute;top:3px;left:3px;width:20px;height:20px;border-radius:50%;background:white;transition:transform .2s ease}
+.toggle.on::after{transform:translateX(22px)}
+.side-menu{display:grid;grid-template-columns:200px 1fr;gap:20px}
+.side-menu-nav{display:flex;flex-direction:column;gap:4px}
+.side-menu-nav button{border:0;background:transparent;color:var(--muted);text-align:left;padding:10px 14px;border-radius:10px;cursor:pointer;transition:var(--transition)}
+.side-menu-nav button:hover{background:#ffffff05;color:var(--text)}
+.side-menu-nav button.active{background:#122035;color:var(--cyan);box-shadow:var(--glow-cyan)}
+.bottomnav{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);width:min(920px,calc(100vw - 32px));display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:6px;padding:10px;border-radius:24px;background:rgba(12,17,30,.9);backdrop-filter:blur(12px);border:1px solid var(--line);z-index:100;box-shadow:0 10px 40px #000a}
+.bottomnav button{border:0;border-radius:16px;background:transparent;color:var(--muted);font:inherit;font-size:10px;padding:10px 6px;cursor:pointer;display:grid;gap:4px;justify-items:center;transition:var(--transition)}
+.bottomnav button span{font-size:20px;transition:transform .25s cubic-bezier(.4,0,.2,1)}
+.bottomnav button:hover{color:var(--cyan);background:#ffffff05}
+.bottomnav button:hover span{transform:translateY(-3px)}
+.bottomnav button.active{color:var(--cyan);background:linear-gradient(100deg,#073342,#271331);box-shadow:var(--glow-cyan)}
+.fab{position:fixed;right:24px;bottom:100px;width:64px;height:64px;border-radius:22px;border:1px solid var(--cyan);background:linear-gradient(140deg,var(--cyan),var(--pink));box-shadow:var(--glow-both), 0 8px 35px #0008;color:white;font-size:26px;cursor:pointer;z-index:101;transition:transform .3s cubic-bezier(.4,0,.2,1)}
+.fab:hover{transform:scale(1.15) rotate(5deg);box-shadow:0 0 25px var(--cyan), 0 0 40px var(--pink)}
+.fab:after{content:"";position:absolute;inset:-5px;border:1px solid var(--pink);border-radius:26px;opacity:.6;animation:pulseGlow 2s infinite}
+.chat{position:fixed;right:24px;bottom:175px;width:min(390px,calc(100vw - 32px));border-radius:24px;padding:0;overflow:hidden;z-index:102;display:none;box-shadow:0 15px 50px #000f, var(--glow-both);border:1px solid var(--line)}
+.chat.open{display:block;animation:pop .2s ease-out}
+@keyframes pop{from{transform:translateY(10px) scale(.97);opacity:0}to{transform:none;opacity:1}}
+.chat-head{padding:16px 20px;display:flex;align-items:center;gap:12px;border-bottom:1px solid var(--line);background:#111a2a}
+.chat-head .avatar{width:40px;height:40px;flex-basis:40px}
+.chat-head strong{display:block;font-size:15px}
+.chat-head small{color:var(--green);font-size:12px}
+.close{margin-left:auto;background:none;border:0;color:#b9c5d9;font-size:24px;cursor:pointer;transition:var(--transition)}
+.close:hover{color:var(--pink);transform:rotate(90deg)}
+.messages{padding:20px;display:grid;gap:14px;max-height:340px;overflow:auto;background:linear-gradient(180deg,#0f1525,#0a1020)}
+.messages::-webkit-scrollbar{width:4px}
+.messages::-webkit-scrollbar-thumb{background:var(--line);border-radius:4px}
+.bubble{max-width:85%;padding:13px 16px;border-radius:18px;background:#172237;color:#eaf2ff;font-size:14px;line-height:1.5;animation:bubbleIn .2s ease-out}
+@keyframes bubbleIn{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.bubble.me{justify-self:end;background:linear-gradient(100deg,#007f9b,#9225a0);border:none}
+.suggestions{display:flex;flex-wrap:wrap;gap:8px;padding:14px 20px;border-top:1px solid var(--line);background:#0f1525}
+.suggest-chip{border:1px solid var(--cyan);background:#0a203066;color:var(--cyan);border-radius:20px;padding:8px 14px;font-size:12px;cursor:pointer;transition:var(--transition)}
+.suggest-chip:hover{background:var(--cyan);color:black;box-shadow:var(--glow-cyan);transform:translateY(-2px)}
+.chat-form{display:flex;gap:10px;padding:16px;border-top:1px solid var(--line);background:#0f1525}
+.chat-form input{flex:1;min-width:0;background:#080e1b;border:1px solid #29354a;border-radius:14px;padding:13px 16px;color:white;outline:none;transition:var(--transition)}
+.chat-form input:focus{border-color:var(--cyan);box-shadow:var(--glow-cyan)}
+.chat-form button{border:0;border-radius:14px;padding:0 20px;background:linear-gradient(100deg,var(--cyan),var(--pink));color:white;cursor:pointer;transition:var(--transition)}
+.chat-form button:hover{transform:scale(1.05);box-shadow:var(--glow-both)}
+@media(max-width:900px){
+  .app{grid-template-columns:1fr;padding:15px;gap:15px;padding-bottom:100px}
+  .sidebar,.side-menu-nav{display:none}
+  .side-menu{grid-template-columns:1fr}
+  .topbar{padding:16px 18px}
+  .topbar h1{font-size:22px}
+  .two-col,.three-col{grid-template-columns:1fr}
+  .week{grid-template-columns:repeat(2,1fr)}
+  .bottomnav{width:calc(100vw - 24px);bottom:12px;padding:8px 4px}
+  .bottomnav button{font-size:9px;padding:8px 2px}
+  .bottomnav button span{font-size:18px}
+  .fab{right:16px;bottom:95px;width:56px;height:56px;font-size:24px}
+  .chat{right:12px;bottom:160px;width:calc(100vw - 24px)}
+  .splash-icon{width:140px;height:140px;font-size:70px}
+  .splash h1{font-size:36px}
+}
+@media(max-width:430px){
+  .week{grid-template-columns:1fr}
+  .fab{right:14px;bottom:90px}
+  .splash-icon{width:120px;height:120px;font-size:60px}
+}
+</style>
+</head>
+<body id="body" class="splash-page">
+<div class="particles" id="particles"></div>
+
+<!-- SPLASH SCREEN -->
+<div class="splash" id="splash">
+  <div class="splash-icon">C</div>
+  <h1>Cris</h1>
+  <p>Mais foco. Mais organização. Mais conquistas.</p>
+  <div class="splash-loader"><span></span></div>
+  <button class="btn-primary" style="margin-top:30px" id="goLogin">Entrar no App ✨</button>
+</div>
+
+<!-- TELA DE LOGIN -->
+<div class="auth-page" id="loginPage" style="display:none">
+  <div class="auth-card">
+    <div class="auth-logo">C</div>
+    <h1>Cris</h1>
+    <p>Estude com mais foco, organização e brilho ✨</p>
+    <div class="form-group">
+      <label>E-mail</label>
+      <input type="email" placeholder="seuemail@exemplo.com">
+    </div>
+    <div class="form-group">
+      <label>Senha</label>
+      <input type="password" placeholder="Sua senha">
+    </div>
+    <button class="btn-primary" id="btnLogin">Entrar</button>
+    <div class="divider"><span>ou</span></div>
+    <button class="btn-google">
+      <span>🔵</span> Entrar com Google
+    </button>
+    <div class="auth-links">
+      <a href="#" id="goRegister">Criar conta</a>
+      <a href="#">Esqueci minha senha</a>
+    </div>
+  </div>
+</div>
+
+<!-- INTERFACE PRINCIPAL -->
+<div class="app" id="app" style="display:none">
+<aside class="sidebar">
+  <div class="brand"><div class="logo">C</div><div><strong>Cris</strong><small>Estudo Organizado</small></div></div>
+  <nav class="nav" id="sideNav"></nav>
+  <div class="mentor-mini">
+    <div class="mentor-row">
+      <div class="avatar">✦</div>
+      <div><strong>Cris · Mentora IA</strong><div class="online">● Disponível para ajudar</div></div>
+    </div>
+    <p class="muted" style="font-size:12px;margin:12px 0 0">Um passo de cada vez. Você consegue. 💜</p>
+  </div>
+</aside>
+
+<main class="main">
+  <header class="topbar">
+    <div>
+      <div class="eyebrow" id="eyebrow">SEU ESPAÇO DE ESTUDOS</div>
+      <h1 id="pageTitle">Olá! 👋</h1>
+    </div>
+    <div class="top-actions">
+      <span class="date" id="todayDate"></span>
+      <button class="icon-btn" id="themeToggle" title="Alternar tema">🎨</button>
+      <button class="icon-btn" title="Sair" id="btnLogout">🚪</button>
+    </div>
+  </header>
+  <section class="content" id="content"></section>
+</main>
+</div>
+
+<nav class="bottomnav" id="bottomNav" aria-label="Navegação principal"></nav>
+<button class="fab" id="fab" aria-label="Conversar com a Cris" title="Conversar com a Cris">✦</button>
+
+<section class="chat" id="chat" aria-label="Chat com Cris">
+  <div class="chat-head">
+    <div class="avatar">✦</div>
+    <div><strong>Cris · sua mentora</strong><small>● Online para ajudar</small></div>
+    <button class="close" id="closeChat" aria-label="Fechar chat">×</button>
+  </div>
+  <div class="messages" id="messages">
+    <div class="bubble">Oi! 💜 Em que posso ajudar agora?</div>
+  </div>
+  <div class="suggestions" id="suggestions">
+    <button class="suggest-chip">📋 Montar plano de estudo</button>
+    <button class="suggest-chip">📝 Resumir um texto</button>
+    <button class="suggest-chip">💡 Explicar um assunto</button>
+    <button class="suggest-chip">🗓 Organizar minha semana</button>
+  </div>
+  <form class="chat-form" id="chatForm">
+    <input id="chatInput" placeholder="Escreva sua mensagem..." autocomplete="off">
+    <button type="submit">Enviar</button>
+  </form>
+</section>
+
+<script>
+const pages={
+  Hoje:{icon:'⌂',eyebrow:'SEU ESPAÇO DE ESTUDOS',title:'Bem-vinda de volta! 💜'},
+  Editor:{icon:'▤',eyebrow:'IDEIAS QUE VIRAM CONHECIMENTO',title:'Seu Editor'},
+  Planejamento:{icon:'◷',eyebrow:'UM PASSO DE CADA VEZ',title:'Cronograma e Metas'},
+  Biblioteca:{icon:'▣',eyebrow:'TUDO NO SEU LUGAR',title:'Sua Biblioteca'},
+  Conversas:{icon:'💬',eyebrow:'CONEXÕES',title:'Conversas'},
+  Ajustes:{icon:'⚙',eyebrow:'DO SEU JEITO',title:'Preferências'}
+};
+
+let current='Hoje';
+let themeMode='auto';
+let timeMode='midnight';
+let ajustesTab='perfil';
+let iaTab='api';
+const $=id=>document.getElementById(id);
+
+function createParticles(){
+  const p=$('particles');
+  for(let i=0;i<40;i++){
+    const el=document.createElement('div');
+    el.className='particle';
+    el.style.left=Math.random()*100+'%';
+    el.style.animationDelay=Math.random()*12+'s';
+    el.style.animationDuration=(8+Math.random()*8)+'s';
+    p.appendChild(el);
+  }
+}
+createParticles();
+
+$('goLogin').onclick=()=>{
+  $('splash').style.opacity='0';
+  $('splash').style.transition='opacity .5s ease, transform .5s ease';
+  $('splash').style.transform='scale(.95)';
+  setTimeout(()=>{
+    $('splash').style.display='none';
+    $('loginPage').style.display='grid';
+  },500);
+};
+$('btnLogin').onclick=()=>{
+  $('loginPage').style.display='none';
+  $('app').style.display='grid';
+  $('body').classList.remove('splash-page');
+  $('body').style.placeItems='unset';
+  initTimeTheme();
+  render();
+};
+$('btnLogout').onclick=()=>{
+  $('app').style.display='none';
+  $('loginPage').style.display='grid';
+  current='Hoje';
+};
+$('goRegister').onclick=(e)=>{
+  e.preventDefault();
+  alert('Página de cadastro — insira seus dados e crie sua conta! ✨');
+};
+
+function initTimeTheme(){
+  if(themeMode==='auto'){
+    const h=new Date().getHours();
+    if(h>=6 && h<12) timeMode='morning';
+    else if(h>=12 && h<18) timeMode='afternoon';
+    else if(h>=18 && h<24) timeMode='evening';
+    else timeMode='midnight';
+  }
+  applyTimeTheme();
+}
+function applyTimeTheme(){
+  $('body').setAttribute('data-time',timeMode);
+  if(timeMode==='morning' || timeMode==='afternoon'){
+    $('body').setAttribute('data-theme','light');
+  }else{
+    $('body').removeAttribute('data-theme');
+  }
+}
+$('themeToggle').onclick=()=>{
+  const modes=['auto','dark','light'];
+  const idx=modes.indexOf(themeMode);
+  themeMode=modes[(idx+1)%3];
+  if(themeMode==='auto'){
+    initTimeTheme();
+    $('themeToggle').textContent='🕐 Auto';
+  }else if(themeMode==='dark'){
+    $('body').removeAttribute('data-theme');
+    $('body').removeAttribute('data-time');
+    $('themeToggle').textContent='🌙 Escuro';
+  }else{
+    $('body').setAttribute('data-theme','light');
+    $('body').removeAttribute('data-time');
+    $('themeToggle').textContent='☀️ Claro';
+  }
+};
+
+function makeNav(){
+  const navHTML=Object.keys(pages).map(n=>`<button data-page="${n}" class="${n===current?'active':''}"><span class="ico">${pages[n].icon}</span>${n}</button>`).join('');
+  $('sideNav').innerHTML=navHTML;
+  $('bottomNav').innerHTML=Object.keys(pages).map(n=>`<button data-page="${n}" class="${n===current?'active':''}"><span>${pages[n].icon}</span>${n}</button>`).join('');
+}
+function header(){
+  $('eyebrow').textContent=pages[current].eyebrow;
+  $('pageTitle').textContent=pages[current].title;
+  document.querySelectorAll('[data-page]').forEach(b=>b.classList.toggle('active',b.dataset.page===current));
+}
+function go(n){current=n;render();window.scrollTo({top:0,behavior:'smooth'})}
+document.addEventListener('click',e=>{
+  const b=e.target.closest('[data-page]');
+  if(b)go(b.dataset.page);
+  const tab=e.target.closest('[data-tab]');
+  if(tab && tab.closest('.ajustes-tabs')){
+    ajustesTab=tab.dataset.tab;
+    render();
+  }
+  if(tab && tab.closest('.ia-tabs')){
+    iaTab=tab.dataset.tab;
+    render();
+  }
+  const toggle=e.target.closest('.toggle');
+  if(toggle){
+    toggle.classList.toggle('on');
+  }
+});
+
+$('fab').onclick=()=>{$('chat').classList.toggle('open')};
+$('closeChat').onclick=()=>{$('chat').classList.remove('open')};
+document.addEventListener('click',e=>{
+  if(e.target.closest('.suggest-chip')){
+    const chip=e.target.closest('.suggest-chip');
+    const msg=chip.textContent.trim();
+    addMessage(msg,'me');
+    setTimeout(()=>addMessage('Ótima ideia! Vamos trabalhar nisso juntos. 💜 Já estou preparando...'),1000);
+  }
+});
+$('chatForm').onsubmit=(e)=>{
+  e.preventDefault();
+  const msg=$('chatInput').value.trim();
+  if(!msg)return;
+  addMessage(msg,'me');
+  $('chatInput').value='';
+  setTimeout(()=>addMessage('Recebi sua mensagem! Deixa comigo ✨'),1200);
+};
+function addMessage(text,who='ai'){
+  const m=document.createElement('div');
+  m.className=`bubble ${who==='me'?'me':''}`;
+  m.textContent=text;
+  $('messages').appendChild(m);
+  $('messages').scrollTop=$('messages').scrollHeight;
+}
+
+const views={
+  Hoje:()=>`
+    <div class="card" style="background:linear-gradient(135deg,#101a30,#1a1035);border-color:#253555">
+      <h2 style="margin:0 0 8px">Tudo pronto para brilhar! ✨</h2>
+      <p style="color:var(--muted);margin:0">Seu espaço de estudos está organizado e esperando por você.</p>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-head"><h3>📘 Seu Progresso</h3><button class="text-link" data-page="Planejamento">Ver plano →</button></div>
+        <p style="color:var(--muted);font-size:13px">Continue de onde parou:</p>
+        <p><b>Revisão de Lógica de Programação</b></p>
+        <div class="progress"><span style="width:45%"></span></div>
+        <p style="font-size:12px;color:var(--muted)">45% concluído — você está indo muito bem! 💜</p>
+        <button class="btn-primary" style="margin-top:10px">Continuar Estudo →</button>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>⚡ Acesso Rápido</h3></div>
+        <button class="text-link" data-page="Editor" style="display:block;margin:8px 0">→ Abrir editor de anotações</button>
+        <button class="text-link" data-page="Biblioteca" style="display:block;margin:8px 0">→ Ver materiais salvos</button>
+        <button class="text-link" data-page="Conversas" style="display:block;margin:8px 0">→ Retomar conversa</button>
+        <button class="text-link" data-page="Ajustes" style="display:block;margin:8px 0">→ Personalizar o app</button>
+      </div>
+    </div>
+    <div class="three-col">
+      <div class="card" style="text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">📖</div>
+        <strong>4</strong>
+        <p class="muted" style="font-size:12px;margin:0">Materiais</p>
+      </div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">⏱</div>
+        <strong>4h 30m</strong>
+        <p class="muted" style="font-size:12px;margin:0">Esta semana</p>
+      </div>
+      <div class="card" style="text-align:center">
+        <div style="font-size:28px;margin-bottom:8px">🔥</div>
+        <strong>7 dias</strong>
+        <p class="muted" style="font-size:12px;margin:0">Sequência</p>
+      </div>
+    </div>
+  `,
+
+  Editor:()=>`
+    <div class="card">
+      <div class="card-head">
+        <div><h3>▤ Editor de Anotações</h3><span class="muted">Suas ideias organizadas em um só lugar</span></div>
+        <div>
+          <button class="text-link">💾 Salvar</button>
+          <button class="text-link">📄 Novo</button>
+        </div>
+      </div>
+      <div class="toolbar">
+        <button data-cmd="bold"><b>B</b></button>
+        <button data-cmd="italic"><i>I</i></button>
+        <button data-cmd="insertUnorderedList">• Lista</button>
+        <button data-cmd="insertOrderedList">1. Lista</button>
+        <button data-cmd="formatBlock" data-value="h2">Título</button>
+        <button data-cmd="formatBlock" data-value="blockquote">Citação</button>
+      </div>
+      <div class="editor-surface" contenteditable="true">
+        <h2>📚 Introdução à Programação</h2>
+        <p><b>1. O que é programação?</b></p>
+        <p>Programar é a arte de traduzir ideias em instruções que o computador consegue executar. É como escrever uma receita passo a passo.</p>
+        <p><b>2. Conceitos fundamentais</b></p>
+        <ul>
+          <li><b>Variáveis</b> → guardam informações (números, textos, dados)</li>
+          <li><b>Condições</b> → tomam decisões com base em regras</li>
+          <li><b>Laços</b> → repetem ações várias vezes</li>
+          <li><b>Funções</b> → agrupam lógica para reutilizar</li>
+        </ul>
+        <blockquote>O segredo não é correr, é persistir um passo de cada vez. 💜</blockquote>
+      </div>
+    </div>
+  `,
+
+  Planejamento:()=>`
+    <div class="card">
+      <div class="card-head">
+        <div><h3>◷ Cronograma Semanal</h3><span class="muted">Organize seu tempo com leveza</span></div>
+        <button class="btn-primary" style="padding:8px 14px;font-size:13px">+ Nova Sessão</button>
+      </div>
+      <div class="week">
+        <div><strong>SEG · 12/10</strong><span>Lógica · 14h — 1h</span><span>Revisão · 19h — 30m</span></div>
+        <div><strong>TER · 13/10</strong><span>Programação · 15h — 1h</span><span>Exercícios · 20h — 45m</span></div>
+        <div><strong>QUA · 14/10</strong><span>Banco de Dados · 14h — 1h</span><span>Leitura · 19h — 30m</span></div>
+        <div><strong>QUI · 15/10</strong><span>Web · 15h — 1h</span><span>Projeto · 20h — 1h</span></div>
+        <div><strong>SEX · 16/10</strong><span>Revisão Geral · 10h — 1h30</span><span>Descanso ✨</span></div>
+      </div>
+    </div>
+    <div class="two-col">
+      <div class="card">
+        <div class="card-head"><h3>🎯 Metas do Mês</h3><span class="chip recommended">2 de 5 concluídas</span></div>
+        <p style="color:var(--green)">✅ Finalizar módulo introdutório</p>
+        <p style="color:var(--green)">✅ Organizar materiais de estudo</p>
+        <p style="color:var(--text)">⬜ Resolver 20 exercícios de lógica</p>
+        <p style="color:var(--text)">⬜ Criar primeiro projeto em Python</p>
+        <p style="color:var(--text)">⬜ Fazer simulado</p>
+        <div class="progress" style="margin-top:15px"><span style="width:40%"></span></div>
+      </div>
+      <div class="card">
+        <div class="card-head"><h3>📊 Seu Ritmo</h3></div>
+        <p style="margin-bottom:8px">Horas estudadas esta semana</p>
+        <div class="progress"><span style="width:55%"></span></div>
+        <p class="muted" style="font-size:12px">4h 30m de 8h planejadas</p>
+        <p style="margin-top:15px;color:var(--gold)">💡 Dica da Cris: estude no mesmo horário todos os dias. A constância vence a intensidade!</p>
+      </div>
+    </div>
+  `,
+
+  Biblioteca:()=>`
+    <div class="card">
+      <div class="card-head">
+        <div><h3>▣ Sua Biblioteca</h3><span class="muted">PDFs, vídeos, anotações e links organizados</span></div>
+        <button class="btn-primary" style="padding:8px 14px;font-size:13px">+ Adicionar</button>
+      </div>
+      
+      padding:12px 16px;margin-bottom:16px;border:1px solid var(--line);border-radius:12px;background:#0b1220;color:var(--text);width:100%;font:inherit">
+      <div class="tabs" style="margin-bottom:12px">
+        <button class="tab active">Todos</button>
+        <button class="tab">📄 PDF</button>
+        <button class="tab">📝 Anotações</button>
+        <button class="tab">🎬 Vídeos</button>
+        <button class="tab">🔗 Links</button>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:10px">
+        <div class="list-item">
+          <div class="file-icon">📄</div>
+          <div style="flex:1">
+            <strong>Introdução à Lógica de Programação</strong>
+            <p style="font-size:12px;color:var(--muted);margin:2px 0">Adicionado em 05/10/2026 · 2.4 MB</p>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="file-icon">📝</div>
+          <div style="flex:1">
+            <strong>Anotações — Variáveis e Tipos de Dados</strong>
+            <p style="font-size:12px;color:var(--muted);margin:2px 0">Editado em 07/10/2026</p>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="file-icon">🎬</div>
+          <div style="flex:1">
+            <strong>Curso Python — Aula 01: Primeiros Passos</strong>
+            <p style="font-size:12px;color:var(--muted);margin:2px 0">Vídeo · Duração: 42 min</p>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="file-icon">🔗</div>
+          <div style="flex:1">
+            <strong>Documentação Oficial Python</strong>
+            <p style="font-size:12px;color:var(--muted);margin:2px 0">python.org · Acesso em 08/10/2026</p>
+          </div>
+        </div>
+        <div class="list-item">
+          <div class="file-icon">📄</div>
+          <div style="flex:1">
+            <strong>Exercícios Resolvidos — Estruturas de Controle</strong>
+            <p style="font-size:12px;color:var(--muted);margin:2px 0">Adicionado em 08/10/2026 · 1.1 MB</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  `,
+
+  Conversas:()=>`
+    <div class="card">
+      <div class="card-head">
+        <div><h3>💬 Conversas</h3><span class="muted">Suas interações</span></div>
+        <button class="btn-primary" style="padding:8px 14px;font-size:13px">+ Nova Conversa</button>
+      </div>
+      <div style="display:flex;flex-direction:column">
+        <div class="conversation">
+          <div class="avatar">✦</div>
+          <div style="flex:1">
+            <strong>Cris — Mentora IA</strong>
+            <p>Podemos começar pelos conceitos fundamentais de lógica...</p>
+          </div>
+          <time>14:25</time>
+        </div>
+        <div class="conversation">
+          <div class="avatar" style="background:linear-gradient(140deg,#49e5b1,#00a8cc)">M</div>
+          <div style="flex:1">
+            <strong>Maria — Colega de Turma</strong>
+            <p>Conseguiu resolver aquele exercício de repetição? Eu travei aqui 😅</p>
+          </div>
+          <time>Ontem</time>
+        </div>
+        <div class="conversation">
+          <div class="avatar" style="background:linear-gradient(140deg,#ff9f43,#ff4d6d)">P</div>
+          <div style="flex:1">
+            <strong>Prof. Paulo — Programação</strong>
+            <p>Ótimo progresso! Na próxima aula vamos aprofundar funções.</p>
+          </div>
+          <time>Terça</time>
+        </div>
+        <div class="conversation">
+          <div class="avatar" style="background:linear-gradient(140deg,#9333ea,#e34bff)">L</div>
+          <div style="flex:1">
+            <strong>Lucas — Grupo de Estudos</strong>
+            <p>Reunião marcada para sábado às 14h! 📚</p>
+          </div>
+          <time>Segunda</time>
+        </div>
+      </div>
+    </div>
+  `,
+
+  Ajustes:()=>`
+    <div class="side-menu">
+      <nav class="side-menu-nav ajustes-tabs">
+        <button data-tab="perfil" class="${ajustesTab==='perfil'?'active':''}👤 Perfil</button>
+        <button data-tab="conta" class="${ajustesTab==='conta'?'active':''}🔐 Conta</button>
+        <button data-tab="aparencia" class="${ajustesTab==='aparencia'?'active':''}🎨 Aparência</button>
+        <button data-tab="notificacoes" class="${ajustesTab==='notificacoes'?'active':''}🔔 Notificações</button>
+        <button data-tab="conexoes" class="${ajustesTab==='conexoes'?'active':''}🔗 Conexões</button>
+        <button data-tab="ia" class="${ajustesTab==='ia'?'active':''}🤖 APIs de IA</button>
+        <button data-tab="editor" class="${ajustesTab==='editor'?'active':''}✏️ Editor</button>
+        <button data-tab="estudos" class="${ajustesTab==='estudos'?'active':''}📘 Estudos</button>
+        <button data-tab="privacidade" class="${ajustesTab==='privacidade'?'active':''}🛡️ Privacidade</button>
+        <button data-tab="dados" class="${ajustesTab==='dados'?'active':''}💾 Dados</button>
+        <button data-tab="sobre" class="${ajustesTab==='sobre'?'active':''}ℹ️ Sobre</button>
+      </nav>
+      <div>
+        ${(function(){
+          switch(ajustesTab){
+            case 'perfil':return `
+              <div class="card">
+                <div class="card-head"><h3>👤 Sobre Mim</h3></div>
+                <div class="form-group">
+                  <label>Nome completo</label>
+                  <input type="text" value="Ana Carolina Silva">
+                </div>
+                <div class="form-group">
+                  <label>Apelido / Como prefere ser chamada</label>
+                  <input type="text" value="Ana">
+                </div>
+                <div class="form-group">
+                  <label>Instituição de ensino</label>
+                  <input type="text" value="Universidade Federal de Minas Gerais">
+                </div>
+                <div class="form-group">
+                  <label>Curso</label>
+                  <input type="text" value="Ciência da Computação — 1º Período">
+                </div>
+                <div class="form-group">
+                  <label>Matérias que está cursando</label>
+                  <textarea rows="4" style="resize:none">Introdução à Programação
+Lógica Matemática
+Fundamentos de Computação
+Matemática Discreta</textarea>
+                </div>
+                <div class="form-group">
+                  <label>Objetivos atuais</label>
+                  <textarea rows="3" style="resize:none">Dominar lógica de programação e construir uma base sólida para desenvolvimento de software.</textarea>
+                </div>
+                <button class="btn-primary">💾 Salvar Alterações</button>
+
+                <div class="transparency-card">
+                  <h4>📋 O que a Cris recebe</h4>
+                  <p><span class="status-ok">✅</span> Seu nome e preferências de chamada — para te tratar da melhor forma 💜</p>
+                  <p><span class="status-ok">✅</span> Curso, matérias e objetivos — para personalizar dicas e planos de estudo</p>
+                  <p><span class="status-ok">✅</span> Anotações e materiais que você cria — para revisar, resumir e acompanhar seu progresso</p>
+                  <p><span class="status-warn">⚠️</span> Dados sensíveis (senha, documentos pessoais, endereço) <strong>não</strong> são solicitados nem armazenados</p>
+                </div>
+              </div>
+            `;
+            case 'conta':return `
+              <div class="card">
+                <div class="card-head"><h3>🔐 Conta</h3></div>
+                <div class="form-group">
+                  <label>E-mail cadastrado</label>
+                  <input type="email" value="anasilva@email.com" disabled style="opacity:.7">
+                </div>
+                <div class="form-group">
+                  <label>Alterar senha atual</label>
+                  <input type="password" placeholder="Digite sua senha atual">
+                </div>
+                <div class="form-group">
+                  <label>Nova senha</label>
+                  <input type="password" placeholder="Mínimo 8 caracteres">
+                </div>
+                <div class="form-group">
+                  <label>Confirmar nova senha</label>
+                  <input type="password" placeholder="Digite novamente">
+                </div>
+                <button class="btn-primary">🔄 Atualizar Dados</button>
+                <hr style="border:none;border-top:1px solid var(--line);margin:20px 0">
+                <h4 style="color:var(--red);margin-bottom:10px">Zona de Perigo</h4>
+                <p style="font-size:13px;color:var(--muted);margin-bottom:12px">Ação irreversível — todos os dados serão apagados.</p>
+                <button class="btn-secondary" style="color:var(--red);border-color:var(--red)">🗑️ Excluir minha conta</button>
+              </div>
+            `;
+            case 'aparencia':return `
+              <div class="card">
+                <div class="card-head"><h3>🎨 Aparência</h3></div>
+                <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Escolha o visual que combina com você ✨</p>
+                <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:20px">
+                  <button class="btn-secondary" style="border-color:${themeMode==='dark'?'var(--cyan)':'transparent'};text-align:left;padding:16px">
+                    <strong>🌙 Escuro</strong>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0">Fundo escuro, fácil para os olhos</p>
+                  </button>
+                  <button class="btn-secondary" style="border-color:${themeMode==='light'?'var(--cyan)':'transparent'};text-align:left;padding:16px">
+                    <strong>☀️ Claro</strong>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0">Telas claras e nítidas</p>
+                  </button>
+                  <button class="btn-secondary" style="border-color:${themeMode==='auto'&&timeMode==='morning'?'var(--cyan)':'transparent'};text-align:left;padding:16px">
+                    <strong>🌅 Amanhecer</strong>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0">Tons suaves de laranja e rosa</p>
+                  </button>
+                  <button class="btn-secondary" style="border-color:${themeMode==='auto'&&timeMode==='evening'?'var(--cyan)':'transparent'};text-align:left;padding:16px">
+                    <strong>🌇 Entardecer</strong>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0">Roxo e roxo-escuro elegante</p>
+                  </button>
+                  <button class="btn-secondary" style="border-color:${themeMode==='auto'?'var(--cyan)':'transparent'};text-align:left;padding:16px;grid-column:span 2">
+                    <strong>🕐 Automático</strong>
+                    <p style="font-size:12px;color:var(--muted);margin:4px 0">Ajusta conforme a hora do dia — manhã → tarde → noite → madrugada</p>
+                  </button>
+                </div>
+                <div class="toggle-row">
+                  <span>Animações suaves</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Partículas flutuando no fundo</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Brilho nos elementos ativos</span>
+                  <div class="toggle on"></div>
+                </div>
+              </div>
+            `;
+            case 'notificacoes':return `
+              <div class="card">
+                <div class="card-head"><h3>🔔 Notificações</h3></div>
+                <div class="toggle-row">
+                  <span>Lembretes de estudo</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Respostas da Cris</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Mensagens de contatos</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Metas não cumpridas</span>
+                  <div class="toggle"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Dicas e novidades</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="form-group" style="margin-top:20px">
+                  <label>Horário silencioso — não perturbar entre</label>
+                  <div style="display:flex;gap:10px">
+                    <input type="time" value="22:00" style="flex:1">
+                    <span>e</span>
+                    <input type="time" value="07:00" style="flex:1">
+                  </div>
+                </div>
+              </div>
+            `;
+            case 'conexoes':return `
+              <div class="card">
+                <div class="card-head"><h3>🔗 Conexões</h3></div>
+                <p style="font-size:13px;color:var(--muted);margin-bottom:20px">Conecte contatos e serviços para colaboração e backup.</p>
+                <div class="toggle-row">
+                  <span>Google — login e drive para backup</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>GitHub — sincronizar anotações como repositório</span>
+                  <div class="toggle"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Compartilhar com colegas da turma</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Sincronização entre dispositivos</span>
+                  <div class="toggle on"></div>
+                </div>
+              </div>
+            `;
+            case 'ia':return `
+              <div class="card">
+                <div class="card-head"><h3>🤖 Configuração de IA</h3></div>
+                <div class="tabs ia-tabs" style="margin-bottom:20px">
+                  <button class="tab ${iaTab==='api'?'active':''}" data-tab="api">Chaves & Provedores</button>
+                  <button class="tab ${iaTab==='modelos'?'active':''}" data-tab="modelos">Modelos</button>
+                  <button class="tab ${iaTab==='local'?'active':''}" data-tab="local">IA Local</button>
+                </div>
+                ${iaTab==='api'?`
+                  <div class="form-group">
+                    <label>Provedor de IA</label>
+                    <select style="width:100%">
+                      <option selected>OpenAI (GPT)</option>
+                      <option>Anthropic (Claude)</option>
+                      <option>Google (Gemini)</option>
+                      <option>Outro / Personalizado</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>Chave de API</label>
+                    <input type="password" placeholder="sk-••••••••••••" value="sk-xxxxxxxxxxxx">
+                    <p style="font-size:11px;color:var(--muted);margin-top:4px">Sua chave é armazenada apenas neste dispositivo e nunca é compartilhada com terceiros.</p>
+                  </div>
+                  <div class="form-group">
+                    <label>Modelo padrão</label>
+                    <select style="width:100%">
+                      <option>GPT-3.5 Turbo</option>
+                      <option selected>GPT-4o</option>
+                      <option>GPT-4 Turbo</option>
+                    </select>
+                  </div>
+                  <button class="btn-primary">🔍 Testar Conexão</button>
+                `:''}
+                ${iaTab==='modelos'?`
+                  <h4 style="margin-bottom:12px">Modelos Disponíveis</h4>
+                  <div class="banner yellow">
+                    <span>⚠️</span>
+                    <div>
+                      <strong>Atualização importante</strong>
+                      <p style="font-size:13px;margin:4px 0">O modelo GPT-4 Turbo será descontinuado em 01/11/2026. Migre para o GPT-4o para não interromper o uso.</p>
+                    </div>
+                  </div>
+                  <div style="display:flex;flex-direction:column;gap:12px">
+                    <div style="padding:12px;border-radius:10px;background:#0b1220;border:1px solid var(--line)">
+                      <div style="display:flex;justify-content:space-between;align-items:center">
+                        <strong>GPT-4o</strong>
+                        <span class="chip live">✅ Ativo — Recomendado</span>
+                      </div>
+                      <p style="font-size:12px;color:var(--muted);margin-top:6px">Mais recente, rápido e multimídia. Suporta texto, imagem e áudio.</p>
+                    </div>
+                    <div style="padding:12px;border-radius:10px;background:#0b1220;border:1px solid var(--line)">
+                      <div style="display:flex;justify-content:space-between;align-items:center">
+                        <strong>GPT-3.5 Turbo</strong>
+                        <span class="chip live">✅ Ativo</span>
+                      </div>
+                      <p style="font-size:12px;color:var(--muted);margin-top:6px">Econômico e rápido para tarefas simples.</p>
+                    </div>
+                    <div style="padding:12px;border-radius:10px;background:#2a1520;border:1px solid var(--red)">
+                      <div style="display:flex;justify-content:space-between;align-items:center">
+                        <strong>GPT-4 Turbo</strong>
+                        <span class="chip retired">⏳ Aposentado — até 01/11/2026</span>
+                      </div>
+                      <p style="font-size:12px;color:var(--muted);margin-top:6px">Não receberá mais atualizações. Migre agora →</p>
+                      <button class="btn-secondary" style="margin-top:8px;padding:6px 12px;font-size:12px">Migrar para GPT-4o</button>
+                    </div>
+                  </div>
+                `:''}
+                ${iaTab==='local'?`
+                  <h4 style="margin-bottom:12px">Executar IA no próprio dispositivo</h4>
+                  <p style="font-size:13px;color:var(--muted);margin-bottom:16px">Use modelos como Llama 3, Mistral ou seu próprio arquivo .gguf sem depender de internet ou chaves externas.</p>
+                  <div class="form-group">
+                    <label>Caminho do modelo (arquivo .gguf / .llamafile)</label>
+                    <input type="text" placeholder="C:\\Modelos\\meu-modelo.gguf">
+                  </div>
+                  <div class="form-group">
+                    <label>Comando / Executável do servidor local</label>
+                    <input type="text" placeholder="./llamafile --model meu-modelo.gguf">
+                  </div>
+                  <div class="toggle-row">
+                    <span>Usar IA local quando disponível</span>
+                    <div class="toggle"></div>
+                  </div>
+                  <div class="toggle-row">
+                    <span>Recorrer à nuvem se local falhar</span>
+                    <div class="toggle on"></div>
+                  </div>
+                  <button class="btn-primary">🔄 Verificar Modelo Local</button>
+                `:''}
+              </div>
+            `;
+            case 'editor':return `
+              <div class="card">
+                <div class="card-head"><h3>✏️ Preferências do Editor</h3></div>
+                <div class="form-group">
+                  <label>Fonte</label>
+                  <select style="width:100%;background:#0b1220;color:var(--text);border:1px solid var(--line);padding:8px;border-radius:8px">
+                    <option>Inter (padrão)</option>
+                    <option>JetBrains Mono</option>
+                    <option>Consolas</option>
+                    <option>Courier New</option>
+                  </select>
+                </div>
+                <div class="form-group">
+                  <label>Tamanho da fonte — <span id="fontSizeValue">15px</span></label>
+                  <input type="range" min="12" max="24" value="15" oninput="document.getElementById('fontSizeValue').textContent=this.value+'px'">
+                </div>
+                <div class="toggle-row">
+                  <span>Números de linha</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Destaque de sintaxe</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Salvamento automático a cada 30s</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Espaço em vez de Tab (4 espaços)</span>
+                  <div class="toggle on"></div>
+                </div>
+              </div>
+            `;
+            case 'estudos':return `
+              <div class="card">
+                <div class="card-head"><h3>📘 Configurações de Estudo</h3></div>
+                <div class="form-group">
+                  <label>Meta diária de estudo</label>
+                  <input type="time" value="01:30">
+                </div>
+                <div class="form-group">
+                  <label>Técnica de foco</label>
+                  <select style="width:100%">
+                    <option selected>Pomodoro — 25 min / 5 min</option>
+                    <option>50 min foco / 10 min pausa</option>
+                    <option>90 min profundo / 20 min descanso</option>
+                    <option>Personalizado</option>
+                  </select>
+                </div>
+                <div class="toggle-row">
+                  <span>Mostrar contador de sessão</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Registrar tempo automaticamente</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="form-group">
+                  <label>Dia da semana para resetar metas</label>
+                  <select style="width:100%">
+                    <option>Domingo</option>
+                    <option selected>Segunda-feira</option>
+                  </select>
+                </div>
+              </div>
+            `;
+            case 'privacidade':return `
+              <div class="card">
+                <div class="card-head"><h3>🛡️ Privacidade</h3></div>
+                <div class="toggle-row">
+                  <span>Permitir uso dos meus dados para melhorar a IA</span>
+                  <div class="toggle"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Compartilhar progresso com contatos</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Salvar histórico de conversas</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Apagar histórico ao fechar o app</span>
+                  <div class="toggle"></div>
+                </div>
+                <hr style="border:none;border-top:1px solid var(--line);margin:20px 0">
+                <h4>Seus Direitos</h4>
+                <p style="font-size:13px;color:var(--muted);margin:8px 0">Conforme a LGPD — Lei Geral de Proteção de Dados (13.718/2018), você pode:</p>
+                <ul style="font-size:13px;color:var(--muted);padding-left:20px;margin:0">
+                  <li>Acessar todos os dados que temos sobre você</li>
+                  <li>Solicitar correção de informações incorretas</li>
+                  <li>Pedir exclusão completa dos dados</li>
+                  <li>Revogar consentimento a qualquer momento</li>
+                </ul>
+                <div class="btn-group" style="margin-top:16px">
+                  <button class="btn-secondary">📥 Baixar meus dados</button>
+                  <button class="btn-secondary">📄 Ver política de privacidade</button>
+                </div>
+              </div>
+            `;
+            case 'dados':return `
+              <div class="card">
+                <div class="card-head"><h3>💾 Gerenciamento de Dados</h3></div>
+                <div style="background:#0b1220;border-radius:10px;padding:16px;margin-bottom:20px">
+                  <p style="margin:0 0 8px;font-size:13px">Espaço utilizado</p>
+                  <div class="progress"><span style="width:35%"></span></div>
+                  <p style="margin:8px 0 0;font-size:12px;color:var(--muted)">128 MB de 512 MB disponíveis</p>
+                </div>
+                <div class="toggle-row">
+                  <span>Backup automático para nuvem</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Incluir anexos no backup</span>
+                  <div class="toggle on"></div>
+                </div>
+                <div class="toggle-row">
+                  <span>Comprimir dados para economizar espaço</span>
+                  <div class="toggle"></div>
+                </div>
+                <div class="form-group" style="margin-top:20px">
+                  <label>Frequência do backup</label>
+                  <select style="width:100%">
+                    <option selected>Ao encerrar o app</option>
+                    <span>A cada hora</span>
+                    <option>Diário</option>
+                    <option>Semanal</option>
+                  </select>
+                </div>
+                <div class="btn-group">
+                  <button class="btn-primary">🔄 Fazer Backup Agora</button>
+                  <button class="btn-secondary">📂 Restaurar de Backup</button>
+                </div>
+              </div>
+            `;
+            case 'sobre':return `
+              <div class="card">
+                <div class="card-head"><h3>ℹ️ Sobre o Cris</h3></div>
+                <div style="text-align:center;margin-bottom:24px">
+                  <div class="avatar" style="width:80px;height:80px;font-size:36px;margin:0 auto 12px">✦</div>
+                  <h2 style="margin:0">Cris — Estudo Organizado</h2>
+                  <p style="color:var(--muted);font-size:13px;margin:4px 0">Versão 1.0.0 · Lançamento oficial</p>
+                </div>
+                <p style="font-size:14px;line-height:1.6">O Cris nasceu para ser seu espaço de crescimento: um ambiente acolhedor onde você organiza, aprende e evolui com companhia. Tudo feito com carinho 💜</p>
+                <ul style="font-size:13px;color:var(--muted);padding-left:20px;margin:16px 0">
+                  <li>Desenvolvido com foco em estudantes universitários</li>
+                  <li>Respeito à sua privacidade em primeiro lugar</li>
+                  <li>Compatível com modelos em nuvem e locais (llamafile, .gguf)</li>
+                  <li>Código aberto — você pode confiar e colaborar ✨</li>
+                </ul>
+                <p style="font-size:13px;color:var(--cyan);margin-top:20px">Feito em Patos de Minas 💛💚</p>
+                <div class="btn-group" style="margin-top:12px">
+                  <button class="btn-secondary">📝 Notas de Versão</button>
+                  <button class="btn-secondary">💜 Apoiar o Projeto</button>
+                </div>
+              </div>
+            `;
+            default:return `<div class="card"><p>Selecione uma opção</p></div>`;
+          }
+        })()}
+      </div>
+    </div>
+  `
+};
+
+function render(){
+  makeNav();
+  header();
+  $('content').innerHTML=views[current]();
+  const today=new Date();
+  $('todayDate').textContent=today.toLocaleDateString('pt-BR',{weekday:'short',day:'2-digit',month:'2-digit'});
+}
+</script>
+</body>
+</html>

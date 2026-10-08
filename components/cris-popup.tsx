@@ -44,6 +44,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { academicColors } from '@/components/academic/design-system';
+import { NeonFab } from '@/components/neon/fab';
 import { useColors } from '@/hooks/use-colors';
 import type { AiConfig } from '@/lib/api-config';
 import { shouldSendChatOnEnter } from '@/lib/chat-utils';
@@ -57,7 +58,6 @@ import { useStudy } from '@/lib/study-store';
 
 /** Preferências do popup (só o liga/desliga das sugestões é persistido). */
 const PREFS_KEY = '@estudo-organizado/cris-popup-v1';
-const TAB_BAR_BASE = 56;
 const MAX_QUESTION = 1200;
 const HINT_WINDOW_DAYS = 7;
 const GREETING_BASE = 'Sou a Cris, sua mentora de estudos. Posso explicar um assunto, resumir um material, montar um plano ou destravar algo da tela em que você está. Por onde começamos?';
@@ -243,7 +243,8 @@ export default function CrisPopup() {
   );
 
   const bottomPadding = Platform.OS === 'web' ? 12 : Math.max(insets.bottom, 8);
-  const fabBottom = TAB_ROUTES.includes(route) ? TAB_BAR_BASE + bottomPadding + 16 : bottomPadding + 26;
+  // Dentro das abas o FAB se posiciona sozinho, colado na bottom nav do shell.
+  const fabBottom = TAB_ROUTES.includes(route) ? undefined : bottomPadding + 26;
 
   const toggleSuggestions = useCallback(() => {
     const next: PopupPrefs = { suggestionsEnabled: !prefs.suggestionsEnabled };
@@ -376,18 +377,7 @@ export default function CrisPopup() {
 
   return (
     <>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="Abrir a Cris, sua mentora de estudos"
-        onPress={openPopup}
-        style={({ pressed }) => [
-          styles.fab,
-          { backgroundColor: colors.primary, bottom: fabBottom },
-          pressed && styles.pressed,
-        ]}
-      >
-        <MaterialIcons name="auto-awesome" size={24} color="#FFFFFF" />
-      </Pressable>
+      <NeonFab bottom={fabBottom} onPress={openPopup} />
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={closePopup}>
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboard}>
@@ -673,7 +663,6 @@ const styles = StyleSheet.create({
   chipText: { fontSize: 12, fontWeight: '700' },
   composer: { alignItems: 'flex-end', borderTopWidth: 1, flexDirection: 'row', paddingHorizontal: 12, paddingTop: 10 },
   disabled: { opacity: 0.45 },
-  fab: { alignItems: 'center', borderRadius: 28, elevation: 6, height: 56, justifyContent: 'center', position: 'absolute', right: 18, shadowColor: '#111827', shadowOffset: { width: 0, height: 6 }, shadowOpacity: 0.24, shadowRadius: 14, width: 56, zIndex: 40 },
   fallbackRow: { alignItems: 'flex-start', flexDirection: 'row', marginTop: 6 },
   fallbackText: { flex: 1, fontSize: 12, fontWeight: '600', lineHeight: 16, marginLeft: 6 },
   failureCard: { borderTopColor: academicColors.warning, borderTopWidth: 2, marginTop: 6, paddingTop: 4 },

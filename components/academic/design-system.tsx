@@ -1,6 +1,31 @@
-import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, Text, type StyleProp, type ViewStyle, View } from 'react-native';
+import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Animated, Easing, Pressable, StyleSheet, Text, type StyleProp, type ViewStyle, View } from 'react-native';
+import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 
+import { isDarkScheme } from '@/constants/theme';
+import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useColors } from '@/hooks/use-colors';
+import {
+  buildNeonTones,
+  cardShadow,
+  glowShadow,
+  gradientVector,
+  hexToRgba,
+  neonGradientSpec,
+  neonMotion,
+  neonRadius,
+  neonType,
+  type AcademicTone,
+  type NeonGradientName,
+} from '@/lib/theme-runtime';
+
+export type { AcademicTone } from '@/lib/theme-runtime';
+
+/**
+ * Paleta clara histórica do design system.
+ * Valores preservados para as telas que ainda importam `academicColors` diretamente;
+ * telas migradas devem usar `useAcademicColors()`/`useAcademicPalette()`.
+ */
 export const academicColors = {
   indigo: '#3346A8',
   indigoDark: '#263585',
@@ -19,84 +44,554 @@ export const academicColors = {
   nightSurface: '#191E2B',
 } as const;
 
-export type AcademicTone = 'indigo' | 'violet' | 'success' | 'warning' | 'danger' | 'neutral' | 'ghost';
-
-const tones: Record<AcademicTone, { fill: string; text: string }> = {
-  indigo: { fill: '#E8EBFF', text: academicColors.indigo },
-  violet: { fill: academicColors.violetSoft, text: academicColors.violet },
-  success: { fill: '#E8F6EF', text: academicColors.success },
-  warning: { fill: '#FFF5DE', text: academicColors.warning },
-  danger: { fill: '#FDECEF', text: academicColors.danger },
-  neutral: { fill: '#F3F4F6', text: academicColors.muted },
-  ghost: { fill: 'transparent', text: academicColors.indigo },
-};
-
-export function AcademicCard({ children, style, emphasis = false }: { children: ReactNode; style?: StyleProp<ViewStyle>; emphasis?: boolean }) {
-  return <View style={[styles.card, emphasis && styles.cardEmphasis, style]}>{children}</View>;
+/** Paleta viva do tema atual + tons prontos + material derivado. */
+export function useAcademicPalette() {
+  const colors = useColors();
+  const scheme = useColorScheme();
+  const isDark = isDarkScheme(scheme);
+  return useMemo(
+    () => ({
+      colors,
+      gradients: (name: NeonGradientName) => neonGradientSpec(name, colors),
+      isDark,
+      tones: buildNeonTones(colors, isDark),
+    }),
+    [colors, isDark],
+  );
 }
 
-export function AcademicSection({ eyebrow, title, actionLabel, onAction, children }: { eyebrow?: string; title: string; actionLabel?: string; onAction?: () => void; children: ReactNode }) {
-  return <View style={styles.section}>
-    <View style={styles.sectionHeading}>
-      <View style={styles.sectionTitleWrap}>
-        {eyebrow ? <Text style={styles.eyebrow}>{eyebrow}</Text> : null}
-        <Text style={styles.sectionTitle}>{title}</Text>
-      </View>
-      {actionLabel && onAction ? <Pressable accessibilityRole="button" accessibilityLabel={actionLabel} onPress={onAction} style={({ pressed }) => [styles.textAction, pressed && styles.pressed]}><Text style={styles.textActionLabel}>{actionLabel}</Text></Pressable> : null}
+/** Nomes históricos + nomes do mockup, todos resolvidos pelo tema ativo. */
+export function useAcademicColors() {
+  const { colors, isDark } = useAcademicPalette();
+  return useMemo(
+    () => ({
+      canvas: colors.background,
+      danger: colors.error,
+      indigo: colors.primary,
+      indigoDark: colors.primary,
+      info: colors.primary,
+      ink: colors.foreground,
+      line: colors.border,
+      muted: colors.muted,
+      night: colors.background,
+      nightSurface: colors.surfaceAlt,
+      success: colors.success,
+      surface: colors.surface,
+      surfaceAlt: colors.surfaceAlt,
+      violet: colors.accentPurple,
+      violetSoft: colors.lavender,
+      warning: colors.warning,
+      gold: colors.accentGold,
+      green: colors.accentGreen,
+      isDark,
+      onPrimary: '#FFFFFF',
+      orange: colors.accentOrange,
+      pink: colors.accentPink,
+      primary: colors.primary,
+      purple: colors.accentPurple,
+      rose: colors.accentRose,
+      soft: colors.lavender,
+    }),
+    [colors, isDark],
+  );
+}
+
+function useHoverState() {
+  const [hovered, setHovered] = useState(false);
+  const hoverProps = useMemo(
+    () => ({ onHoverIn: () => setHovered(true), onHoverOut: () => setHovered(false) }),
+    [],
+  );
+  return { hovered, hoverProps };
+}
+
+/**
+ * Fundo com gradiente real (SVG) — substitui o `expo-linear-gradient` que não está instalado.
+ * Renderiza o gradiente em `absoluteFill` e as crianças por cima.
+ */
+export function NeonGradient({
+  angle,
+  children,
+  colors,
+  name = 'panel',
+  style,
+}: {
+  angle?: number;
+  children?: ReactNode;
+  colors?: readonly [string, string];
+  name?: NeonGradientName;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { gradients } = useAcademicPalette();
+  const rawId = useId();
+  const gradientId = `neon-${rawId.replace(/[^a-zA-Z0-9]/g, '')}`;
+  const spec = useMemo(() => {
+    if (colors && colors.length === 2) {
+      return { angle: angle ?? 100, stops: [colors[0], colors[1]] as [string, string] };
+    }
+    return gradients(name);
+  }, [angle, colors, gradients, name]);
+  const vector = useMemo(() => gradientVector(spec.angle), [spec.angle]);
+  return (
+    <View style={style}>
+      <Svg
+        pointerEvents="none"
+        preserveAspectRatio="none"
+        style={StyleSheet.absoluteFill}
+        viewBox="0 0 100 100"
+      >
+        <Defs>
+          <LinearGradient id={gradientId} x1={vector.x1} x2={vector.x2} y1={vector.y1} y2={vector.y2}>
+            <Stop offset="0" stopColor={spec.stops[0]} />
+            <Stop offset="1" stopColor={spec.stops[1]} />
+          </LinearGradient>
+        </Defs>
+        <Rect fill={`url(#${gradientId})`} height="100" width="100" x="0" y="0" />
+      </Svg>
+      {children}
     </View>
-    {children}
-  </View>;
+  );
 }
 
-export function AcademicButton({ label, onPress, tone = 'indigo', compact = false, disabled = false, icon }: { label: string; onPress: () => void; tone?: AcademicTone; compact?: boolean; disabled?: boolean; icon?: ReactNode }) {
-  const isPrimary = tone === 'indigo' || tone === 'violet';
-  const isDanger = tone === 'danger';
+/** Card do mockup: gradiente `panel`, borda viva, raio 20, elevação e hover sutil. */
+export function AcademicCard({
+  children,
+  emphasis = false,
+  glow = false,
+  padded = true,
+  style,
+}: {
+  children: ReactNode;
+  emphasis?: boolean;
+  glow?: boolean;
+  padded?: boolean;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useAcademicPalette();
+  return (
+    <NeonGradient
+      name="panel"
+      style={[
+        styles.card,
+        padded && styles.cardPadded,
+        { borderColor: emphasis ? hexToRgba(colors.primary, 0.42) : colors.border },
+        cardShadow(emphasis ? 'floating' : 'card'),
+        glow && glowShadow(colors.primary, 'soft'),
+        style,
+      ]}
+    >
+      {children}
+    </NeonGradient>
+  );
+}
+
+export function AcademicSection({
+  actionLabel,
+  children,
+  eyebrow,
+  onAction,
+  title,
+}: {
+  actionLabel?: string;
+  children: ReactNode;
+  eyebrow?: string;
+  onAction?: () => void;
+  title: string;
+}) {
+  const { colors } = useAcademicPalette();
+  const { hovered, hoverProps } = useHoverState();
+  return (
+    <View style={styles.section}>
+      <View style={styles.sectionHeading}>
+        <View style={styles.sectionTitleWrap}>
+          {eyebrow ? <Text style={[styles.eyebrow, { color: colors.primary }]}>{eyebrow}</Text> : null}
+          <Text style={[styles.sectionTitle, { color: colors.foreground }]}>{title}</Text>
+        </View>
+        {actionLabel && onAction ? (
+          <Pressable
+            {...hoverProps}
+            accessibilityLabel={actionLabel}
+            accessibilityRole="button"
+            onPress={onAction}
+            style={({ pressed }) => [styles.textAction, pressed && styles.pressed]}
+          >
+            <Text style={[styles.textActionLabel, { color: hovered ? colors.accentPink : colors.primary }]}>
+              {actionLabel}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
+      {children}
+    </View>
+  );
+}
+
+export function AcademicButton({
+  compact = false,
+  disabled = false,
+  icon,
+  label,
+  onPress,
+  style,
+  tone = 'indigo',
+}: {
+  compact?: boolean;
+  disabled?: boolean;
+  icon?: ReactNode;
+  label: string;
+  onPress: () => void;
+  style?: StyleProp<ViewStyle>;
+  tone?: AcademicTone;
+}) {
+  const { colors, tones } = useAcademicPalette();
+  const { hovered, hoverProps } = useHoverState();
   const palette = tones[tone];
-  const fill = tone === 'violet' ? academicColors.violet : isDanger ? academicColors.danger : academicColors.indigo;
-  return <Pressable accessibilityRole="button" accessibilityLabel={label} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.button, compact && styles.buttonCompact, isPrimary ? { backgroundColor: fill } : { backgroundColor: palette.fill, borderColor: tone === 'ghost' ? academicColors.line : palette.fill, borderWidth: tone === 'ghost' ? 1 : 0 }, disabled && styles.disabled, pressed && styles.pressed]}>
-    {icon}
-    <Text style={[styles.buttonText, !isPrimary && { color: palette.text }, icon ? styles.buttonTextWithIcon : null]}>{label}</Text>
-  </Pressable>;
+  const primary = tone === 'indigo' || tone === 'violet' || tone === 'primary' || tone === 'accent';
+  return (
+    <Pressable
+      {...hoverProps}
+      accessibilityLabel={label}
+      accessibilityRole="button"
+      disabled={disabled}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.button,
+        compact && styles.buttonCompact,
+        !primary && { backgroundColor: palette.fill, borderColor: palette.border, borderWidth: 1 },
+        disabled && styles.disabled,
+        hovered && !disabled && (primary ? glowShadow(colors.primary, 'strong') : { borderColor: colors.primary }),
+        hovered && !disabled && styles.lift,
+        pressed && styles.pressed,
+        style,
+      ]}
+    >
+      {primary ? <NeonGradient colors={[colors.primary, colors.accentPink]} style={styles.buttonGradient} /> : null}
+      {icon}
+      <Text style={[styles.buttonText, !primary && { color: palette.text }, icon ? styles.buttonTextWithIcon : null]}>
+        {label}
+      </Text>
+    </Pressable>
+  );
 }
 
-export function AcademicPill({ label, tone = 'neutral' }: { label: string; tone?: AcademicTone }) {
+export function AcademicPill({
+  label,
+  size = 'compact',
+  tone = 'neutral',
+}: {
+  label: string;
+  size?: 'compact' | 'chip';
+  tone?: AcademicTone;
+}) {
+  const { tones } = useAcademicPalette();
   const palette = tones[tone];
-  return <View style={[styles.pill, { backgroundColor: palette.fill }]}><Text style={[styles.pillText, { color: palette.text }]}>{label}</Text></View>;
+  return (
+    <View
+      style={[
+        styles.pill,
+        size === 'chip' && styles.pillChip,
+        { backgroundColor: palette.fill, borderColor: palette.border },
+      ]}
+    >
+      <Text style={[styles.pillText, { color: palette.text }]}>{label}</Text>
+    </View>
+  );
 }
 
-export function AcademicProgress({ value, color = academicColors.indigo, height = 8 }: { value: number; color?: string; height?: number }) {
+export function AcademicProgress({
+  color,
+  height = 8,
+  value,
+}: {
+  color?: string;
+  height?: number;
+  value: number;
+}) {
+  const { colors } = useAcademicPalette();
   const safe = Math.max(0, Math.min(100, Math.round(value)));
-  return <View accessibilityRole="progressbar" accessibilityLabel={`Progresso: ${safe}%`} accessibilityValue={{ min: 0, max: 100, now: safe }} style={[styles.progressTrack, { height }]}><View accessibilityElementsHidden style={{ backgroundColor: color, borderRadius: height, height: '100%', width: `${safe}%` }} /></View>;
+  const width = useRef(new Animated.Value(safe)).current;
+  useEffect(() => {
+    const animation = Animated.timing(width, {
+      duration: neonMotion.progress,
+      easing: Easing.out(Easing.cubic),
+      toValue: safe,
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [safe, width]);
+  return (
+    <View
+      accessibilityLabel={`Progresso: ${safe}%`}
+      accessibilityRole="progressbar"
+      accessibilityValue={{ max: 100, min: 0, now: safe }}
+      style={[styles.progressTrack, { backgroundColor: colors.border, height }]}
+    >
+      <Animated.View
+        style={[
+          styles.progressFill,
+          { borderRadius: height, width: width.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) },
+          color ? { backgroundColor: color } : glowShadow(colors.primary, 'soft'),
+        ]}
+      >
+        {color ? null : <NeonGradient colors={[colors.primary, colors.accentPink]} style={styles.progressGradient} />}
+      </Animated.View>
+    </View>
+  );
 }
 
-export function AcademicEmptyState({ title, description, actionLabel, onAction }: { title: string; description: string; actionLabel?: string; onAction?: () => void }) {
-  return <AcademicCard style={styles.emptyState}><View style={styles.emptyMark}><Text style={styles.emptyMarkText}>✦</Text></View><Text style={styles.emptyTitle}>{title}</Text><Text style={styles.emptyDescription}>{description}</Text>{actionLabel && onAction ? <AcademicButton compact label={actionLabel} onPress={onAction} /> : null}</AcademicCard>;
+/** Aba em pílula (`.tabs`/`.tab` do mockup): ativa = fundo cyan translúcido + glow. */
+export function AcademicTab({
+  active = false,
+  icon,
+  label,
+  onPress,
+  style,
+}: {
+  active?: boolean;
+  icon?: ReactNode;
+  label: string;
+  onPress: () => void;
+  style?: StyleProp<ViewStyle>;
+}) {
+  const { colors } = useAcademicPalette();
+  const { hovered, hoverProps } = useHoverState();
+  return (
+    <Pressable
+      {...hoverProps}
+      accessibilityLabel={label}
+      accessibilityRole="tab"
+      accessibilityState={{ selected: active }}
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.tab,
+        { backgroundColor: active ? hexToRgba(colors.primary, 0.16) : 'transparent' },
+        active && { borderColor: hexToRgba(colors.primary, 0.4) },
+        !active && hovered && { borderColor: hexToRgba(colors.primary, 0.3) },
+        active && glowShadow(colors.primary, 'soft'),
+        pressed && styles.pressed,
+        style,
+      ]}
+    >
+      {icon}
+      <Text
+        style={[styles.tabText, { color: active ? colors.primary : colors.muted }, icon ? styles.tabTextWithIcon : null]}
+      >
+        {label}
+      </Text>
+    </Pressable>
+  );
+}
+
+/** Linha de toggle 48×26 do mockup, com trilho em gradiente quando ligada. */
+export function NeonToggle({
+  description,
+  disabled = false,
+  label,
+  last = false,
+  onToggle,
+  value,
+}: {
+  description?: string;
+  disabled?: boolean;
+  label: string;
+  last?: boolean;
+  onToggle: (next: boolean) => void;
+  value: boolean;
+}) {
+  const { colors } = useAcademicPalette();
+  const shift = useRef(new Animated.Value(value ? 1 : 0)).current;
+  useEffect(() => {
+    const animation = Animated.timing(shift, {
+      duration: neonMotion.fast,
+      easing: Easing.out(Easing.cubic),
+      toValue: value ? 1 : 0,
+      useNativeDriver: false,
+    });
+    animation.start();
+    return () => animation.stop();
+  }, [shift, value]);
+  const translateX = shift.interpolate({ inputRange: [0, 1], outputRange: [0, 22] });
+  return (
+    <Pressable
+      accessibilityLabel={label}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: value, disabled }}
+      disabled={disabled}
+      onPress={() => onToggle(!value)}
+      style={({ pressed }) => [
+        styles.toggleRow,
+        !last && { borderBottomColor: colors.border, borderBottomWidth: 1 },
+        disabled && styles.disabled,
+        pressed && styles.pressed,
+      ]}
+    >
+      <View style={styles.toggleCopy}>
+        <Text style={[styles.toggleLabel, { color: colors.foreground }]}>{label}</Text>
+        {description ? <Text style={[styles.toggleDescription, { color: colors.muted }]}>{description}</Text> : null}
+      </View>
+      <View style={[styles.toggleTrack, { backgroundColor: value ? hexToRgba(colors.primary, 0.22) : colors.border }]}>
+        {value ? <NeonGradient colors={[colors.primary, colors.accentPink]} style={styles.toggleTrackGradient} /> : null}
+        <Animated.View style={[styles.toggleThumb, { transform: [{ translateX }] }]} />
+      </View>
+    </Pressable>
+  );
+}
+
+/** Faixa de aviso (`.banner.red`/`.banner.yellow`), agora derivada do tom do tema. */
+export function NeonBanner({
+  children,
+  style,
+  title,
+  tone = 'info',
+}: {
+  children: ReactNode;
+  style?: StyleProp<ViewStyle>;
+  title?: string;
+  tone?: 'danger' | 'info' | 'success' | 'warning';
+}) {
+  const { tones } = useAcademicPalette();
+  const palette = tones[tone];
+  return (
+    <View
+      accessibilityRole="alert"
+      style={[styles.banner, { backgroundColor: palette.fill, borderColor: palette.border }, style]}
+    >
+      <View style={styles.bannerBody}>
+        {title ? <Text style={[styles.bannerTitle, { color: palette.text }]}>{title}</Text> : null}
+        {typeof children === 'string' ? (
+          <Text style={[styles.bannerText, { color: palette.text }]}>{children}</Text>
+        ) : (
+          children
+        )}
+      </View>
+    </View>
+  );
+}
+
+export function AcademicEmptyState({
+  actionLabel,
+  description,
+  onAction,
+  title,
+}: {
+  actionLabel?: string;
+  description: string;
+  onAction?: () => void;
+  title: string;
+}) {
+  const { colors, tones } = useAcademicPalette();
+  return (
+    <AcademicCard style={styles.emptyState}>
+      <View style={[styles.emptyMark, { backgroundColor: tones.accent.fill, borderColor: tones.accent.border }]}>
+        <Text style={[styles.emptyMarkText, { color: tones.accent.text }]}>✦</Text>
+      </View>
+      <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{title}</Text>
+      <Text style={[styles.emptyDescription, { color: colors.muted }]}>{description}</Text>
+      {actionLabel && onAction ? <AcademicButton compact label={actionLabel} onPress={onAction} /> : null}
+    </AcademicCard>
+  );
 }
 
 const styles = StyleSheet.create({
-  button: { alignItems: 'center', borderRadius: 12, flexDirection: 'row', justifyContent: 'center', minHeight: 46, paddingHorizontal: 16 },
+  banner: { borderRadius: neonRadius.banner, borderWidth: 1, marginBottom: 18, paddingHorizontal: 18, paddingVertical: 14 },
+  bannerBody: { flex: 1, gap: 4 },
+  bannerText: { fontSize: neonType.body.size, lineHeight: 19 },
+  bannerTitle: { fontSize: neonType.link.size, fontWeight: neonType.cardTitle.weight },
+  button: {
+    alignItems: 'center',
+    borderRadius: neonRadius.button,
+    flexDirection: 'row',
+    justifyContent: 'center',
+    minHeight: 46,
+    overflow: 'hidden',
+    paddingHorizontal: 16,
+  },
   buttonCompact: { alignSelf: 'flex-start', minHeight: 38, paddingHorizontal: 12 },
-  buttonText: { color: '#FFFFFF', fontSize: 14, fontWeight: '800' },
+  buttonGradient: { bottom: 0, borderRadius: neonRadius.button, left: 0, position: 'absolute', right: 0, top: 0 },
+  buttonText: { color: '#FFFFFF', fontSize: neonType.body.size, fontWeight: '800' },
   buttonTextWithIcon: { marginLeft: 8 },
-  card: { backgroundColor: academicColors.surface, borderColor: academicColors.line, borderRadius: 16, borderWidth: 1, padding: 18, shadowColor: '#111827', shadowOffset: { width: 0, height: 3 }, shadowOpacity: 0.025, shadowRadius: 9 },
-  cardEmphasis: { borderColor: '#D8DDF0', shadowOpacity: 0.04 },
+  card: { borderRadius: neonRadius.card, borderWidth: 1, overflow: 'hidden' },
+  cardPadded: { padding: 20 },
   disabled: { opacity: 0.48 },
-  emptyDescription: { color: academicColors.muted, fontSize: 14, lineHeight: 20, marginTop: 6, textAlign: 'center' },
-  emptyMark: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 16, height: 44, justifyContent: 'center', marginBottom: 12, width: 44 },
-  emptyMarkText: { color: academicColors.violet, fontSize: 22, fontWeight: '800' },
+  emptyDescription: { fontSize: neonType.body.size, lineHeight: 20, marginTop: 6, textAlign: 'center' },
+  emptyMark: {
+    alignItems: 'center',
+    borderRadius: 16,
+    borderWidth: 1,
+    height: 44,
+    justifyContent: 'center',
+    marginBottom: 12,
+    width: 44,
+  },
+  emptyMarkText: { fontSize: 22, fontWeight: '800' },
   emptyState: { alignItems: 'center', paddingVertical: 26 },
-  emptyTitle: { color: academicColors.ink, fontSize: 16, fontWeight: '800' },
-  eyebrow: { color: academicColors.violet, fontSize: 11, fontWeight: '900', letterSpacing: 0.8, marginBottom: 4, textTransform: 'uppercase' },
-  pill: { alignSelf: 'flex-start', borderRadius: 999, minHeight: 24, paddingHorizontal: 9, paddingVertical: 4 },
-  pillText: { fontSize: 11, fontWeight: '800' },
-  pressed: { opacity: 0.82, transform: [{ scale: 0.985 }] },
-  progressTrack: { backgroundColor: '#E8ECF7', borderRadius: 999, overflow: 'hidden', width: '100%' },
+  emptyTitle: { fontSize: 16, fontWeight: '800' },
+  eyebrow: {
+    fontSize: neonType.eyebrow.size,
+    fontWeight: neonType.eyebrow.weight,
+    letterSpacing: neonType.eyebrow.letterSpacing,
+    marginBottom: 4,
+    textTransform: 'uppercase',
+  },
+  lift: { transform: [{ translateY: -2 }] },
+  pill: {
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    borderWidth: 1,
+    minHeight: 24,
+    paddingHorizontal: 9,
+    paddingVertical: 4,
+  },
+  pillChip: { borderRadius: neonRadius.chip, minHeight: 30, paddingHorizontal: 14, paddingVertical: 6 },
+  pillText: { fontSize: neonType.pill.size, fontWeight: neonType.pill.weight },
+  pressed: { opacity: 0.85, transform: [{ scale: 0.985 }] },
+  progressFill: { height: '100%', overflow: 'hidden' },
+  progressGradient: { borderRadius: 999, bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
+  progressTrack: { borderRadius: 999, overflow: 'hidden', width: '100%' },
   section: { marginBottom: 26 },
   sectionHeading: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  sectionTitle: { color: academicColors.ink, fontSize: 20, fontWeight: '800', letterSpacing: -0.25 },
+  sectionTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.25 },
   sectionTitleWrap: { flex: 1, paddingRight: 12 },
+  tab: {
+    alignItems: 'center',
+    borderColor: 'transparent',
+    borderRadius: neonRadius.tab,
+    borderWidth: 1,
+    flexDirection: 'row',
+    minHeight: 38,
+    paddingHorizontal: 16,
+  },
+  tabText: { fontSize: neonType.body.size, fontWeight: '600' },
+  tabTextWithIcon: { marginLeft: 8 },
   textAction: { justifyContent: 'center', minHeight: 36, paddingLeft: 12 },
-  textActionLabel: { color: academicColors.indigo, fontSize: 13, fontWeight: '800' },
+  textActionLabel: { fontSize: neonType.link.size, fontWeight: neonType.link.weight },
+  toggleCopy: { flex: 1, paddingRight: 14 },
+  toggleDescription: { fontSize: neonType.meta.size, lineHeight: 17, marginTop: 3 },
+  toggleLabel: { fontSize: neonType.body.size, fontWeight: '700' },
+  toggleRow: { alignItems: 'center', flexDirection: 'row', minHeight: 56, paddingVertical: 12 },
+  toggleThumb: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 10,
+    height: 20,
+    left: 3,
+    position: 'absolute',
+    top: 3,
+    width: 20,
+  },
+  toggleTrack: { borderRadius: neonRadius.toggle, height: 26, overflow: 'hidden', width: 48 },
+  toggleTrackGradient: {
+    bottom: 0,
+    borderRadius: neonRadius.toggle,
+    left: 0,
+    position: 'absolute',
+    right: 0,
+    top: 0,
+  },
 });
 
 export const academicStyles = styles;
+
+
+

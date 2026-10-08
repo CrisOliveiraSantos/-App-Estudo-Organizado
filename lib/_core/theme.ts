@@ -2,7 +2,22 @@ import { Platform } from "react-native";
 
 import themeConfig from "@/theme.config";
 
-export type ColorScheme = "light" | "dark" | "violet" | "ocean" | "contrast";
+export type ColorScheme =
+  | "light"
+  | "dark"
+  | "violet"
+  | "ocean"
+  | "contrast"
+  | "sunrise"
+  | "sunset"
+  | "neon";
+
+/** Temas com base escura, usados para definir a base do NativeWind/Appearance. */
+export const DarkSchemes: ColorScheme[] = ["dark", "sunset", "neon"];
+
+export function isDarkScheme(scheme: ColorScheme): boolean {
+  return DarkSchemes.includes(scheme);
+}
 
 export const ThemeColors = themeConfig.themeColors;
 
@@ -43,6 +58,21 @@ export const SchemeColors: Record<ColorScheme, Record<ThemeColorName, string>> =
     ...baseSchemeColors.light,
     primary: '#0000EE', background: '#FFFFFF', surface: '#FFFFFF', foreground: '#000000', muted: '#333333', border: '#000000', success: '#006B2E', warning: '#8A4B00', error: '#B00020',
   },
+  sunrise: {
+    ...baseSchemeColors.light,
+    primary: '#E4572E', background: '#FFF8F1', surface: '#FFFFFF', foreground: '#3B2418', muted: '#8A6B57', border: '#F4DAC7', success: '#1F9D68', warning: '#D98E04', error: '#C2414B',
+    accentPink: '#E34BFF', accentGold: '#FFD166', accentGreen: '#1F9D68', accentOrange: '#FF9F43', accentRose: '#FF6B9D', accentPurple: '#7C3AED',
+  },
+  sunset: {
+    ...baseSchemeColors.dark,
+    primary: '#FF8A5B', background: '#1B1023', surface: '#251630', foreground: '#FDEBE3', muted: '#B7A0C2', border: '#3B2748', success: '#5AD1A0', warning: '#F1BE55', error: '#FF7D94',
+    accentPink: '#FF6B9D', accentGold: '#FFD166', accentGreen: '#5AD1A0', accentOrange: '#FF7A30', accentRose: '#FF6B9D', accentPurple: '#9333EA',
+  },
+  neon: {
+    ...baseSchemeColors.dark,
+    primary: '#00E5FF', background: '#080A12', surface: '#101522', foreground: '#F4F7FF', muted: '#91A0B8', border: '#202B40', success: '#49E5B1', warning: '#FFD166', error: '#FF4D6D',
+    accentPink: '#E34BFF', accentGold: '#FFD166', accentGreen: '#49E5B1', accentOrange: '#FF9F43', accentRose: '#FF6B9D', accentPurple: '#9333EA', surfaceAlt: '#0C111E',
+  },
 };
 
 type RuntimePalette = SchemePaletteItem & {
@@ -75,6 +105,9 @@ export const Colors = {
   violet: buildRuntimePalette("violet"),
   ocean: buildRuntimePalette("ocean"),
   contrast: buildRuntimePalette("contrast"),
+  sunrise: buildRuntimePalette("sunrise"),
+  sunset: buildRuntimePalette("sunset"),
+  neon: buildRuntimePalette("neon"),
 } satisfies Record<ColorScheme, RuntimePalette>;
 
 export type ThemeColorPalette = (typeof Colors)[ColorScheme];

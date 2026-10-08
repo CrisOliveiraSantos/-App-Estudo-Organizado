@@ -8,7 +8,7 @@ import { useThemeContext, type ThemePreference } from '@/lib/theme-provider';
 import { useStudy } from '@/lib/study-store';
 import { AcademicButton, AcademicPill, academicColors } from '@/components/academic/design-system';
 import { scheduleTestNotification } from '@/lib/notifications';
-import { SchemeColors } from '@/constants/theme';
+import { SchemeColors, type ColorScheme } from '@/constants/theme';
 import { trpc } from '@/lib/trpc';
 import * as WebBrowser from 'expo-web-browser';
 import { clearAcademicToken, readAcademicToken, saveAcademicToken } from '@/lib/academic-credentials';
@@ -36,7 +36,7 @@ const settingsItems: SettingsItem[] = [
 export default function SettingsScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
-  const { themePreference, setThemePreference } = useThemeContext();
+  const { themePreference, setThemePreference, colorScheme } = useThemeContext();
   const { notes, goals, subjects, events } = useStudy();
   const params = useLocalSearchParams<{ section?: string }>();
   const [activeKey, setActiveKey] = useState<SettingsKey>(settingsItems.find(item => item.key === params.section)?.key ?? 'profile');
@@ -71,7 +71,7 @@ export default function SettingsScreen() {
             <View style={[styles.detailHeader, { borderBottomColor: colors.border }]}><View><Text style={[styles.detailEyebrow, { color: academicColors.violet }]}>AJUSTE ATUAL</Text><Text style={[styles.detailTitle, { color: colors.foreground }]}>{activeItem.label}</Text></View><AcademicPill label="Cris" tone="violet" /></View>
             {activeKey === 'profile' ? <ProfileContent colors={colors} onOpen={() => router.push('/profile')} /> : null}
             {activeKey === 'account' ? <AccountContent colors={colors} /> : null}
-            {activeKey === 'appearance' ? <AppearanceContent colors={colors} preference={themePreference} onChange={setThemePreference} /> : null}
+            {activeKey === 'appearance' ? <AppearanceContent colors={colors} preference={themePreference} resolved={colorScheme} onChange={setThemePreference} /> : null}
             {activeKey === 'notifications' ? <NotificationsContent colors={colors} /> : null}
             {activeKey === 'connections' ? <ConnectionsContent colors={colors} /> : null}
             {activeKey === 'ai' ? <AiContent colors={colors} onOpen={() => router.push('/api-settings')} /> : null}
@@ -99,16 +99,21 @@ function AccountContent({ colors }: { colors: ReturnType<typeof useColors> }) {
   return <View style={styles.contentStack}><InfoLine colors={colors} label="Sessão" detail="A entrada, a saída e a sessão atual são gerenciadas com segurança pelo aplicativo." /><InfoLine colors={colors} label="Recuperação" detail="A redefinição de senha usa um link enviado ao e-mail cadastrado; nenhuma senha fica visível aqui." /><AcademicButton label="Editar perfil e sessão" tone="ghost" onPress={() => router.push('/profile')} compact /></View>;
 }
 
-function AppearanceContent({ colors, preference, onChange }: { colors: ReturnType<typeof useColors>; preference: ThemePreference; onChange: (value: ThemePreference) => void }) {
+function AppearanceContent({ colors, preference, resolved, onChange }: { colors: ReturnType<typeof useColors>; preference: ThemePreference; resolved: ColorScheme; onChange: (value: ThemePreference) => void }) {
   const choices: { key: ThemePreference; label: string; detail: string; swatch: string }[] = [
     { key: 'light', label: 'Claro', detail: 'Leitura nítida', swatch: SchemeColors.light.primary },
     { key: 'dark', label: 'Escuro', detail: 'Conforto noturno', swatch: SchemeColors.dark.primary },
     { key: 'violet', label: 'Violeta', detail: 'Criativo e acadêmico', swatch: SchemeColors.violet.primary },
     { key: 'ocean', label: 'Oceano', detail: 'Calmo e concentrado', swatch: SchemeColors.ocean.primary },
     { key: 'contrast', label: 'Alto contraste', detail: 'Máxima legibilidade', swatch: SchemeColors.contrast.primary },
+    { key: 'sunrise', label: 'Amanhecer', detail: 'Tons quentes da manhã', swatch: SchemeColors.sunrise.primary },
+    { key: 'sunset', label: 'Entardecer', detail: 'Noite aconchegante', swatch: SchemeColors.sunset.primary },
+    { key: 'neon', label: 'Neon', detail: 'Ciano, magenta e dourado', swatch: SchemeColors.neon.primary },
+    { key: 'auto', label: 'Por hora do dia', detail: '5h–9h Amanhecer · 9h–17h Oceano · 17h–21h Entardecer · noite Neon', swatch: SchemeColors.neon.accentPink },
     { key: 'system', label: 'Sistema', detail: 'Segue o dispositivo', swatch: '#7C8496' },
   ];
-  return <View style={styles.contentStack}><Text style={[styles.body, { color: colors.muted }]}>Escolha a atmosfera do seu espaço. A preferência é salva neste dispositivo e cada tema altera fundo, superfícies, textos, bordas e cor de ação.</Text><View style={styles.themeGrid}>{choices.map(choice => <TouchableOpacity key={choice.key} onPress={() => onChange(choice.key)} accessibilityRole="button" accessibilityState={{ selected: preference === choice.key }} style={[styles.themeChoice, { borderColor: colors.border }, preference === choice.key && { backgroundColor: `${choice.swatch}18`, borderColor: choice.swatch }]}><View style={[styles.themeSwatch, { backgroundColor: choice.swatch, borderColor: colors.border }]} /><Text style={[styles.themeLabel, { color: colors.foreground }]}>{choice.label}</Text><Text style={[styles.themeDetail, { color: colors.muted }]}>{choice.detail}</Text></TouchableOpacity>)}</View></View>;
+  const schemeLabels: Record<ColorScheme, string> = { light: 'Claro', dark: 'Escuro', violet: 'Violeta', ocean: 'Oceano', contrast: 'Alto contraste', sunrise: 'Amanhecer', sunset: 'Entardecer', neon: 'Neon' };
+  return <View style={styles.contentStack}><Text style={[styles.body, { color: colors.muted }]}>Escolha a atmosfera do seu espaço. A preferência é salva neste dispositivo e cada tema altera fundo, superfícies, textos, bordas e cor de ação.</Text>{preference === 'auto' ? <Text style={[styles.body, { color: colors.primary, fontWeight: '800' }]}>Modo automático agora ({new Date().getHours()}h): {schemeLabels[resolved]} — madrugada → Neon · manhã → Amanhecer · tarde → Oceano · noite → Entardecer.</Text> : null}<View style={styles.themeGrid}>{choices.map(choice => <TouchableOpacity key={choice.key} onPress={() => onChange(choice.key)} accessibilityRole="button" accessibilityState={{ selected: preference === choice.key }} style={[styles.themeChoice, { borderColor: colors.border }, preference === choice.key && { backgroundColor: `${choice.swatch}18`, borderColor: choice.swatch }]}><View style={[styles.themeSwatch, { backgroundColor: choice.swatch, borderColor: colors.border }]} /><Text style={[styles.themeLabel, { color: colors.foreground }]}>{choice.label}</Text><Text style={[styles.themeDetail, { color: colors.muted }]}>{choice.detail}</Text></TouchableOpacity>)}</View></View>;
 }
 
 function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }) {

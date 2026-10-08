@@ -1,21 +1,20 @@
 import { useEffect, useState } from "react";
-import { useColorScheme as useRNColorScheme } from "react-native";
+import { useThemeContext } from "@/lib/theme-provider";
 
 /**
- * To support static rendering, this value needs to be re-calculated on the client side for web
+ * Para suportar a renderização estática, o valor precisa ser recalculado no cliente (web).
+ * Depois da hidratação, devolvemos o esquema resolvido pelo ThemeProvider — isso inclui
+ * os temas personalizados (Violeta, Oceano, Amanhecer, Entardecer, Neon) e o modo
+ * automático por hora do dia. Antes, este hook usava o esquema do sistema, então a troca
+ * de tema não refletia em tempo real nos componentes que usam `useColors()`.
  */
 export function useColorScheme() {
   const [hasHydrated, setHasHydrated] = useState(false);
+  const { colorScheme } = useThemeContext();
 
   useEffect(() => {
     setHasHydrated(true);
   }, []);
 
-  const colorScheme = useRNColorScheme();
-
-  if (hasHydrated) {
-    return colorScheme;
-  }
-
-  return "light";
+  return hasHydrated ? colorScheme : "light";
 }
