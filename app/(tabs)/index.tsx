@@ -2,6 +2,8 @@ import { useMemo, useState, type ComponentProps } from 'react';
 import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
+import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, AcademicProgress, AcademicSection, NeonGradient, useAcademicColors } from '@/components/academic/design-system';
 import { cardShadow, hexToRgba, neonRadius, neonType } from '@/lib/theme-runtime';
@@ -34,6 +36,9 @@ function eventMatchesPoint(event: AcademicEvent, point: CalendarPoint, today: Da
 export default function HomeScreen() {
   const { width } = useWindowDimensions();
   const tablet = width >= 760;
+  const insets = useSafeAreaInsets();
+  /** A pílula da bottom nav é flutuante: esta tela não reserva o edge de baixo, então a folga vem daqui. */
+  const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom;
   const { subjects, events, goals, notes, addSubject, updateSubject, deleteSubject, addEvent, toggleEvent, deleteEvent, toggleTask } = useStudy();
   const c = useAcademicColors();
   const styles = useMemo(() => createStyles(c), [c]);
@@ -85,7 +90,7 @@ export default function HomeScreen() {
   };
 
   return <ScreenContainer className="bg-transparent" containerClassName="bg-transparent" style={styles.screen}>
-    <ScrollView contentContainerStyle={[styles.content, tablet && styles.contentWide]}>
+    <ScrollView contentContainerStyle={[styles.content, tablet && styles.contentWide, { paddingBottom: navClearance }]}>
       <View style={[styles.heroShadow, cardShadow('floating')]}>
         <NeonGradient name="hero" style={styles.hero}>
           <View style={styles.heroCopy}>
@@ -234,7 +239,7 @@ function createStyles(c: HomePalette) {
     columnCard: { flex: 1 },
     composer: { marginBottom: 13, padding: 15 },
     composerTitle: { color: c.ink, fontSize: 15, fontWeight: '800', marginBottom: 12 },
-    content: { paddingBottom: 118, paddingHorizontal: 18, paddingTop: 20 },
+    content: { paddingHorizontal: 18, paddingTop: 20 },
     contentWide: { alignSelf: 'center', maxWidth: 1240, paddingHorizontal: 28, width: '100%' },
     dayCell: { alignItems: 'center', borderRadius: 12, height: 47, justifyContent: 'center', marginBottom: 2, width: '14.2857%' },
     daySelected: { backgroundColor: c.primary },

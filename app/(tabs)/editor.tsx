@@ -2,6 +2,8 @@ import { useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
+import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, academicColors } from '@/components/academic/design-system';
 import { type Note, type RichBlock, useStudy } from '@/lib/study-store';
@@ -24,6 +26,9 @@ const templates: Template[] = [
 export default function EditorDocumentsScreen() {
   const { width } = useWindowDimensions();
   const wide = width >= 760;
+  const insets = useSafeAreaInsets();
+  /** A pílula da bottom nav é flutuante: esta tela não reserva o edge de baixo, então a folga vem daqui. */
+  const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom;
   const { notes, folders, createNote, duplicateNote, deleteNote, renameNote, moveNote, toggleNoteFavorite, saveNote } = useStudy();
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
@@ -68,7 +73,7 @@ export default function EditorDocumentsScreen() {
       numColumns={viewMode === 'grid' ? (wide ? 3 : 2) : 1}
       keyExtractor={item => item.id}
       columnWrapperStyle={viewMode === 'grid' && documents.length ? styles.gridRow : undefined}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: navClearance }]}
       ListHeaderComponent={<View>
         <View style={styles.header}><View style={styles.headerCopy}><Text style={styles.overline}>ESPAÇO DE ESCRITA · CRIS</Text><Text style={styles.title}>Meus documentos</Text><Text style={styles.subtitle}>Organize resumos, trabalhos, pesquisas e anotações em um só lugar.</Text></View><AcademicButton label="Novo documento" onPress={() => createFromTemplate(templates[0])} compact /></View>
         <AcademicCard style={styles.commandCard} emphasis><View style={styles.commandIcon}><IconSymbol name="note.text" size={22} color={academicColors.violet} /></View><View style={styles.commandCopy}><Text style={styles.commandTitle}>Seu espaço de escrita acadêmica</Text><Text style={styles.commandText}>Comece do zero ou use um modelo para organizar seu trabalho com mais rapidez.</Text></View><AcademicButton label={showTemplates ? 'Fechar modelos' : 'Ver modelos'} tone="violet" compact onPress={() => setShowTemplates(value => !value)} /></AcademicCard>
@@ -95,7 +100,7 @@ const styles = StyleSheet.create({
   commandIcon: { alignItems: 'center', backgroundColor: '#F0EBFF', borderRadius: 14, height: 45, justifyContent: 'center', width: 45 },
   commandText: { color: academicColors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
   commandTitle: { color: academicColors.ink, fontSize: 15, fontWeight: '900' },
-  content: { paddingBottom: 116, paddingHorizontal: 18, paddingTop: 20 },
+  content: { paddingHorizontal: 18, paddingTop: 20 },
   count: { color: academicColors.muted, fontSize: 12, fontWeight: '700' },
   deleteButton: { justifyContent: 'center', minHeight: 34, paddingHorizontal: 7 },
   deleteText: { color: academicColors.danger, fontSize: 11, fontWeight: '800' },

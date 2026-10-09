@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
@@ -189,22 +189,25 @@ export default function ChatScreen() {
   if (!cloudUser && !localAccount) {
     return (
       <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
-        <AuthPanel
-          mode={authMode}
-          setMode={setAuthMode}
-          email={authEmail}
-          setEmail={setAuthEmail}
-          name={authName}
-          setName={setAuthName}
-          password={authPassword}
-          setPassword={setAuthPassword}
-          submit={submitAuth}
-          loading={authPending}
-          feedback={authFeedback}
-          colors={colors}
-          usesSupabase={isSupabaseConfigured}
-          forgotEmail={() => setAuthFeedback({ tone: 'success', text: 'Por segurança, o aplicativo não revela endereços de contas sem uma sessão iniciada. Verifique as caixas de entrada que você usa ou entre em outro dispositivo e abra Configurações › Meu perfil.' })}
-        />
+        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+          <AuthPanel
+            navClearance={navClearance}
+            mode={authMode}
+            setMode={setAuthMode}
+            email={authEmail}
+            setEmail={setAuthEmail}
+            name={authName}
+            setName={setAuthName}
+            password={authPassword}
+            setPassword={setAuthPassword}
+            submit={submitAuth}
+            loading={authPending}
+            feedback={authFeedback}
+            colors={colors}
+            usesSupabase={isSupabaseConfigured}
+            forgotEmail={() => setAuthFeedback({ tone: 'success', text: 'Por segurança, o aplicativo não revela endereços de contas sem uma sessão iniciada. Verifique as caixas de entrada que você usa ou entre em outro dispositivo e abra Configurações › Meu perfil.' })}
+          />
+        </KeyboardAvoidingView>
       </ScreenContainer>
     );
   }
@@ -299,9 +302,13 @@ export default function ChatScreen() {
   );
 }
 
-function AuthPanel({ mode, setMode, email, setEmail, name, setName, password, setPassword, submit, loading, feedback, colors, usesSupabase, forgotEmail }: { mode: 'login' | 'register' | 'recovery'; setMode: (value: 'login' | 'register' | 'recovery') => void; email: string; setEmail: (value: string) => void; name: string; setName: (value: string) => void; password: string; setPassword: (value: string) => void; submit: () => void; loading: boolean; feedback: AuthFeedback; colors: ReturnType<typeof useColors>; usesSupabase: boolean; forgotEmail: () => void }) {
+function AuthPanel({ mode, setMode, email, setEmail, name, setName, password, setPassword, submit, loading, feedback, colors, usesSupabase, forgotEmail, navClearance }: { mode: 'login' | 'register' | 'recovery'; setMode: (value: 'login' | 'register' | 'recovery') => void; email: string; setEmail: (value: string) => void; name: string; setName: (value: string) => void; password: string; setPassword: (value: string) => void; submit: () => void; loading: boolean; feedback: AuthFeedback; colors: ReturnType<typeof useColors>; usesSupabase: boolean; forgotEmail: () => void; navClearance: number }) {
   return (
-    <View className="flex-1 justify-center px-6">
+    <ScrollView
+      className="flex-1"
+      contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingBottom: navClearance, paddingHorizontal: 24 }}
+      keyboardShouldPersistTaps="handled"
+    >
       <View className="bg-primary rounded-3xl p-6 mb-5">
         <Text className="text-indigo-100 text-sm">ESTUDO ORGANIZADO</Text>
         <Text className="text-white text-3xl font-bold mt-1">Entre para conversar</Text>
@@ -348,7 +355,7 @@ function AuthPanel({ mode, setMode, email, setEmail, name, setName, password, se
         {mode === 'recovery' && <TouchableOpacity onPress={() => setMode('login')} accessibilityRole="button" accessibilityLabel="Voltar para entrar" style={styles.recoveryLinkButton}><Text style={[styles.recoveryLink, { color: colors.primary }]}>Voltar para Entrar</Text></TouchableOpacity>}
         <Text className="text-muted text-xs leading-5 mt-4">{usesSupabase ? mode === 'recovery' ? 'O link abre uma página segura para você definir a nova senha.' : 'Você receberá um e-mail para confirmar a conta. Seus estudos locais continuam disponíveis mesmo sem conexão.' : 'O modo local permanece disponível neste dispositivo se o servidor estiver indisponível.'}</Text>
       </View>
-    </View>
+    </ScrollView>
   );
 }
 

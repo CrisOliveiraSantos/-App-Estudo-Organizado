@@ -1,11 +1,13 @@
 import { useMemo, useState } from 'react';
-import { Alert, FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import { trpc } from '@/lib/trpc';
+import { extractTextFromImage } from '@/lib/cris-ocr';
 import { ScreenContainer } from '@/components/screen-container';
+import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, academicColors } from '@/components/academic/design-system';
 import { type Note, useStudy } from '@/lib/study-store';
@@ -14,7 +16,11 @@ type Filter = 'Todos' | 'Notas' | 'PDFs';
 
 export default function LibraryScreen() {
   const { notes, folders, addPdf, addOcrDocument, addFolder, deleteNote, renameNote, moveNote } = useStudy();
-  const ocrMutation = trpc.ocr.extract.useMutation();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  /** A pílula da bottom nav é flutuante: esta tela não reserva o edge de baixo, então a folga vem daqui. */
+  const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom;
+  const [ocrBusy, setOcrBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>('Todos');
   const [query, setQuery] = useState('');
   const [folderName, setFolderName] = useState('');
@@ -51,7 +57,26 @@ export default function LibraryScreen() {
       Alert.alert('PDF importado', 'O arquivo foi registrado. Se ele não abrir após reiniciar, importe-o novamente.');
     }
   };
-  const pickImage = async () => { const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 10, quality: 1 }); if (!result.canceled) { try { const pages = []; for (const [index, asset] of result.assets.entries()) { const imageBase64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 }); const recognized = await ocrMutation.mutateAsync({ imageBase64, mimeType: asset.mimeType ?? 'image/jpeg' }); pages.push({ id: `${Date.now()}-${index}`, pageNumber: index + 1, imageUri: asset.uri, extractedText: recognized.text || '[Nenhum texto legível]', ocrStatus: 'complete' as const }); } addOcrDocument(`Documento OCR — ${new Date().toLocaleDateString('pt-BR')}`, pages); Alert.alert('Documento reconhecido', `${pages.length} página(s) foram transcritas e salvas na Biblioteca.`); } catch { Alert.alert('OCR indisponível', 'Verifique sua conexão e tente novamente com imagens mais nítidas.'); } } };
+  /** OCR direto no dispositivo: a imagem vai para a IA conectada, nunca para os servidores do app. */
+  const pickImage = async () => {
+    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 10, quality: 1 });
+    if (result.canceled) return;
+    setOcrBusy(true);
+    try {
+      const pages = [];
+      for (const [index, asset] of result.assets.entries()) {
+        const imageBase64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
+        const recognized = await extractTextFromImage(imageBase64, asset.mimeType ?? 'image/jpeg');
+        pages.push({ id: `${Date.now()}-${index}`, pageNumber: index + 1, imageUri: asset.uri, extractedText: recognized.text || '[Nenhum texto legível]', ocrStatus: 'complete' as const });
+      }
+      addOcrDocument(`Documento OCR — ${new Date().toLocaleDateString('pt-BR')}`, pages);
+      Alert.alert('Documento reconhecido', `${pages.length} página(s) foram transcritas e salvas na Biblioteca.`);
+    } catch (error) {
+      Alert.alert('OCR indisponível', error instanceof Error ? error.message : 'Verifique sua conexão e tente novamente com imagens mais nítidas.');
+    } finally {
+      setOcrBusy(false);
+    }
+  };
   const shown = useMemo(() => notes.filter(note => (filter === 'Todos' || (filter === 'Notas' ? note.kind === 'note' : note.kind === 'pdf')) && [note.title, note.content, note.folder, note.selectedText].join(' ').toLowerCase().includes(query.toLowerCase())).sort((left, right) => left.title.localeCompare(right.title, 'pt-BR')), [notes, filter, query]);
   const finishRename = () => { if (editingId && draftTitle.trim()) renameNote(editingId, draftTitle.trim()); setEditingId(null); setDraftTitle(''); };
   const createFolder = () => { if (!folderName.trim()) return; addFolder(folderName.trim()); setFolderName(''); setShowFolderForm(false); };
@@ -60,10 +85,10 @@ export default function LibraryScreen() {
     <FlatList
       data={shown}
       keyExtractor={item => item.id}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: navClearance }]}
       ListHeaderComponent={<View>
         <View style={styles.header}><View style={styles.headerCopy}><Text style={styles.overline}>MATERIAIS DE ESTUDO</Text><Text style={styles.title}>Biblioteca</Text><Text style={styles.subtitle}>Guarde PDFs, textos reconhecidos e anotações importantes para revisar quando precisar.</Text></View><AcademicButton label="Novo texto" onPress={() => router.push('/editor')} compact /></View>
-        <View style={styles.importGrid}><TouchableOpacity onPress={() => { void pickPdf(); }} accessibilityRole="button" accessibilityLabel="Importar PDF" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#FDECEF' }]}><IconSymbol name="doc.text.fill" size={21} color={academicColors.danger} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>Importar PDF</Text><Text style={styles.importDescription}>Guarde e consulte materiais em PDF.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity><TouchableOpacity onPress={() => { void pickImage(); }} accessibilityRole="button" accessibilityLabel="Extrair texto por OCR" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#E8EBFF' }]}><IconSymbol name="photo" size={21} color={academicColors.indigo} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>{ocrMutation.isPending ? 'Lendo imagens…' : 'Extrair texto (OCR)'}</Text><Text style={styles.importDescription}>Reconheça imagens ou páginas fotografadas.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity></View>
+        <View style={styles.importGrid}><TouchableOpacity onPress={() => { void pickPdf(); }} accessibilityRole="button" accessibilityLabel="Importar PDF" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#FDECEF' }]}><IconSymbol name="doc.text.fill" size={21} color={academicColors.danger} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>Importar PDF</Text><Text style={styles.importDescription}>Guarde e consulte materiais em PDF.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity><TouchableOpacity onPress={() => { void pickImage(); }} accessibilityRole="button" accessibilityLabel="Extrair texto por OCR" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#E8EBFF' }]}><IconSymbol name="photo" size={21} color={academicColors.indigo} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>{ocrBusy ? 'Lendo imagens…' : 'Extrair texto (OCR)'}</Text><Text style={styles.importDescription}>Reconheça imagens ou páginas fotografadas.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity></View>
         <View style={styles.searchBox}><IconSymbol name="magnifyingglass" size={20} color={academicColors.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="Buscar em títulos, pastas e texto reconhecido" placeholderTextColor={academicColors.muted} style={styles.searchInput} /></View>
         <View style={styles.filterBar}>{(['Todos', 'Notas', 'PDFs'] as Filter[]).map(item => <TouchableOpacity key={item} onPress={() => setFilter(item)} accessibilityRole="button" accessibilityState={{ selected: filter === item }} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item}</Text></TouchableOpacity>)}</View>
         <View style={styles.folderHeader}><View><Text style={styles.sectionTitle}>Pastas</Text><Text style={styles.sectionDescription}>Mantenha seus materiais em um lugar fácil de encontrar.</Text></View><TouchableOpacity onPress={() => setShowFolderForm(value => !value)} accessibilityRole="button" style={styles.folderToggle}><Text style={styles.folderToggleText}>{showFolderForm ? 'Fechar' : '+ Nova pasta'}</Text></TouchableOpacity></View>
@@ -87,7 +112,7 @@ const styles = StyleSheet.create({
   action: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 7 },
   actionText: { color: academicColors.indigo, fontSize: 12, fontWeight: '800' },
   actions: { borderTopColor: academicColors.line, borderTopWidth: 1, flexDirection: 'row', marginTop: 13, paddingTop: 8 },
-  content: { paddingBottom: 115, paddingHorizontal: 18, paddingTop: 20 },
+  content: { paddingHorizontal: 18, paddingTop: 20 },
   deleteAction: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 7 },
   deleteActionText: { color: academicColors.danger, fontSize: 12, fontWeight: '800' },
   filter: { alignItems: 'center', borderRadius: 10, flex: 1, justifyContent: 'center', minHeight: 38 },

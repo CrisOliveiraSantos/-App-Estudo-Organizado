@@ -1,6 +1,8 @@
 import { useMemo, useState } from 'react';
-import { FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { FlatList, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { ScreenContainer } from '@/components/screen-container';
+import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, AcademicProgress, AcademicSection, academicColors } from '@/components/academic/design-system';
 import { type Goal, type Task, type TaskCategory, useStudy } from '@/lib/study-store';
@@ -11,6 +13,10 @@ const filters: TaskFilter[] = ['Hoje', 'Amanhã', 'Próximas', 'Atrasadas', 'Con
 
 export default function PlanningScreen() {
   const { goals, addGoal, addTask, toggleTask } = useStudy();
+  const { width } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  /** A pílula da bottom nav é flutuante: esta tela não reserva o edge de baixo, então a folga vem daqui. */
+  const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom;
   const [filter, setFilter] = useState<TaskFilter>('Hoje');
   const [showGoalForm, setShowGoalForm] = useState(false);
   const [title, setTitle] = useState('');
@@ -39,7 +45,7 @@ export default function PlanningScreen() {
     <FlatList
       data={goals}
       keyExtractor={item => item.id}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: navClearance }]}
       ListHeaderComponent={<View>
         <View style={styles.header}><View style={styles.headerCopy}><Text style={styles.overline}>PLANEJAMENTO</Text><Text style={styles.title}>Ritmo de estudos</Text><Text style={styles.subtitle}>Organize prioridades, acompanhe metas e transforme intenção em avanço real.</Text></View><AcademicButton label="Nova meta" onPress={() => setShowGoalForm(value => !value)} compact /></View>
 
@@ -81,7 +87,7 @@ const styles = StyleSheet.create({
   categoryGroup: { paddingBottom: 11 },
   columnInput: { flex: 1, marginBottom: 0, marginRight: 10 },
   composerTitle: { color: academicColors.ink, fontSize: 14, fontWeight: '800', marginBottom: 10 },
-  content: { paddingBottom: 118, paddingHorizontal: 18, paddingTop: 20 },
+  content: { paddingHorizontal: 18, paddingTop: 20 },
   done: { color: academicColors.muted, textDecorationLine: 'line-through' },
   emptyGoal: { color: academicColors.muted, fontSize: 13, lineHeight: 19 },
   expandedTitle: { color: academicColors.ink, fontSize: 15, fontWeight: '800', marginBottom: 10 },
