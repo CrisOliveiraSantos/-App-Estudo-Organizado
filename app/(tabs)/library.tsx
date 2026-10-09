@@ -72,7 +72,7 @@ export default function LibraryScreen() {
       addOcrDocument(`Documento OCR — ${new Date().toLocaleDateString('pt-BR')}`, pages);
       Alert.alert('Documento reconhecido', `${pages.length} página(s) foram transcritas e salvas na Biblioteca.`);
     } catch (error) {
-      Alert.alert('OCR indisponível', error instanceof Error ? error.message : 'Verifique sua conexão e tente novamente com imagens mais nítidas.');
+      Alert.alert('OCR no dispositivo', error instanceof Error ? error.message : 'Verifique sua conexão e tente novamente com imagens mais nítidas.');
     } finally {
       setOcrBusy(false);
     }
@@ -81,7 +81,7 @@ export default function LibraryScreen() {
   const finishRename = () => { if (editingId && draftTitle.trim()) renameNote(editingId, draftTitle.trim()); setEditingId(null); setDraftTitle(''); };
   const createFolder = () => { if (!folderName.trim()) return; addFolder(folderName.trim()); setFolderName(''); setShowFolderForm(false); };
 
-  return <ScreenContainer style={styles.screen}>
+  return <ScreenContainer>
     <FlatList
       data={shown}
       keyExtractor={item => item.id}
@@ -149,7 +149,6 @@ const styles = StyleSheet.create({
   ocrLabel: { color: academicColors.success, fontSize: 10, fontWeight: '800', marginTop: 6 },
   overline: { color: academicColors.violet, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
   renameBox: { borderTopColor: academicColors.line, borderTopWidth: 1, marginTop: 13, paddingTop: 11 },
-  screen: { backgroundColor: academicColors.canvas },
   searchBox: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: academicColors.line, borderRadius: 12, borderWidth: 1, flexDirection: 'row', marginBottom: 11, minHeight: 47, paddingHorizontal: 12 },
   searchInput: { color: academicColors.ink, flex: 1, fontSize: 14, minHeight: 46, paddingLeft: 8 },
   sectionDescription: { color: academicColors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },

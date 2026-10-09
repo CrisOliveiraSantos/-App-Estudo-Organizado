@@ -41,7 +41,7 @@ export default function PlanningScreen() {
     setTaskDraft(''); setTaskDeadline(''); setTaskPriority('Média'); setTaskCategory('Próximas');
   };
 
-  return <ScreenContainer style={styles.screen}>
+  return <ScreenContainer>
     <FlatList
       data={goals}
       keyExtractor={item => item.id}
@@ -125,7 +125,6 @@ const styles = StyleSheet.create({
   overviewRingText: { color: academicColors.violet, fontSize: 20, fontWeight: '900' },
   overviewValue: { color: academicColors.ink, fontSize: 34, fontWeight: '900', letterSpacing: -1, lineHeight: 39, marginTop: 1 },
   priorityGroup: { alignItems: 'center' },
-  screen: { backgroundColor: academicColors.canvas },
   sectionHelp: { color: academicColors.muted, fontSize: 13, lineHeight: 19, marginTop: -2 },
   smallChoice: { backgroundColor: '#F5F7FC', borderColor: academicColors.line, borderRadius: 999, borderWidth: 1, marginRight: 6, minHeight: 38, paddingHorizontal: 10, justifyContent: 'center' },
   smallChoiceActive: { backgroundColor: academicColors.indigo, borderColor: academicColors.indigo },

@@ -66,7 +66,7 @@ export default function EditorDocumentsScreen() {
     Alert.alert('Excluir documento?', 'Esta ação não pode ser desfeita.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: remove }]);
   };
 
-  return <ScreenContainer style={styles.screen}>
+  return <ScreenContainer>
     <FlatList
       key={viewMode}
       data={documents}
@@ -131,7 +131,6 @@ const styles = StyleSheet.create({
   overline: { color: academicColors.violet, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
   renameBox: { borderTopColor: academicColors.line, borderTopWidth: 1, marginTop: 13, paddingTop: 11 },
   renameInput: { backgroundColor: '#F9FAFE', borderColor: academicColors.line, borderRadius: 10, borderWidth: 1, color: academicColors.ink, fontSize: 13, marginBottom: 8, minHeight: 40, paddingHorizontal: 10 },
-  screen: { backgroundColor: academicColors.canvas },
   searchBox: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: academicColors.line, borderRadius: 12, borderWidth: 1, flex: 1, flexDirection: 'row', minHeight: 46, paddingHorizontal: 12 },
   searchInput: { color: academicColors.ink, flex: 1, fontSize: 14, minHeight: 45, paddingLeft: 8 },
   searchRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
