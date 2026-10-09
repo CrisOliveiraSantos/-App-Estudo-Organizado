@@ -191,9 +191,21 @@ describe('buildSystemPrompt', () => {
 });
 
 describe('configuração de geração (anti-repetição)', () => {
-  it('mantém max_tokens 600 e temperature 0.3 no cliente da Cris', () => {
+  it('mantém max_tokens 2048 e temperature 0.3 no cliente da Cris', () => {
     const source = readFileSync(CLIENT_SOURCE, 'utf8');
-    expect(source).toContain('const CHAT_MAX_TOKENS = 600;');
+    expect(source).toContain('const CHAT_MAX_TOKENS = 2048;');
     expect(source).toContain('const CHAT_TEMPERATURE = 0.3;');
+  });
+
+  /**
+   * Fix 3: a resposta cortada pelo teto de tokens não pode passar em silêncio.
+   * O sinal é o `finish_reason: 'length'` do último frame (no streaming ele vem
+   * com `delta` vazio) e o resultado é `failure.kind === 'truncated'`.
+   */
+  it('avisa quando o provedor corta a resposta no teto de tokens (finish_reason length)', () => {
+    const source = readFileSync(CLIENT_SOURCE, 'utf8');
+    expect(source).toContain("readFinishReason(payload) === 'length'");
+    expect(source).toContain("kind: 'truncated'");
+    expect(source).toContain('const CHAT_STREAM_IDLE_MS = 20000;');
   });
 });

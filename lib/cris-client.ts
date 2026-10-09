@@ -27,11 +27,21 @@ import { describeUserMemory, type CrisUserMemory } from './cris-memory';
  * Constantes
  * ------------------------------------------------------------------ */
 
-const CHAT_TIMEOUT_MS = 45000;
-// Respostas mais curtas (600) e menos "criativas" (0.3) reduzem o loop de
+// Teto do PRIMEIRO byte (TTFB): depois que o provedor começa a responder, este
+// timer é cancelado no `finally` do fetch — o tempo gasto DENTRO do stream é
+// assunto do CHAT_STREAM_IDLE_MS (Fix 2, ainda não ligado).
+const CHAT_TIMEOUT_MS = 30000;
+// Silêncio máximo dentro de um stream já aberto (Fix 2, ainda não ligado).
+const CHAT_STREAM_IDLE_MS = 20000;
+// Respostas mais curtas e menos "criativas" (0.3) reduzem o loop de
 // repetição em modelos locais pequenos (LocalAI/llama.cpp). Se a repetição
 // persistir, o caminho é subir de modelo (Groq/Gemini) em Ajustes → IA.
-const CHAT_MAX_TOKENS = 600;
+// O teto era 600 e cortava a resposta no meio da frase: no Gemini 3/2.5 os
+// tokens de raciocínio ("thinking") entram no MESMO `max_tokens`, então sobrava
+// quase nada de texto visível. 2048 cobre o estilo pedido no prompt do sistema.
+const CHAT_MAX_TOKENS = 2048;
+/** Aviso mostrado quando o provedor para a resposta antes do fim (corte por `max_tokens`). */
+const TRUNCATED_MESSAGE = 'A resposta foi cortada pelo limite de tamanho. Peça "continue" ou aumente o limite.';
 const CHAT_TEMPERATURE = 0.3;
 const HISTORY_LIMIT = 8;
 const SELECTION_LIMIT = 280;
@@ -128,6 +138,8 @@ export type CrisFailureKind =
   | 'timeout'
   | 'offline'
   | 'empty'
+  /** A IA parou por atingir o teto de tokens: o texto chegou pela metade. */
+  | 'truncated'
   | 'other';
 
 /** Detalhes de uma falha da IA (ex.: modelo aposentado), mostrados com ação ao usuário. */
@@ -164,6 +176,13 @@ export type CrisReply = {
 type CrisCallPlan = { target: CrisTarget; apiKey: string; providerId?: ApiProviderId; swapModel?: string };
 
 type ChatMessage = { role: 'system' | 'user' | 'assistant'; content: string };
+
+/**
+ * Marca de geração do turno. Vive em cada chamada de `askCris`/`streamCris` e é
+ * ligada quando o provedor sinaliza `finish_reason: 'length'` — assim o aviso de
+ * corte é montado no fim do turno, sem perder o texto que já chegou.
+ */
+type CrisGeneration = { truncated: boolean };
 
 type ApiConfigModule = typeof import('@/lib/api-config');
 
@@ -507,6 +526,12 @@ export function describeCrisFailure(error: unknown, target?: CrisTarget): CrisFa
  * Camada de rede (sempre direto do dispositivo — nunca pelo servidor)
  * ------------------------------------------------------------------ */
 
+/** Aviso de resposta cortada pelo teto de tokens (null quando não houve corte). */
+function truncatedFailure(target: CrisTarget, generation: CrisGeneration): CrisFailure | null {
+  if (!generation.truncated) return null;
+  return { kind: 'truncated', message: TRUNCATED_MESSAGE, model: target.model?.trim() || undefined };
+}
+
 function buildMessages(question: string, ctx: CrisContext, history: CrisHistoryTurn[] | undefined, memory?: Partial<CrisUserMemory> | null): ChatMessage[] {
   const messages: ChatMessage[] = [{ role: 'system', content: buildSystemPrompt(ctx, memory) }];
   for (const turn of (history ?? []).slice(-HISTORY_LIMIT)) {
@@ -556,6 +581,39 @@ function extractChatText(payload: unknown, preserveWhitespace = false): string {
     }
   }
   return pick(source.response) ?? pick(source.message?.content) ?? '';
+}
+
+/**
+ * `finish_reason` de uma resposta compatível com a API OpenAI ('' quando ausente).
+ * `'length'` é o sinal de que o provedor parou por atingir `max_tokens`.
+ */
+function readFinishReason(payload: unknown): string {
+  if (!payload || typeof payload !== 'object') return '';
+  const choices = (payload as { choices?: { finish_reason?: unknown }[] }).choices;
+  if (!Array.isArray(choices)) return '';
+  for (const choice of choices) {
+    const reason = choice?.finish_reason;
+    if (typeof reason === 'string' && reason) return reason;
+  }
+  return '';
+}
+
+/** Liga `generation.truncated` quando o motivo informado pelo provedor é o teto de tokens. */
+function markTruncated(payload: unknown, generation: CrisGeneration | undefined): void {
+  if (generation && readFinishReason(payload) === 'length') generation.truncated = true;
+}
+
+/**
+ * Vê o `finish_reason` de uma linha de SSE. No streaming o motivo vem no frame
+ * final, com `delta` vazio — ou seja, ele nunca aparece no texto entregue.
+ */
+function watchFinishReason(line: string, generation: CrisGeneration | undefined): void {
+  if (!generation || generation.truncated) return;
+  const trimmed = line.trim();
+  if (!trimmed.startsWith('data:')) return;
+  const payload = trimmed.slice(5).trim();
+  if (!payload || payload === '[DONE]') return;
+  markTruncated(tryParseJson(payload), generation);
 }
 
 /** Uma linha de SSE → texto do delta, `SSE_DONE`, '' (sem conteúdo) ou null (ignorar). */
@@ -630,18 +688,19 @@ async function fetchCris(
 async function requestCompletion(
   plan: CrisCallPlan,
   messages: ChatMessage[],
-  options: { timeoutMs?: number; maxTokens?: number; signal?: AbortSignal },
+  options: { timeoutMs?: number; maxTokens?: number; signal?: AbortSignal; generation?: CrisGeneration },
 ): Promise<string> {
   const body = buildRequestBody(plan, messages, false, options.maxTokens);
   const response = await fetchCris(plan, body, false, options.timeoutMs, options.signal);
   const payload = await response.json().catch(() => null);
+  markTruncated(payload, options.generation);
   const text = extractChatText(payload);
   if (!text) throw new CrisCallError(plan.target.kind === 'provider' ? 'provider' : 'local', { empty: true });
   return text;
 }
 
 /** Lê o corpo em SSE entregando cada delta. Devolve '' quando não há stream útil. */
-async function consumeStreamed(response: Response, onChunk: (chunk: string) => void): Promise<string> {
+async function consumeStreamed(response: Response, onChunk: (chunk: string) => void, generation?: CrisGeneration): Promise<string> {
   const body = response.body as ReadableStream<Uint8Array> | null;
   if (!body || typeof body.getReader !== 'function' || typeof TextDecoder === 'undefined') return '';
   const reader = body.getReader();
@@ -660,6 +719,7 @@ async function consumeStreamed(response: Response, onChunk: (chunk: string) => v
     const lines = buffer.split('\n');
     buffer = lines.pop() ?? '';
     for (const line of lines) {
+      watchFinishReason(line, generation);
       const delta = parseSseFrame(line);
       if (delta === null) continue;
       if (delta === SSE_DONE) { finished = true; break; }
@@ -667,13 +727,16 @@ async function consumeStreamed(response: Response, onChunk: (chunk: string) => v
     }
   }
   if (buffer && !finished) {
+    watchFinishReason(buffer, generation);
     const delta = parseSseFrame(buffer);
     if (delta && delta !== SSE_DONE) { streamed += delta; onChunk(delta); }
   }
   // Apara apenas as pontas do texto inteiro (o miolo fica intacto, com os espaços).
   if (streamed) return streamed.trim();
   // Servidor respondeu JSON apesar de stream=true → entrega o texto de uma vez.
-  const degraded = extractChatText(tryParseJson(raw));
+  const payload = tryParseJson(raw);
+  markTruncated(payload, generation);
+  const degraded = extractChatText(payload);
   if (degraded) onChunk(degraded);
   return degraded;
 }
@@ -719,6 +782,7 @@ async function hotSwap(
   failures: string[],
   startedAt: number,
   ctx: CrisContext,
+  generation: CrisGeneration,
 ): Promise<CrisReply | null> {
   if (descriptor.kind !== 'retired-model' || !plan.swapModel || plan.swapModel === plan.target.model) return null;
   const swappedPlan: CrisCallPlan = { ...plan, target: { ...plan.target, model: plan.swapModel } };
@@ -730,7 +794,7 @@ async function hotSwap(
       switchedTo: plan.swapModel,
       message: `Usei o modelo "${plan.swapModel}" porque o seu ("${plan.target.model}") não funciona mais. Toque em "Corrigir agora" para fixar o novo modelo.`,
     };
-    return finishReply(text, swappedPlan.target, startedAt, joinFailures(failures.concat(notice.message)), ctx, notice);
+    return finishReply(text, swappedPlan.target, startedAt, joinFailures(failures.concat(notice.message)), ctx, truncatedFailure(swappedPlan.target, generation) ?? notice);
   } catch (error) {
     failures.push(describeCrisFailure(error, plan.target).message);
     return null;
@@ -751,6 +815,8 @@ const CONFIG_UNAVAILABLE = 'Não foi possível ler a configuração de IA neste 
  * resposta pronta do app junto com o motivo amigável da falha.
  */
 export async function askCris(message: string, ctx: CrisContext, options: CrisAskOptions = {}): Promise<CrisReply> {
+  /** Marca deste turno: ligada se o provedor cortar a resposta por `max_tokens`. */
+  const generation: CrisGeneration = { truncated: false };
   const startedAt = Date.now();
   const question = (message ?? '').trim();
   const { plans, configUnavailable } = await preparePlans(options);
@@ -760,16 +826,16 @@ export async function askCris(message: string, ctx: CrisContext, options: CrisAs
   const failures: string[] = [];
   let failure: CrisFailure | null = null;
   const run = (plan: CrisCallPlan) =>
-    requestCompletion(plan, messages, { timeoutMs: options.timeoutMs, maxTokens: options.maxTokens, signal: options.signal });
+    requestCompletion(plan, messages, { timeoutMs: options.timeoutMs, maxTokens: options.maxTokens, signal: options.signal, generation });
   for (const plan of plans) {
     if (plan.target.kind === 'fallback') break;
     try {
       const text = await run(plan);
-      return finishReply(text, plan.target, startedAt, joinFailures(failures), ctx, failure);
+      return finishReply(text, plan.target, startedAt, joinFailures(failures), ctx, truncatedFailure(plan.target, generation) ?? failure);
     } catch (error) {
       const descriptor = describeCrisFailure(error, plan.target);
       if (plan.target.kind === 'provider') failure = descriptor;
-      const swapped = await hotSwap(plan, descriptor, run, failures, startedAt, ctx);
+      const swapped = await hotSwap(plan, descriptor, run, failures, startedAt, ctx, generation);
       if (swapped) return swapped;
       failures.push(descriptor.message);
     }
@@ -802,15 +868,18 @@ export async function streamCris(
   const messages = buildMessages(question, ctx, options.history, options.memory);
   const failures: string[] = [];
   let failure: CrisFailure | null = null;
+  /** Marca deste turno: ligada se o provedor cortar a resposta por `max_tokens`. */
+  const generation: CrisGeneration = { truncated: false };
   const run = async (plan: CrisCallPlan): Promise<string> => {
     let text = '';
     if (typeof TextDecoder !== 'undefined') {
       const body = buildRequestBody(plan, messages, true, options.maxTokens);
       const response = await fetchCris(plan, body, true, options.timeoutMs, options.signal);
-      text = await consumeStreamed(response, emit);
+      text = await consumeStreamed(response, emit, generation);
     }
     if (!text) {
       text = await requestCompletion(plan, messages, {
+        generation,
         timeoutMs: options.timeoutMs,
         maxTokens: options.maxTokens,
         signal: options.signal,
@@ -823,11 +892,11 @@ export async function streamCris(
     if (plan.target.kind === 'fallback') break;
     try {
       const text = await run(plan);
-      return finishReply(text, plan.target, startedAt, joinFailures(failures), ctx, failure);
+      return finishReply(text, plan.target, startedAt, joinFailures(failures), ctx, truncatedFailure(plan.target, generation) ?? failure);
     } catch (error) {
       const descriptor = describeCrisFailure(error, plan.target);
       if (plan.target.kind === 'provider') failure = descriptor;
-      const swapped = await hotSwap(plan, descriptor, run, failures, startedAt, ctx);
+      const swapped = await hotSwap(plan, descriptor, run, failures, startedAt, ctx, generation);
       if (swapped) return swapped;
       failures.push(descriptor.message);
     }

@@ -81,8 +81,14 @@ export default function TabLayout() {
   );
   const navWidth = wide ? Math.min(NEON_LAYOUT.navMaxWidth, sceneWidth) : sceneWidth;
   const navLeft = Math.max((sceneWidth - navWidth) / 2, 0);
-  /** `.app{padding-bottom:100px}` do mockup: a cena nunca fica sob a pílula. */
-  const bottomClearance = navHeight + navBottom + (wide ? 24 : 20);
+  /**
+   * A pílula do mockup (`.bottomnav`) é `position:fixed; bottom:12-20px`, isto é,
+   * medida da JANELA. Aqui ela é `position:absolute` e o pai é a cena, portanto o
+   * `bottom` só cai no mesmo lugar se a cena alcançar o fundo da janela — é por
+   * isso que o frame não reserva nada embaixo. A folga do `.app{padding-bottom:
+   * 100px}` fica com o conteúdo de cada aba (`content.paddingBottom`, hoje
+   * 115-120 px); somá-la aqui *e* lá empurrava a pílula ~127 px para cima.
+   */
   /** `backdrop-filter: blur(12px)` do mockup não existe no tipo de estilo do RN. */
   const webBlur = Platform.OS === 'web' ? ({ backdropFilter: 'blur(12px)' } as unknown as ViewStyle) : null;
 
@@ -92,7 +98,7 @@ export default function TabLayout() {
       <View
         style={[
           styles.frame,
-          { padding: shellPadding, paddingBottom: bottomClearance + shellPadding, paddingTop: shellPadding + topInset },
+          { paddingHorizontal: shellPadding, paddingTop: shellPadding + topInset },
         ]}
       >
         <View style={[styles.grid, wide ? styles.gridWide : styles.gridTight]}>

@@ -65,6 +65,16 @@ export const NEON_LAYOUT = {
 export const neonNavHeight = (wide: boolean) => (wide ? NEON_LAYOUT.navHeightWide : NEON_LAYOUT.navHeight);
 export const neonNavBottom = (wide: boolean) => (wide ? NEON_LAYOUT.navBottomWide : NEON_LAYOUT.navBottom);
 
+/**
+ * Folga que o fim do conteúdo precisa reservar para não ficar sob a pílula
+ * (`.app{padding-bottom:100px}` do mockup no mobile — `neonNavClearance(false)`
+ * devolve exatamente 100). A pílula é `position:absolute` dentro da cena, então
+ * não reserva espaço sozinha: quem rola até o fim soma esta folga ao próprio
+ * `paddingBottom`. O `insets.bottom` não entra aqui — o `SafeAreaView` da tela
+ * já o aplica por fora.
+ */
+export const neonNavClearance = (wide: boolean) => neonNavHeight(wide) + neonNavBottom(wide) + (wide ? 24 : 20);
+
 /** Item de navegação do caminho atual (fallback: Hoje). */
 export function neonItemForPath(pathname: string | null | undefined): NeonNavItem {
   const path = pathname ?? '/';

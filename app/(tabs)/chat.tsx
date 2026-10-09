@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
+import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useStudy, type ChatMessage } from '@/lib/study-store';
 import { useColors } from '@/hooks/use-colors';
@@ -25,6 +26,9 @@ function toCloudUser(user: { id: string; email?: string; user_metadata?: Record<
 
 export default function ChatScreen() {
   const colors = useColors();
+  const { width } = useWindowDimensions();
+  /** A pílula da bottom nav é flutuante: o compositor precisa reservar a folga. */
+  const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint);
   const { chatMessages, addChatMessage } = useStudy();
   const [localAccount, setLocalAccount] = useState<LocalChatAccount | null>(null);
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
@@ -258,7 +262,7 @@ export default function ChatScreen() {
           ListEmptyComponent={<View className="bg-surface border border-border rounded-2xl p-5 mt-4"><Text className="text-foreground font-bold">Ainda não há mensagens</Text><Text className="text-muted mt-1">Comece a conversa compartilhando uma dúvida ou material.</Text></View>}
           renderItem={({ item }) => <View className={`mb-3 max-w-[88%] ${item.isOwn ? 'self-end' : 'self-start'}`}><Text className="text-muted text-[11px] mb-1">{item.author} · {item.createdAt}</Text><View className={`rounded-2xl px-4 py-3 ${item.isOwn ? 'bg-primary rounded-tr-sm' : 'bg-surface border border-border rounded-tl-sm'}`}><Text className={item.isOwn ? 'text-white leading-5' : 'text-foreground leading-5'}>{item.text}</Text></View></View>}
         />
-        <View className="px-5 pb-4 pt-2 border-t border-border bg-background">
+        <View className="px-5 pt-2 border-t border-border bg-background" style={{ paddingBottom: navClearance }}>
           <View className="flex-row items-end bg-surface border border-border rounded-2xl px-3 py-2">
             <TextInput
               value={draft}
