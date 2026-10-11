@@ -90,7 +90,7 @@ export default function HomeScreen() {
   };
 
   return <ScreenContainer className="bg-transparent" containerClassName="bg-transparent" style={styles.screen}>
-    <ScrollView contentContainerStyle={[styles.content, tablet && styles.contentWide, { paddingBottom: navClearance }]}>
+    <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, tablet && styles.contentWide, { paddingBottom: navClearance }]}>
       <View style={[styles.heroShadow, cardShadow('floating')]}>
         <NeonGradient name="hero" style={styles.hero}>
           <View style={styles.heroCopy}>
@@ -303,6 +303,7 @@ function createStyles(c: HomePalette) {
     removeButton: { alignItems: 'center', height: 34, justifyContent: 'center', marginLeft: 5, width: 28 },
     removeText: { color: c.danger, fontSize: 23, fontWeight: '400' },
     screen: { backgroundColor: 'transparent' },
+    scroll: { backgroundColor: 'transparent', flex: 1 },
     secondaryColumn: { flex: 1 },
     splitGrid: { gap: 26 },
     splitGridTablet: { alignItems: 'flex-start', flexDirection: 'row' },

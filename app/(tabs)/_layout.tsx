@@ -177,7 +177,7 @@ const styles = StyleSheet.create({
   tabButton: { borderRadius: 16, flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' },
   tabButtonCompact: { gap: 4, paddingHorizontal: 2, paddingVertical: 8 },
   tabButtonWide: { gap: 4, paddingHorizontal: 6, paddingVertical: 10 },
-  tabIcon: { marginBottom: 0 },
+  tabIcon: { alignItems: 'center', height: 22, justifyContent: 'center', marginBottom: 0 },
   tabItem: { borderRadius: 16, marginHorizontal: 3, overflow: 'hidden' },
   tabLabel: { fontWeight: '800', letterSpacing: 0.1, lineHeight: 13 },
   tabLabelCompact: { fontSize: 9 },

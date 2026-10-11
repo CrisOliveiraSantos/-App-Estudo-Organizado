@@ -1,7 +1,7 @@
 /**
  * `.fab` do mockup (linhas 165-167 + 202 + 209): 64 px (56 no celular),
  * raio 22, gradiente 140° ciano→rosa, borda ciano, glow e um anel rosa
- * pulsando por fora (`pulseGlow 2s`, inset -5).
+ * pulsando por fora (`pulseGlow 2s`, inset -3).
  *
  * O estado, a posição e o `onPress` continuam em `components/cris-popup.tsx`;
  * aqui vive só a aparência e a animação.
@@ -30,9 +30,9 @@ export function NeonFab({ bottom, onPress, style }: { bottom?: number; onPress: 
   const grown = hovered || pressed;
   const size = wide ? 64 : 56;
   const right = wide ? 24 : width <= 430 ? 14 : 16;
-  /** Sem `bottom` explícito, o FAB cola na pílula (mesma geometria do layout). */
+  /** Sem `bottom` explícito, o FAB flutua 16 px acima da pílula (mesma geometria do layout). */
   const resolvedBottom =
-    bottom ?? neonNavHeight(wide) + neonNavBottom(wide) + (Platform.OS === 'web' ? 0 : insets.bottom) + 10;
+    bottom ?? neonNavHeight(wide) + neonNavBottom(wide) + (Platform.OS === 'web' ? 0 : insets.bottom) + 16;
 
   useEffect(() => {
     const loop = Animated.loop(
@@ -95,5 +95,5 @@ const styles = StyleSheet.create({
   anchor: { position: 'absolute', zIndex: 40 },
   button: { alignItems: 'center', borderRadius: neonRadius.fab, borderWidth: 1, justifyContent: 'center', overflow: 'hidden' },
   glow: { borderRadius: neonRadius.fab + 5 },
-  ring: { borderWidth: 1, borderRadius: neonRadius.fab + 4, bottom: -5, left: -5, position: 'absolute', right: -5, top: -5 },
+  ring: { borderWidth: 1, borderRadius: neonRadius.fab + 4, bottom: -3, left: -3, position: 'absolute', right: -3, top: -3 },
 });
