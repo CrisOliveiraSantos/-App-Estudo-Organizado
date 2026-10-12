@@ -9,7 +9,7 @@ export type Task = { id: string; title: string; done: boolean; priority: 'Alta' 
 export type Goal = { id: string; title: string; description: string; deadline?: string; tasks: Task[] };
 export type RichBlockType = 'paragraph' | 'heading' | 'quote' | 'code' | 'bullet' | 'table' | 'image' | 'chart';
 export type RichBlock = { id: string; type: RichBlockType; text?: string; data?: string };
-export type PdfPage = { id: string; pageNumber: number; imageUri?: string; extractedText?: string; ocrStatus: 'pending' | 'complete' };
+export type PdfPage = { id: string; pageNumber: number; imageUri?: string; extractedText?: string };
 export type Note = { id: string; title: string; content: string; folder: string; updatedAt: string; kind: 'note' | 'pdf'; uri?: string; blocks?: RichBlock[]; images?: string[]; pdfPages?: PdfPage[]; selectedText?: string; favorite?: boolean };
 export type Folder = { id: string; name: string };
 export type Subject = { id: string; name: string; professor: string; color: string; emoji: string; description?: string; tasks?: Task[] };
@@ -99,7 +99,6 @@ type Store = StudyState & {
   toggleNoteFavorite: (noteId: string) => void;
   addFolder: (name: string) => void;
   addPdf: (name: string, uri: string) => void;
-  addOcrDocument: (name: string, pages: PdfPage[]) => void;
   appendPdfPage: (noteId: string, page: PdfPage) => void;
 };
 const StudyContext = createContext<Store | null>(null);
@@ -268,8 +267,7 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     moveNote: (noteId, folder) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, folder, updatedAt: 'Agora' } : note) })),
     toggleNoteFavorite: noteId => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, favorite: !note.favorite, updatedAt: 'Agora' } : note) })),
     addFolder: name => setState(s => ({ ...s, folders: [...s.folders, { id: Date.now().toString(), name }] })),
-    addPdf: (name, uri) => setState(s => ({ ...s, notes: [{ id: Date.now().toString(), title: name, content: `Material importado localmente.\nArquivo: ${uri}`, folder: 'Sem pasta', updatedAt: 'Agora', kind: 'pdf', uri, pdfPages: [{ id: `${Date.now()}-1`, pageNumber: 1, imageUri: undefined, ocrStatus: 'pending' }] }, ...s.notes] })),
-    addOcrDocument: (name, pages) => setState(s => ({ ...s, notes: [{ id: Date.now().toString(), title: name, content: pages.map(page => `Página ${page.pageNumber}\n${page.extractedText ?? ''}`).join('\n\n'), folder: 'OCR', updatedAt: 'Agora', kind: 'pdf', pdfPages: pages }, ...s.notes] })),
+    addPdf: (name, uri) => setState(s => ({ ...s, notes: [{ id: Date.now().toString(), title: name, content: `Material importado localmente.\nArquivo: ${uri}`, folder: 'Sem pasta', updatedAt: 'Agora', kind: 'pdf', uri, pdfPages: [{ id: `${Date.now()}-1`, pageNumber: 1, imageUri: undefined }] }, ...s.notes] })),
     appendPdfPage: (noteId, page) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, updatedAt: 'Agora', content: `${note.content}\n\nPágina ${page.pageNumber}\n${page.extractedText ?? ''}`, pdfPages: [...(note.pdfPages ?? []), page] } : note) })),
   }), [state]);
   return <StudyContext.Provider value={value}>{children}</StudyContext.Provider>;

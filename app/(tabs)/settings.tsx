@@ -224,7 +224,7 @@ function AboutContent({ colors }: { colors: ReturnType<typeof useColors> }) {
     <View style={styles.aboutMark}><Text style={styles.aboutMarkText}>✦</Text></View>
     <Text style={[styles.aboutTitle, { color: colors.foreground }]}>Estudo Organizado</Text>
     <Text style={[styles.aboutLead, { color: colors.foreground }]}>Pensado e construído por Cris</Text>
-    <Text style={[styles.body, { color: colors.muted }]}>O Estudo Organizado foi idealizado e desenvolvido por Cris para agilizar trabalhos da faculdade e apoiar a rotina acadêmica em geral. O programa reúne planejamento de estudos, editor de texto, editor de código, biblioteca, OCR, assistência da Cris online e recursos preparados para funcionamento local e em nuvem.</Text>
+    <Text style={[styles.body, { color: colors.muted }]}>O Estudo Organizado foi idealizado e desenvolvido por Cris para agilizar trabalhos da faculdade e apoiar a rotina acadêmica em geral. O programa reúne planejamento de estudos, editor de texto, editor de código, biblioteca, assistência da Cris online e recursos preparados para funcionamento local e em nuvem.</Text>
     <Text style={[styles.body, { color: colors.muted }]}>A proposta é transformar tarefas acadêmicas complexas em um fluxo mais claro, organizado e produtivo, ajudando cada pessoa a estudar, escrever, programar e acompanhar sua evolução em um só espaço.</Text>
     <Text style={[styles.version, { color: colors.muted }]}>Criadora e responsável pelo projeto: Cris</Text>
     <View style={styles.contactCard}>

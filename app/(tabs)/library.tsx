@@ -1,10 +1,8 @@
 import { useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import * as DocumentPicker from 'expo-document-picker';
-import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system/legacy';
 import { router } from 'expo-router';
-import { extractTextFromImage } from '@/lib/cris-ocr';
 import { ScreenContainer } from '@/components/screen-container';
 import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,12 +13,11 @@ import { type Note, useStudy } from '@/lib/study-store';
 type Filter = 'Todos' | 'Notas' | 'PDFs';
 
 export default function LibraryScreen() {
-  const { notes, folders, addPdf, addOcrDocument, addFolder, deleteNote, renameNote, moveNote } = useStudy();
+  const { notes, folders, addPdf, addFolder, deleteNote, renameNote, moveNote } = useStudy();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   /** A pílula da bottom nav é flutuante: esta tela não reserva o edge de baixo, então a folga vem daqui. */
   const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom;
-  const [ocrBusy, setOcrBusy] = useState(false);
   const [filter, setFilter] = useState<Filter>('Todos');
   const [query, setQuery] = useState('');
   const [folderName, setFolderName] = useState('');
@@ -57,26 +54,6 @@ export default function LibraryScreen() {
       Alert.alert('PDF importado', 'O arquivo foi registrado. Se ele não abrir após reiniciar, importe-o novamente.');
     }
   };
-  /** OCR direto no dispositivo: a imagem vai para a IA conectada, nunca para os servidores do app. */
-  const pickImage = async () => {
-    const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 10, quality: 1 });
-    if (result.canceled) return;
-    setOcrBusy(true);
-    try {
-      const pages = [];
-      for (const [index, asset] of result.assets.entries()) {
-        const imageBase64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 });
-        const recognized = await extractTextFromImage(imageBase64, asset.mimeType ?? 'image/jpeg');
-        pages.push({ id: `${Date.now()}-${index}`, pageNumber: index + 1, imageUri: asset.uri, extractedText: recognized.text || '[Nenhum texto legível]', ocrStatus: 'complete' as const });
-      }
-      addOcrDocument(`Documento OCR — ${new Date().toLocaleDateString('pt-BR')}`, pages);
-      Alert.alert('Documento reconhecido', `${pages.length} página(s) foram transcritas e salvas na Biblioteca.`);
-    } catch (error) {
-      Alert.alert('OCR no dispositivo', error instanceof Error ? error.message : 'Verifique sua conexão e tente novamente com imagens mais nítidas.');
-    } finally {
-      setOcrBusy(false);
-    }
-  };
   const shown = useMemo(() => notes.filter(note => (filter === 'Todos' || (filter === 'Notas' ? note.kind === 'note' : note.kind === 'pdf')) && [note.title, note.content, note.folder, note.selectedText].join(' ').toLowerCase().includes(query.toLowerCase())).sort((left, right) => left.title.localeCompare(right.title, 'pt-BR')), [notes, filter, query]);
   const finishRename = () => { if (editingId && draftTitle.trim()) renameNote(editingId, draftTitle.trim()); setEditingId(null); setDraftTitle(''); };
   const createFolder = () => { if (!folderName.trim()) return; addFolder(folderName.trim()); setFolderName(''); setShowFolderForm(false); };
@@ -87,16 +64,16 @@ export default function LibraryScreen() {
       keyExtractor={item => item.id}
       contentContainerStyle={[styles.content, { paddingBottom: navClearance }]}
       ListHeaderComponent={<View>
-        <View style={styles.header}><View style={styles.headerCopy}><Text style={styles.overline}>MATERIAIS DE ESTUDO</Text><Text style={styles.title}>Biblioteca</Text><Text style={styles.subtitle}>Guarde PDFs, textos reconhecidos e anotações importantes para revisar quando precisar.</Text></View><AcademicButton label="Novo texto" onPress={() => router.push('/editor')} compact /></View>
-        <View style={styles.importGrid}><TouchableOpacity onPress={() => { void pickPdf(); }} accessibilityRole="button" accessibilityLabel="Importar PDF" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#FDECEF' }]}><IconSymbol name="doc.text.fill" size={21} color={academicColors.danger} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>Importar PDF</Text><Text style={styles.importDescription}>Guarde e consulte materiais em PDF.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity><TouchableOpacity onPress={() => { void pickImage(); }} accessibilityRole="button" accessibilityLabel="Extrair texto por OCR" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#E8EBFF' }]}><IconSymbol name="photo" size={21} color={academicColors.indigo} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>{ocrBusy ? 'Lendo imagens…' : 'Extrair texto (OCR)'}</Text><Text style={styles.importDescription}>Reconheça imagens ou páginas fotografadas.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity></View>
-        <View style={styles.searchBox}><IconSymbol name="magnifyingglass" size={20} color={academicColors.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="Buscar em títulos, pastas e texto reconhecido" placeholderTextColor={academicColors.muted} style={styles.searchInput} /></View>
+        <View style={styles.header}><View style={styles.headerCopy}><Text style={styles.overline}>MATERIAIS DE ESTUDO</Text><Text style={styles.title}>Biblioteca</Text><Text style={styles.subtitle}>Guarde PDFs e anotações importantes para revisar quando precisar.</Text></View><AcademicButton label="Novo texto" onPress={() => router.push('/editor')} compact /></View>
+        <View style={styles.importGrid}><TouchableOpacity onPress={() => { void pickPdf(); }} accessibilityRole="button" accessibilityLabel="Importar PDF" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#FDECEF' }]}><IconSymbol name="doc.text.fill" size={21} color={academicColors.danger} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>Importar PDF</Text><Text style={styles.importDescription}>Guarde e consulte materiais em PDF.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity></View>
+        <View style={styles.searchBox}><IconSymbol name="magnifyingglass" size={20} color={academicColors.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="Buscar em títulos, pastas e conteúdo" placeholderTextColor={academicColors.muted} style={styles.searchInput} /></View>
         <View style={styles.filterBar}>{(['Todos', 'Notas', 'PDFs'] as Filter[]).map(item => <TouchableOpacity key={item} onPress={() => setFilter(item)} accessibilityRole="button" accessibilityState={{ selected: filter === item }} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item}</Text></TouchableOpacity>)}</View>
         <View style={styles.folderHeader}><View><Text style={styles.sectionTitle}>Pastas</Text><Text style={styles.sectionDescription}>Mantenha seus materiais em um lugar fácil de encontrar.</Text></View><TouchableOpacity onPress={() => setShowFolderForm(value => !value)} accessibilityRole="button" style={styles.folderToggle}><Text style={styles.folderToggleText}>{showFolderForm ? 'Fechar' : '+ Nova pasta'}</Text></TouchableOpacity></View>
         {showFolderForm ? <AcademicCard style={styles.folderForm}><TextInput value={folderName} onChangeText={setFolderName} placeholder="Nome da nova pasta" placeholderTextColor={academicColors.muted} style={styles.input} /><AcademicButton label="Criar pasta" onPress={createFolder} compact /></AcademicCard> : null}
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderScroller}>{folders.map(folder => <View key={folder.id} style={styles.folderChip}><IconSymbol name="folder.fill" size={15} color={academicColors.violet} /><Text style={styles.folderText}>{folder.name}</Text></View>)}{!folders.length ? <AcademicPill label="Sem pastas criadas" tone="neutral" /> : null}</ScrollView>
         <View style={styles.listHeader}><View><Text style={styles.sectionTitle}>Seus materiais</Text><Text style={styles.sectionDescription}>{shown.length} {shown.length === 1 ? 'item encontrado' : 'itens encontrados'}</Text></View><AcademicPill label={filter} tone="indigo" /></View>
       </View>}
-      ListEmptyComponent={<AcademicEmptyState title={query ? 'Nenhum material encontrado' : 'Sua Biblioteca está pronta'} description={query ? 'Tente outro termo ou outro filtro.' : 'Importe um PDF, reconheça o texto de imagens ou crie uma nota para começar.'} actionLabel={query ? undefined : 'Importar PDF'} onAction={query ? undefined : () => { void pickPdf(); }} />}
+      ListEmptyComponent={<AcademicEmptyState title={query ? 'Nenhum material encontrado' : 'Sua Biblioteca está pronta'} description={query ? 'Tente outro termo ou outro filtro.' : 'Importe um PDF ou crie uma nota para começar.'} actionLabel={query ? undefined : 'Importar PDF'} onAction={query ? undefined : () => { void pickPdf(); }} />}
       renderItem={({ item }) => <LibraryItem item={item} folders={folders.map(folder => folder.name)} editing={editingId === item.id} draftTitle={draftTitle} setDraftTitle={setDraftTitle} onOpen={() => router.push(item.kind === 'pdf' ? { pathname: '/pdf', params: { id: item.id } } : { pathname: '/document', params: { id: item.id } })} onRename={() => { setEditingId(item.id); setDraftTitle(item.title); }} onSaveRename={finishRename} onMove={() => moveNote(item.id, folders[(folders.findIndex(folder => folder.name === item.folder) + 1) % Math.max(folders.length, 1)]?.name ?? 'Sem pasta')} onDelete={() => { const remove = () => deleteNote(item.id); if (Platform.OS === 'web' && typeof window !== 'undefined') { if (window.confirm(`Excluir “${item.title}”? Esta ação não pode ser desfeita.`)) remove(); return; } Alert.alert('Excluir material?', 'Esta ação remove o material dos dados locais.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: remove }]); }} />}
     />
   </ScreenContainer>;
@@ -104,8 +81,7 @@ export default function LibraryScreen() {
 
 function LibraryItem({ item, editing, draftTitle, setDraftTitle, onOpen, onRename, onSaveRename, onMove, onDelete }: { item: Note; folders: string[]; editing: boolean; draftTitle: string; setDraftTitle: (value: string) => void; onOpen: () => void; onRename: () => void; onSaveRename: () => void; onMove: () => void; onDelete: () => void }) {
   const isPdf = item.kind === 'pdf';
-  const ocrPages = item.pdfPages?.filter(page => page.ocrStatus === 'complete').length ?? 0;
-  return <AcademicCard style={styles.materialCard}><TouchableOpacity onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${item.title}`} activeOpacity={0.76} style={styles.materialOpen}><View style={[styles.materialIcon, { backgroundColor: isPdf ? '#FDECEF' : '#E8EBFF' }]}><IconSymbol name={isPdf ? 'doc.text.fill' : 'note.text'} size={23} color={isPdf ? academicColors.danger : academicColors.indigo} /></View><View style={styles.materialCopy}><View style={styles.materialTitleRow}><Text numberOfLines={1} style={styles.materialTitle}>{item.title}</Text><AcademicPill label={isPdf ? 'PDF' : 'Nota'} tone={isPdf ? 'danger' : 'indigo'} /></View><Text style={styles.materialMeta}>{item.folder || 'Sem pasta'} · {item.updatedAt}</Text><Text numberOfLines={2} style={styles.materialPreview}>{item.content || (isPdf ? 'Material em PDF pronto para visualização.' : 'Documento vazio — toque para começar a escrever.')}</Text>{isPdf && ocrPages ? <Text style={styles.ocrLabel}>{ocrPages} {ocrPages === 1 ? 'página reconhecida' : 'páginas reconhecidas'} por OCR</Text> : null}</View><IconSymbol name="chevron.right" size={19} color={academicColors.muted} /></TouchableOpacity>{editing ? <View style={styles.renameBox}><TextInput value={draftTitle} onChangeText={setDraftTitle} autoFocus onSubmitEditing={onSaveRename} placeholder="Título do material" placeholderTextColor={academicColors.muted} style={styles.input} /><AcademicButton label="Salvar nome" onPress={onSaveRename} compact /></View> : <View style={styles.actions}><TouchableOpacity onPress={onRename} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Renomear</Text></TouchableOpacity><TouchableOpacity onPress={onMove} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Mover</Text></TouchableOpacity><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${item.title}`} style={styles.deleteAction}><Text style={styles.deleteActionText}>Excluir</Text></TouchableOpacity></View>}</AcademicCard>;
+  return <AcademicCard style={styles.materialCard}><TouchableOpacity onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${item.title}`} activeOpacity={0.76} style={styles.materialOpen}><View style={[styles.materialIcon, { backgroundColor: isPdf ? '#FDECEF' : '#E8EBFF' }]}><IconSymbol name={isPdf ? 'doc.text.fill' : 'note.text'} size={23} color={isPdf ? academicColors.danger : academicColors.indigo} /></View><View style={styles.materialCopy}><View style={styles.materialTitleRow}><Text numberOfLines={1} style={styles.materialTitle}>{item.title}</Text><AcademicPill label={isPdf ? 'PDF' : 'Nota'} tone={isPdf ? 'danger' : 'indigo'} /></View><Text style={styles.materialMeta}>{item.folder || 'Sem pasta'} · {item.updatedAt}</Text><Text numberOfLines={2} style={styles.materialPreview}>{item.content || (isPdf ? 'Material em PDF pronto para visualização.' : 'Documento vazio — toque para começar a escrever.')}</Text></View><IconSymbol name="chevron.right" size={19} color={academicColors.muted} /></TouchableOpacity>{editing ? <View style={styles.renameBox}><TextInput value={draftTitle} onChangeText={setDraftTitle} autoFocus onSubmitEditing={onSaveRename} placeholder="Título do material" placeholderTextColor={academicColors.muted} style={styles.input} /><AcademicButton label="Salvar nome" onPress={onSaveRename} compact /></View> : <View style={styles.actions}><TouchableOpacity onPress={onRename} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Renomear</Text></TouchableOpacity><TouchableOpacity onPress={onMove} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Mover</Text></TouchableOpacity><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${item.title}`} style={styles.deleteAction}><Text style={styles.deleteActionText}>Excluir</Text></TouchableOpacity></View>}</AcademicCard>;
 }
 
 const styles = StyleSheet.create({
@@ -146,7 +122,6 @@ const styles = StyleSheet.create({
   materialPreview: { color: academicColors.muted, fontSize: 12, lineHeight: 17, marginTop: 7 },
   materialTitle: { color: academicColors.ink, flex: 1, fontSize: 15, fontWeight: '900', paddingRight: 7 },
   materialTitleRow: { alignItems: 'center', flexDirection: 'row' },
-  ocrLabel: { color: academicColors.success, fontSize: 10, fontWeight: '800', marginTop: 6 },
   overline: { color: academicColors.violet, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
   renameBox: { borderTopColor: academicColors.line, borderTopWidth: 1, marginTop: 13, paddingTop: 11 },
   searchBox: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: academicColors.line, borderRadius: 12, borderWidth: 1, flexDirection: 'row', marginBottom: 11, minHeight: 47, paddingHorizontal: 12 },

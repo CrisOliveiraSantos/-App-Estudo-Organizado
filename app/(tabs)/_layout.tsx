@@ -139,7 +139,7 @@ export default function TabLayout() {
                     key={item.name}
                     name={item.name}
                     options={{
-                      tabBarIcon: ({ color }) => <IconSymbol color={color} name={item.icon} size={wide ? 20 : 18} />,
+                      tabBarIcon: ({ color }) => <IconSymbol color={color} name={item.icon} size={26} />,
                       title: item.label,
                     }}
                   />
@@ -174,11 +174,11 @@ const styles = StyleSheet.create({
   sceneFill: { backgroundColor: 'transparent' },
   shell: { flex: 1 },
   tabActiveFill: { borderRadius: 16 },
-  tabButton: { borderRadius: 16, flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' },
-  tabButtonCompact: { gap: 4, paddingHorizontal: 2, paddingVertical: 8 },
-  tabButtonWide: { gap: 4, paddingHorizontal: 6, paddingVertical: 10 },
-  tabIcon: { alignItems: 'center', height: 22, justifyContent: 'center', marginBottom: 0 },
-  tabItem: { borderRadius: 16, marginHorizontal: 3, overflow: 'hidden' },
+  tabButton: { alignItems: 'center', borderRadius: 16, flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' },
+  tabButtonCompact: { gap: 4, paddingHorizontal: 2, paddingVertical: 4 },
+  tabButtonWide: { gap: 4, paddingHorizontal: 6, paddingVertical: 6 },
+  tabIcon: { alignItems: 'center', height: 26, justifyContent: 'center', marginBottom: 0 },
+  tabItem: { alignItems: 'center', borderRadius: 16, justifyContent: 'center', marginHorizontal: 3, overflow: 'hidden' },
   tabLabel: { fontWeight: '800', letterSpacing: 0.1, lineHeight: 13 },
   tabLabelCompact: { fontSize: 9 },
   tabPressed: { opacity: 0.75 },

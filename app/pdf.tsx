@@ -1,58 +1,22 @@
 import { useState } from 'react';
-import { Alert, Image, Platform, Pressable, ScrollView, Text, View } from 'react-native';
+import { Alert, Image, Pressable, ScrollView, Text, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system/legacy';
-import { extractTextFromImage } from '@/lib/cris-ocr';
-import { trpc } from '@/lib/trpc';
 import { ScreenContainer } from '@/components/screen-container';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useStudy } from '@/lib/study-store';
 import { useColors } from '@/hooks/use-colors';
 import { NativePdfViewer } from '@/components/native-pdf-viewer';
 
-async function readPdfAsBase64(uri: string): Promise<string> {
-  const dataUrlPrefix = 'data:application/pdf;base64,';
-  if (uri.startsWith(dataUrlPrefix)) return uri.slice(dataUrlPrefix.length);
-
-  if (Platform.OS === 'web') {
-    const response = await fetch(uri);
-    if (!response.ok) throw new Error('Não foi possível ler o PDF no navegador.');
-    const blob = await response.blob();
-    const dataUrl = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('Não foi possível ler o PDF no navegador.'));
-      reader.onload = () => {
-        if (typeof reader.result !== 'string') {
-          reject(new Error('O navegador retornou um formato de PDF inválido.'));
-          return;
-        }
-        resolve(reader.result);
-      };
-      reader.readAsDataURL(blob);
-    });
-    const separator = dataUrl.indexOf(',');
-    if (separator < 0) throw new Error('Formato de PDF inválido.');
-    return dataUrl.slice(separator + 1);
-  }
-
-  return FileSystem.readAsStringAsync(uri, { encoding: FileSystem.EncodingType.Base64 });
-}
-
 export default function PdfViewerScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { notes, appendPdfPage, saveNote } = useStudy();
+  const { notes } = useStudy();
   const colors = useColors();
-  const [ocrBusy, setOcrBusy] = useState(false);
-  const pdfOcrMutation = trpc.ocr.extractPdf.useMutation();
   const pdf = notes.find(note => note.id === id);
   const pages = pdf?.pdfPages ?? [];
   const [pageIndex, setPageIndex] = useState(0);
   const [selected, setSelected] = useState('');
   const page = pages[pageIndex];
-  const pageText = page?.extractedText ?? pdf?.selectedText ?? 'Esta página ainda não tem uma transcrição. Adicione uma imagem da página para executar o OCR.';
-  const ocrFullPdf = async () => { if (!pdf?.uri) { Alert.alert('PDF não disponível', 'Importe o PDF novamente para gerar o OCR completo.'); return; } try { const pdfBase64 = await readPdfAsBase64(pdf.uri); const recognized = await pdfOcrMutation.mutateAsync({ pdfBase64 }); const text = recognized.text || '[Nenhum texto legível]'; saveNote({ ...pdf, content: text, selectedText: text, updatedAt: 'Agora', pdfPages: [{ id: `${Date.now()}-full`, pageNumber: 1, extractedText: text, ocrStatus: 'complete' }] }); setSelected(text); Alert.alert('OCR concluído', 'O texto completo foi reconhecido e salvo para revisão.'); } catch { Alert.alert('OCR indisponível', 'Verifique a conexão e tente novamente com um PDF menor.'); } };
-  const addPage = async () => { if (!pdf) return; const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 1 }); if (!result.canceled) { try { const asset = result.assets[0]; setOcrBusy(true); const imageBase64 = await FileSystem.readAsStringAsync(asset.uri, { encoding: FileSystem.EncodingType.Base64 }); const recognized = await extractTextFromImage(imageBase64, asset.mimeType ?? 'image/jpeg'); appendPdfPage(pdf.id, { id: `${Date.now()}`, pageNumber: pages.length + 1, imageUri: asset.uri, extractedText: recognized.text || '[Nenhum texto legível]', ocrStatus: 'complete' }); setPageIndex(pages.length); Alert.alert('Página adicionada', `A página ${pages.length + 1} foi reconhecida e anexada ao documento.`); } catch (error) { Alert.alert('OCR indisponível', error instanceof Error ? error.message : 'Não foi possível processar esta página.'); } finally { setOcrBusy(false); } } };
-  return <ScreenContainer edges={['top', 'bottom', 'left', 'right']}><View className="px-5 pt-4 flex-row items-center border-b border-border pb-3"><Pressable onPress={() => router.back()} className="flex-row items-center px-1 py-2"><IconSymbol name="arrow.backward" size={21} color={colors.foreground} /><Text className="text-foreground font-semibold ml-1">Voltar</Text></Pressable><View className="flex-1 ml-4"><Text className="text-foreground font-bold" numberOfLines={1}>{pdf?.title ?? 'Visualizador PDF'}</Text><Text className="text-muted text-xs mt-1">{pages.length ? `${pages.length} páginas reconhecidas` : 'Visualização de material'}</Text></View><Pressable onPress={addPage} disabled={ocrBusy} className="bg-primary rounded-full px-3 py-2"><Text className="text-white text-xs font-bold">{ocrBusy ? 'Lendo…' : '+ Página'}</Text></Pressable></View><ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 50 }}><ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4"><View className="flex-row gap-2">{(pages.length ? pages : [{ id: 'empty', pageNumber: 1, ocrStatus: 'pending' as const }]).map((item, index) => <Pressable key={item.id} onPress={() => setPageIndex(index)} className={`w-16 h-16 rounded-xl border items-center justify-center ${pageIndex === index ? 'border-primary bg-lavender' : 'border-border bg-surface'}`}>{item.imageUri ? <Image source={{ uri: item.imageUri }} style={{ width: 56, height: 56, borderRadius: 9 }} /> : <Text className="text-primary font-bold">{item.pageNumber}</Text>}</Pressable>)}<Pressable onPress={addPage} className="w-16 h-16 rounded-xl border border-dashed border-primary items-center justify-center"><Text className="text-primary text-2xl">+</Text><Text className="text-primary text-[9px]">página</Text></Pressable></View></ScrollView><Pressable onPress={ocrFullPdf} disabled={pdfOcrMutation.isPending} className={`rounded-2xl border border-primary bg-lavender py-3 items-center mb-4 ${pdfOcrMutation.isPending ? 'opacity-50' : ''}`}><Text className="text-primary font-bold">{pdfOcrMutation.isPending ? 'Reconhecendo documento…' : 'OCR do PDF completo'}</Text><Text className="text-primary/70 text-xs mt-1">Extrair o texto de todas as páginas para revisão</Text></Pressable><View className="bg-surface border border-border rounded-3xl p-4 min-h-[360px]">{pdf?.uri ? <NativePdfViewer source={pdf.uri} style={{ height: 420, width: '100%' }} /> : page?.imageUri ? <Image source={{ uri: page.imageUri }} style={{ height: 320, borderRadius: 16 }} resizeMode="contain" /> : <View className="flex-1 min-h-[300px] items-center justify-center"><IconSymbol name="doc.text.fill" size={48} color={colors.primary} /><Text className="text-foreground font-bold mt-4">Prévia da página</Text><Text className="text-muted text-center text-sm mt-2">Selecione uma imagem de página para acrescentar ao documento e reconhecer o texto.</Text></View>}</View><View className="flex-row justify-between items-center my-4"><Pressable disabled={pageIndex === 0} onPress={() => setPageIndex(value => Math.max(0, value - 1))} className={`bg-surface border border-border rounded-xl px-4 py-3 ${pageIndex === 0 ? 'opacity-40' : ''}`}><Text className="text-foreground font-semibold">Anterior</Text></Pressable><Text className="text-muted text-sm">Página {pageIndex + 1} / {Math.max(pages.length, 1)}</Text><Pressable disabled={pageIndex >= pages.length - 1} onPress={() => setPageIndex(value => Math.min(pages.length - 1, value + 1))} className={`bg-surface border border-border rounded-xl px-4 py-3 ${pageIndex >= pages.length - 1 ? 'opacity-40' : ''}`}><Text className="text-foreground font-semibold">Próxima</Text></Pressable></View><View className="bg-lavender rounded-2xl p-4"><View className="flex-row justify-between items-center"><Text className="text-primary font-bold">Texto da página</Text><Pressable onPress={async () => { await Clipboard.setStringAsync(selected || pageText); Alert.alert('Texto copiado', 'A transcrição foi copiada para a área de transferência.'); }}><Text className="text-primary text-xs font-bold">Copiar texto</Text></Pressable></View><Text selectable onPress={() => setSelected(pageText)} className="text-foreground text-base leading-6 mt-3">{pageText}</Text><Text className="text-primary text-xs mt-3">Toque no texto para selecionar automaticamente a transcrição. Em plataformas compatíveis, mantenha pressionado para selecionar apenas um trecho.</Text></View></ScrollView></ScreenContainer>;
+  const pageText = page?.extractedText ?? pdf?.selectedText ?? 'Esta página ainda não tem texto associado.';
+  return <ScreenContainer edges={['top', 'bottom', 'left', 'right']}><View className="px-5 pt-4 flex-row items-center border-b border-border pb-3"><Pressable onPress={() => router.back()} className="flex-row items-center px-1 py-2"><IconSymbol name="arrow.backward" size={21} color={colors.foreground} /><Text className="text-foreground font-semibold ml-1">Voltar</Text></Pressable><View className="flex-1 ml-4"><Text className="text-foreground font-bold" numberOfLines={1}>{pdf?.title ?? 'Visualizador PDF'}</Text><Text className="text-muted text-xs mt-1">{pages.length ? (pages.length === 1 ? '1 página' : `${pages.length} páginas`) : 'Visualização de material'}</Text></View></View><ScrollView contentContainerStyle={{ padding: 20, paddingBottom: 50 }}><ScrollView horizontal showsHorizontalScrollIndicator={false} className="mb-4"><View className="flex-row gap-2">{(pages.length ? pages : [{ id: 'empty', pageNumber: 1 }]).map((item, index) => <Pressable key={item.id} onPress={() => setPageIndex(index)} className={`w-16 h-16 rounded-xl border items-center justify-center ${pageIndex === index ? 'border-primary bg-lavender' : 'border-border bg-surface'}`}>{item.imageUri ? <Image source={{ uri: item.imageUri }} style={{ width: 56, height: 56, borderRadius: 9 }} /> : <Text className="text-primary font-bold">{item.pageNumber}</Text>}</Pressable>)}</View></ScrollView><View className="bg-surface border border-border rounded-3xl p-4 min-h-[360px]">{pdf?.uri ? <NativePdfViewer source={pdf.uri} style={{ height: 420, width: '100%' }} /> : page?.imageUri ? <Image source={{ uri: page.imageUri }} style={{ height: 320, borderRadius: 16 }} resizeMode="contain" /> : <View className="flex-1 min-h-[300px] items-center justify-center"><IconSymbol name="doc.text.fill" size={48} color={colors.primary} /><Text className="text-foreground font-bold mt-4">Prévia da página</Text><Text className="text-muted text-center text-sm mt-2">Este documento ainda não tem páginas com imagem.</Text></View>}</View><View className="flex-row justify-between items-center my-4"><Pressable disabled={pageIndex === 0} onPress={() => setPageIndex(value => Math.max(0, value - 1))} className={`bg-surface border border-border rounded-xl px-4 py-3 ${pageIndex === 0 ? 'opacity-40' : ''}`}><Text className="text-foreground font-semibold">Anterior</Text></Pressable><Text className="text-muted text-sm">Página {pageIndex + 1} / {Math.max(pages.length, 1)}</Text><Pressable disabled={pageIndex >= pages.length - 1} onPress={() => setPageIndex(value => Math.min(pages.length - 1, value + 1))} className={`bg-surface border border-border rounded-xl px-4 py-3 ${pageIndex >= pages.length - 1 ? 'opacity-40' : ''}`}><Text className="text-foreground font-semibold">Próxima</Text></Pressable></View><View className="bg-lavender rounded-2xl p-4"><View className="flex-row justify-between items-center"><Text className="text-primary font-bold">Texto da página</Text><Pressable onPress={async () => { await Clipboard.setStringAsync(selected || pageText); Alert.alert('Texto copiado', 'O texto foi copiado para a área de transferência.'); }}><Text className="text-primary text-xs font-bold">Copiar texto</Text></Pressable></View><Text selectable onPress={() => setSelected(pageText)} className="text-foreground text-base leading-6 mt-3">{pageText}</Text><Text className="text-primary text-xs mt-3">Toque no texto para selecionar automaticamente. Em plataformas compatíveis, mantenha pressionado para selecionar apenas um trecho.</Text></View></ScrollView></ScreenContainer>;
 }

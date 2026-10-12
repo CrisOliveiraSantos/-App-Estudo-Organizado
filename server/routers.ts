@@ -1,7 +1,6 @@
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, router } from "./_core/trpc";
-import { invokeLLM } from "./_core/llm";
 import { TRPCError } from "@trpc/server";
 import { z } from "zod";
 import { createLocalAccount, createLocalSession, createPersistedChatMessage, findLocalAccountByEmail, getLocalAccountByTokenHash, listPersistedChatMessages } from "./db";
@@ -48,18 +47,6 @@ export const appRouter = router({
       if (input.room === 'Conversa privada' && !recipient) throw new TRPCError({ code: 'NOT_FOUND', message: 'Destinatário não encontrado. Use o e-mail cadastrado.' });
       const id = await createPersistedChatMessage({ room: input.room === 'Sala pública' ? 'public' : 'private', senderId: account.id, recipientId: recipient?.id, recipientHandle: input.recipient?.toLowerCase(), text: input.text });
       return { id: String(id || Date.now()), author: account.displayName, text: input.text, room: input.room, recipient: input.recipient, createdAt: new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }) };
-    }),
-  }),
-  ocr: router({
-    extract: publicProcedure.input(z.object({ imageBase64: z.string().min(1), mimeType: z.string().default('image/jpeg') })).mutation(async ({ input }) => {
-      const response = await invokeLLM({ model: 'gemini-3-flash-preview', messages: [{ role: 'system', content: 'Você é um OCR preciso. Extraia somente o texto visível na imagem, preservando parágrafos, títulos, listas e acentuação. Não invente conteúdo; quando algo estiver ilegível, use [ilegível].' }, { role: 'user', content: [{ type: 'text', text: 'Transcreva integralmente esta página para estudo.' }, { type: 'image_url', image_url: { url: `data:${input.mimeType};base64,${input.imageBase64}`, detail: 'high' } }] }], maxTokens: 4096 });
-      const content = response.choices?.[0]?.message?.content;
-      return { text: typeof content === 'string' ? content : '' };
-    }),
-    extractPdf: publicProcedure.input(z.object({ pdfBase64: z.string().min(1) })).mutation(async ({ input }) => {
-      const response = await invokeLLM({ model: 'gemini-3-flash-preview', messages: [{ role: 'system', content: 'Você é um OCR de documentos. Extraia todo o texto legível do PDF, página por página. Preserve títulos, parágrafos, listas e tabelas em texto. Comece cada página com o marcador [PÁGINA N]. Não invente conteúdo; use [ilegível] quando necessário.' }, { role: 'user', content: [{ type: 'text', text: 'Transcreva integralmente este documento PDF para revisão e estudo.' }, { type: 'file_url', file_url: { url: `data:application/pdf;base64,${input.pdfBase64}`, mime_type: 'application/pdf' } }] }], maxTokens: 12000 });
-      const content = response.choices?.[0]?.message?.content;
-      return { text: typeof content === 'string' ? content : '' };
     }),
   }),
   auth: router({

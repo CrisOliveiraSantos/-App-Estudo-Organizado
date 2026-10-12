@@ -16,7 +16,6 @@
 - [x] Implementar formatação essencial, copiar e colar
 - [x] Implementar seleção de documentos e imagens do dispositivo
 - [x] Implementar importação e registro local de PDFs
-- [x] Implementar fluxo inicial de OCR para páginas/imagens escaneadas
 - [x] Permitir copiar o texto reconhecido para uma nova nota
 - [x] Implementar Configurações e limpeza de dados com confirmação
 - [x] Adicionar testes unitários para regras de progresso
@@ -32,14 +31,11 @@
 - [x] Adicionar suporte de editor para tabelas editáveis
 - [x] Adicionar inserção e gerenciamento de imagens nas notas
 - [x] Adicionar gráficos configuráveis nas notas
-- [x] Implementar busca global por título, conteúdo, pasta e texto OCR
 - [x] Implementar renomear, mover e excluir documentos com confirmação
 - [x] Melhorar organização visual da Biblioteca com filtros e ordenação
 - [x] Implementar visualização de PDF página por página
 - [x] Implementar seleção automática e manual de texto em PDF
 - [x] Implementar cópia de textos selecionados de PDFs
-- [x] Ampliar OCR para todas as páginas de documentos escaneados
-- [x] Criar revisão e edição do texto OCR antes de salvar
 - [x] Adicionar testes para regras centrais da expansão e regressão de progresso
 - [x] Validar a expansão em tipos, testes, lint e fluxos principais
 
@@ -75,7 +71,7 @@
 - [x] Criar sala de chat público com atualização periódica e fallback local
 - [x] Criar conversa privada por destinatário no protótipo
 - [x] Definir modelo de mensagens e destinatário para o chat
-- [x] Remover dependências específicas do Manus do fluxo local; OCR e chat remoto continuam com backend configurável
+- [x] Remover dependências específicas do Manus do fluxo local; chat remoto continua com backend configurável
 - [x] Documentar dependências inevitáveis do sistema operacional e do aplicativo móvel
 - [x] Validar tipos, testes e lint; salvar checkpoint após revisão final
 
@@ -106,7 +102,6 @@
 - [x] Substituir chat em memória por armazenamento compartilhado quando o banco está disponível
 - [x] Adicionar atualização periódica entre dispositivos
 - [x] Integrar visualizador PDF nativo para Development Build com navegação paginada
-- [x] Integrar OCR por documento completo com revisão e seleção no fluxo de PDF
 - [x] Validar hash de senha, tipos, testes e lint; validação nativa no aparelho ainda pendente
 - [x] Atualizar documentação de dependências e infraestrutura própria
 
@@ -234,7 +229,7 @@
 - [x] Reconstruir a central Meus Documentos com busca, recentes, favoritos, pastas, ordenação e grade/lista
 - [x] Reestruturar o editor profissional com menus, barra de ferramentas, régua, página e barra de status
 - [x] Adicionar modelos acadêmicos, favoritos, exportação e compartilhamento de documentos
-- [x] Alinhar Biblioteca ao sistema visual premium sem alterar a lógica de PDFs e OCR
+- [x] Alinhar Biblioteca ao sistema visual premium sem alterar a lógica de PDFs
 - [x] Alinhar Configurações e Perfil ao sistema visual premium sem alterar os fluxos de conta
 - [x] Revalidar as assinaturas do Chat protegido após a publicação final
 - [x] Validar visualmente a experiência web sem modificar o Chat e publicar a atualização

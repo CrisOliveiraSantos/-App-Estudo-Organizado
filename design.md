@@ -33,7 +33,7 @@ O layout utilizará superfícies brancas ou escuras bem delimitadas, sombras mui
 | Calendário | Mês navegável, hoje, dias com categorias e agenda do dia selecionado | Visualizar e incluir compromissos | Adicionar compromisso ao dia |
 | Meus Documentos | Busca, recentes, favoritos, pastas, filtros, ordenação e alternância grade/lista | Organizar e abrir trabalhos acadêmicos | Novo documento ou modelo |
 | Documento | Cabeçalho, menus, barra de ferramentas, régua, folha de escrita e estado de salvamento | Criar TCC, artigos, relatórios, resumos e anotações | Escrever e salvar automaticamente |
-| Biblioteca | PDFs, OCR disponível, materiais e pastas | Consultar e organizar fontes de estudo | Importar material |
+| Biblioteca | PDFs, materiais e pastas | Consultar e organizar fontes de estudo | Importar material |
 | Configurações | Conta, aparência, estudos, editor, privacidade, dados e preferências | Ajustar a experiência pessoal | Abrir a categoria desejada |
 | Perfil | Dados de exibição e acesso da conta autenticada | Gerenciar a própria identidade | Salvar perfil |
 | Conversas | **Mantida sem qualquer alteração** | Comunicação existente | Enviar mensagem |
@@ -73,4 +73,4 @@ O sistema terá cabeçalho de contexto, seção com ação, cartão de matéria,
 
 ## Limites de implementação honesta
 
-Autosave e histórico usarão a persistência existente. PDFs e OCR continuarão explicitando quando dependem de processamento disponível no ambiente. Exportação DOCX/PDF e compartilhamento serão adicionados somente quando gerarem arquivos ou ações reais, não uma simulação visual. Notificações internas discretas podem comunicar estados locais; alertas de sistema em segundo plano exigem configuração própria e serão tratados como uma etapa separada.
+Autosave e histórico usarão a persistência existente. PDFs continuarão explicitando quando dependem de processamento disponível no ambiente. Exportação DOCX/PDF e compartilhamento serão adicionados somente quando gerarem arquivos ou ações reais, não uma simulação visual. Notificações internas discretas podem comunicar estados locais; alertas de sistema em segundo plano exigem configuração própria e serão tratados como uma etapa separada.
