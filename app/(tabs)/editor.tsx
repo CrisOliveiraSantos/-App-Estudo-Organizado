@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { Alert, FlatList, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
-import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
+import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, academicColors } from '@/components/academic/design-system';
@@ -27,8 +27,13 @@ export default function EditorDocumentsScreen() {
   const { width } = useWindowDimensions();
   const wide = width >= 760;
   const insets = useSafeAreaInsets();
-  /** A pílula da bottom nav é flutuante: esta tela não reserva o edge de baixo, então a folga vem daqui. */
-  const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom;
+  /**
+   * A pílula da bottom nav é flutuante: esta tela não reserva o edge de baixo.
+   * E o FAB da Cris paira 16 px acima da pílula, então a folga é a do FAB
+   * (`neonFabClearance` = 152 px no celular / 180 no desktop) + 8 px de respiro
+   * + o inset de baixo do aparelho (o `ScreenContainer` só reserva top/left/right).
+   */
+  const navClearance = neonFabClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom + 8;
   const { notes, folders, createNote, duplicateNote, deleteNote, renameNote, moveNote, toggleNoteFavorite, saveNote } = useStudy();
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');

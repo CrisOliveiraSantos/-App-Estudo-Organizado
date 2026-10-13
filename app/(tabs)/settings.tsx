@@ -3,6 +3,7 @@ import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, TextInput, To
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
+import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { useColors } from '@/hooks/use-colors';
 import { useThemeContext, type ThemePreference } from '@/lib/theme-provider';
 import { useStudy } from '@/lib/study-store';
@@ -41,11 +42,20 @@ export default function SettingsScreen() {
   const params = useLocalSearchParams<{ section?: string }>();
   const [activeKey, setActiveKey] = useState<SettingsKey>(settingsItems.find(item => item.key === params.section)?.key ?? 'profile');
   const isWide = width >= 780;
+  /**
+   * O FAB da Cris paira 16 px acima da pílula e cobria o fim dos ajustes —
+   * `styles.content` reservava 120 px fixos. `neonFabClearance` (152 px no
+   * celular / 180 no desktop) + 8 px de respiro fecha a conta. Aqui o
+   * `insets.bottom` NÃO entra: este `ScreenContainer` passa
+   * `edges={['top','bottom','left','right']}`, então o `SafeAreaView` já reserva
+   * o edge de baixo por fora da rolagem (somá-lo dobraria a folga).
+   */
+  const navClearance = neonFabClearance(width >= NEON_LAYOUT.breakpoint) + 8;
   const activeItem = useMemo(() => settingsItems.find(item => item.key === activeKey) ?? settingsItems[0], [activeKey]);
 
   return (
     <ScreenContainer edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: colors.background }]}>
-      <ScrollView contentContainerStyle={[styles.content, isWide && styles.contentWide]}>
+      <ScrollView contentContainerStyle={[styles.content, isWide && styles.contentWide, { paddingBottom: navClearance }]}>
         <View style={styles.heading}>
           <View style={styles.headingCopy}>
             <Text style={[styles.overline, { color: academicColors.violet }]}>ESPAÇO PESSOAL</Text>
@@ -280,7 +290,7 @@ const styles = StyleSheet.create({
   avatar: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 14, height: 42, justifyContent: 'center', width: 42 },
   avatarText: { color: academicColors.violet, fontSize: 18, fontWeight: '900' },
   body: { fontSize: 14, lineHeight: 21, maxWidth: 600 },
-  content: { paddingBottom: 120, paddingHorizontal: 18, paddingTop: 22 },
+  content: { paddingHorizontal: 18, paddingTop: 22 },
   contentStack: { gap: 18, paddingTop: 22 },
   connectionInput: { borderRadius: 10, borderWidth: 1, fontSize: 14, minHeight: 44, paddingHorizontal: 12, paddingVertical: 10 },
   connectionOption: { borderRadius: 12, borderWidth: 1, flex: 1, minWidth: 140, padding: 12 },

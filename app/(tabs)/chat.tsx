@@ -2,8 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
-import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
+import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStudy, type ChatMessage } from '@/lib/study-store';
 import { useColors } from '@/hooks/use-colors';
 import { readLocalChatAccount, saveLocalChatAccount, type LocalChatAccount } from '@/lib/local-chat-auth';
@@ -27,8 +28,15 @@ function toCloudUser(user: { id: string; email?: string; user_metadata?: Record<
 export default function ChatScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
-  /** A pílula da bottom nav é flutuante: o compositor precisa reservar a folga. */
-  const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint);
+  /**
+   * A pílula da bottom nav é flutuante e o FAB da Cris paira 16 px acima dela —
+   * exatamente sobre a linha de digitação. O compositor (e o `AuthPanel`) reserva
+   * a folga do FAB (`neonFabClearance` = 152/180) + 8 px de respiro + o inset de
+   * baixo, então o FAB fica no vão entre o compositor e a pílula. A lista de
+   * mensagens não precisa disso: ela termina exatamente onde o compositor começa.
+   */
+  const insets = useSafeAreaInsets();
+  const navClearance = neonFabClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom + 8;
   const { chatMessages, addChatMessage } = useStudy();
   const [localAccount, setLocalAccount] = useState<LocalChatAccount | null>(null);
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
