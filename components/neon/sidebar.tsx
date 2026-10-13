@@ -74,12 +74,22 @@ export function NeonSidebar({ style }: { style?: StyleProp<ViewStyle> }) {
   }, [blink]);
 
   return (
-    <View style={[styles.shadow, { width: NEON_LAYOUT.sidebarWidth }, cardShadow('card'), style]}>
+    <View style={[styles.shadow, { backgroundColor: colors.surfaceAlt, width: NEON_LAYOUT.sidebarWidth }, cardShadow('card'), style]}>
       <NeonGradient name="panel" style={[styles.sidebar, { borderColor: colors.border }]}>
         <View style={styles.brand}>
           <NeonGradient
             colors={[colors.primary, colors.accentPink]}
-            style={[styles.logo, { borderColor: colors.primary }, glowShadow(colors.primary, 'base')]}
+            style={[
+              styles.logo,
+              /**
+               * Mesma causa do wrapper de baixo: o glow é `elevation` e o fundo
+               * do logo é o SVG deste gradiente (um filho), então sem base
+               * sólida o Android lê o retângulo cru dos limites e o glow vira um
+               * quadrado. `primary` é a 1ª parada e o SVG cobre o logo inteiro.
+               */
+              { backgroundColor: colors.primary, borderColor: colors.primary },
+              glowShadow(colors.primary, 'base'),
+            ]}
           >
             <Text style={styles.logoText}>C</Text>
           </NeonGradient>
@@ -159,6 +169,14 @@ const styles = StyleSheet.create({
   navItemFill: { borderRadius: neonRadius.listItem },
   navItemHover: { backgroundColor: '#ffffff08', transform: [{ translateX: 3 }] },
   navLabel: { flex: 1, fontSize: 14, fontWeight: '700' },
+  /**
+   * A cor de fundo entra inline (`colors.surfaceAlt`) pelo mesmo motivo do
+   * topbar: `cardShadow` é `elevation` e o fundo real da coluna é o SVG do
+   * `NeonGradient panel`, um filho. Sem base sólida o Android ignora o raio
+   * (`neonRadius.sidebar`) e desenha a sombra a partir do retângulo cru dos
+   * limites — o quadrado que vazava pelos cantos da sidebar. `surfaceAlt` é a 2ª
+   * parada do gradiente e o SVG cobre o wrapper inteiro: base invisível.
+   */
   shadow: { borderRadius: neonRadius.sidebar, flex: 1 },
   sidebar: {
     borderRadius: neonRadius.sidebar,

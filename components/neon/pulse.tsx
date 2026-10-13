@@ -48,6 +48,13 @@ export function NeonPulse({
           style={[
             StyleSheet.absoluteFill,
             { borderColor: hexToRgba(colors.primary, 0.55), borderRadius: neonRadius.button, borderWidth: 1 },
+            /**
+             * 0.9 e não `transparent`: o glow é `elevation` e o Android só deriva
+             * um contorno arredondado quando existe fundo (sem ele o pulso vira
+             * um quadrado). O overlay é renderizado antes dos `children`, então o
+             * botão fica por cima; a base é da cor do próprio botão.
+             */
+            { backgroundColor: hexToRgba(colors.primary, 0.9) },
             glowShadow(colors.primary, 'base'),
             {
               opacity: beat.interpolate({ inputRange: [0, 0.6, 1], outputRange: [0.5, 0, 0] }),

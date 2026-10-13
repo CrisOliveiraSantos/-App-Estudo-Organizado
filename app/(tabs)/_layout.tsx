@@ -49,7 +49,14 @@ function NeonTabButton({ compact, ...props }: BottomTabBarButtonProps & { compac
         props.style,
         styles.tabButton,
         compact ? styles.tabButtonCompact : styles.tabButtonWide,
-        focused ? glowShadow(colors.primary, 'base') : null,
+        /**
+         * `hexToRgba(surfaceAlt, 0.9)` acompanha o glow: `elevation` sem fundo
+         * desenha a sombra pelo retângulo cru dos limites (mesmo caso dos
+         * cards/topbar). É a cor da pílula que está atrás e, sobre ela, 0.9
+         * desloca ~1 nível; o `NeonGradient activeNav` por cima é translúcido de
+         * propósito, então a base não o substitui.
+         */
+        focused ? [glowShadow(colors.primary, 'base'), { backgroundColor: hexToRgba(colors.surfaceAlt, 0.9) }] : null,
         hovered && !focused ? { backgroundColor: '#ffffff05', transform: [{ translateY: -3 }] } : null,
         pressed ? styles.tabPressed : null,
       ]}

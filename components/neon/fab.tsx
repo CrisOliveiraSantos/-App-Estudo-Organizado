@@ -82,7 +82,21 @@ export function NeonFab({ bottom, onPress, style }: { bottom?: number; onPress: 
       onPressOut={() => setPressed(false)}
       style={[styles.anchor, { bottom: resolvedBottom, right }, style]}
     >
-      <Animated.View style={[styles.glow, { transform: [{ scale }] }, glowShadow(colors.primary, 'strong')]}>
+      <Animated.View
+        style={[
+          styles.glow,
+          /**
+           * Base opaca **invisível**: o `NeonGradient` do botão é um SVG em
+           * `absoluteFill` de raio 22 dentro deste wrapper de raio 27, isto é,
+           * cobre a base inteira. Ela existe porque o glow é `elevation` e, sem
+           * fundo sólido, o Android desenha a sombra a partir do retângulo cru
+           * dos limites — o halo do FAB saía quadrado.
+           */
+          { backgroundColor: colors.primary },
+          { transform: [{ scale }] },
+          glowShadow(colors.primary, 'strong'),
+        ]}
+      >
         <Animated.View pointerEvents="none" style={[styles.ring, { borderColor: colors.accentPink, opacity: ringOpacity }]} />
         <NeonGradient
           angle={neonGradientAngles.brandSteep}

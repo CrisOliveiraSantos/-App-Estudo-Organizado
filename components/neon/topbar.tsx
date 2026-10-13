@@ -109,7 +109,7 @@ export function NeonTopbar({ compact = false, style }: { compact?: boolean; styl
   }, []);
 
   return (
-    <View style={[styles.shadow, cardShadow('card'), style]}>
+    <View style={[styles.shadow, { backgroundColor: colors.surface }, cardShadow('card'), style]}>
       <NeonGradient
         name="panel"
         style={[styles.bar, compact ? styles.barCompact : styles.barWide, { borderColor: colors.border }]}
@@ -176,6 +176,16 @@ const styles = StyleSheet.create({
     width: 40,
   },
   iconGlyph: { fontSize: 17 },
+  /**
+   * Aqui só vive a forma: a cor de fundo entra inline (`colors.surface`) e ela
+   * não é decoração. `cardShadow` é `elevation`, e no Android a sombra é
+   * derivada do **outline** da view — o fundo deste wrapper era o SVG do
+   * `NeonGradient panel` (um filho), então a view não tinha contorno sólido e o
+   * Android desenhava a sombra a partir do retângulo cru dos limites: o "ghost
+   * box" do topbar, que mudava de tom junto com o tema. `surface` é a 1ª parada
+   * do gradiente `panel` e o SVG cobre o wrapper inteiro, então a base é
+   * invisível — só devolve o contorno arredondado de 22 px.
+   */
   shadow: { borderRadius: 22 },
   title: { fontWeight: neonType.screenTitle.weight, letterSpacing: neonType.screenTitle.letterSpacing, marginTop: 3 },
   titleCompact: { fontSize: 22 },

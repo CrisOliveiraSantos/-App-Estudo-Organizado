@@ -274,7 +274,15 @@ export function AcademicButton({
         compact && styles.buttonCompact,
         !primary && { backgroundColor: palette.fill, borderColor: palette.border, borderWidth: 1 },
         disabled && styles.disabled,
-        hovered && !disabled && (primary ? glowShadow(colors.primary, 'strong') : { borderColor: colors.primary }),
+        /**
+         * O glow é `elevation`: sem fundo sólido o Android desenha a sombra pelo
+         * retângulo cru dos limites. Os tons primários não pintam
+         * `backgroundColor` (o fundo é o SVG do `NeonGradient buttonGradient`),
+         * então a base `primary` entra junto do glow — o SVG cobre o botão
+         * inteiro e ela é invisível. Os secundários não têm glow (só a troca de
+         * borda) e já usam `palette.fill` como fundo.
+         */
+        hovered && !disabled && (primary ? [glowShadow(colors.primary, 'strong'), { backgroundColor: colors.primary }] : { borderColor: colors.primary }),
         hovered && !disabled && styles.lift,
         pressed && styles.pressed,
         style,
@@ -346,7 +354,13 @@ export function AcademicProgress({
         style={[
           styles.progressFill,
           { borderRadius: height, width: width.interpolate({ inputRange: [0, 100], outputRange: ['0%', '100%'] }) },
-          color ? { backgroundColor: color } : glowShadow(colors.primary, 'soft'),
+          /**
+           * O ramo sem `color` pinta o preenchimento com o SVG
+           * `progressGradient`; sem base sólida o glow (que é `elevation`) sairia
+           * pelo retângulo cru dos limites. A base `primary` fica debaixo do SVG,
+           * que cobre o fill inteiro.
+           */
+          color ? { backgroundColor: color } : [glowShadow(colors.primary, 'soft'), { backgroundColor: colors.primary }],
         ]}
       >
         {color ? null : <NeonGradient colors={[colors.primary, colors.accentPink]} style={styles.progressGradient} />}
