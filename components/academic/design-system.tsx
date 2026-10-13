@@ -174,7 +174,22 @@ export function AcademicCard({
       style={[
         styles.card,
         padded && styles.cardPadded,
-        { borderColor: emphasis ? hexToRgba(colors.primary, 0.42) : colors.border },
+        /**
+         * Fundo opaco explícito — é ele que mata o "ghost box" do Android.
+         * `elevation` desenha a sombra a partir do **outline** da view, e uma view
+         * que só tem `borderRadius`/`borderWidth` (sem `backgroundColor`) não
+         * oferece um contorno sólido: o Android cai no retângulo cru dos limites
+         * do card e a mancha quadrada aparece ao redor/por baixo do gradiente —
+         * que é `rgba(...,0.96)` e deixa 4% dela passar. Com uma base opaca o
+         * contorno volta a ser o retângulo arredondado de 20 px (é o que a pílula
+         * da bottom nav já fazia com `hexToRgba(surfaceAlt, 0.9)` e por isso nunca
+         * teve o artefato). `surface` é a 1ª parada do gradiente `panel`, então o
+         * visual não muda — só deixa de ser translúcido.
+         */
+        {
+          backgroundColor: colors.surface,
+          borderColor: emphasis ? hexToRgba(colors.primary, 0.42) : colors.border,
+        },
         cardShadow(emphasis ? 'floating' : 'card'),
         glow && glowShadow(colors.primary, 'soft'),
         style,

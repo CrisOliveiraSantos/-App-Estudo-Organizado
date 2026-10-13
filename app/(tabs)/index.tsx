@@ -266,7 +266,17 @@ function createStyles(c: HomePalette) {
     eventTitle: { color: c.ink, fontSize: 14, fontWeight: '800', lineHeight: 20 },
     hero: { alignItems: 'flex-start', borderColor: c.line, borderRadius: neonRadius.card, borderWidth: 1, flexDirection: 'row', gap: 12, overflow: 'hidden', padding: 19 },
     heroCopy: { flex: 1 },
-    heroShadow: { borderRadius: neonRadius.card, marginBottom: 20 },
+    /**
+     * `backgroundColor` aqui pelo mesmo motivo do `AcademicCard`: este é o
+     * container que carrega `cardShadow('floating')` e ele era 100% transparente
+     * (o fundo vivia só no filho `NeonGradient`, com `hero` = ciano/rosa a 0.14).
+     * Sombra de `elevation` em container transparente = quadrado fantasma do
+     * Android. A base usa `c.canvas` (= `colors.background`, o mesmo tom que o
+     * `styles.shell` de `app/(tabs)/_layout.tsx` pinta por trás do hero): o hero é
+     * o único card translúcido do app, então o tom sobre a página continua
+     * idêntico — só as partículas atrás dele deixam de atravessar.
+     */
+    heroShadow: { backgroundColor: c.canvas, borderRadius: neonRadius.card, marginBottom: 20 },
     heroText: { color: c.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
     heroTitle: { color: c.ink, fontSize: 23, fontWeight: '900', letterSpacing: -0.6, lineHeight: 29, marginTop: 4 },
     iconAction: { minHeight: 32, paddingLeft: 10 },

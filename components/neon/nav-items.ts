@@ -53,8 +53,14 @@ export const NEON_LAYOUT = {
   gapWide: 22,
   navBottom: 12,
   navBottomWide: 20,
-  navHeight: 68,
-  navHeightWide: 80,
+  /**
+   * 76/88 (e não 68/80): a pílula tem de caber ícone (26) + respiro + rótulo
+   * (13) + os paddings. Com 68 o conteúdo pedia 51 px dentro de uma caixa de 50
+   * — qualquer ganho de fonte/inset do aparelho fatiaba o ícone e sumia com o
+   * rótulo (teste real no Android, 2026-10-13).
+   */
+  navHeight: 76,
+  navHeightWide: 88,
   navMaxWidth: 920,
   shellMaxWidth: 1480,
   shellPadding: 15,
@@ -68,7 +74,8 @@ export const neonNavBottom = (wide: boolean) => (wide ? NEON_LAYOUT.navBottomWid
 /**
  * Folga que o fim do conteúdo precisa reservar para não ficar sob a pílula
  * (`.app{padding-bottom:100px}` do mockup no mobile — `neonNavClearance(false)`
- * devolve exatamente 100). A pílula é `position:absolute` dentro da cena, então
+ * devolve 108 com a pílula de 76, e devolvia 100 com a de 68). A pílula é
+ * `position:absolute` dentro da cena, então
  * não reserva espaço sozinha: quem rola até o fim soma esta folga ao próprio
  * `paddingBottom`. O `insets.bottom` não entra aqui — o `SafeAreaView` da tela
  * já o aplica por fora.
@@ -86,9 +93,9 @@ export const neonFabSize = (wide: boolean) => (wide ? 64 : 56);
 
 /**
  * Folga que o fim de uma lista precisa reservar quando o FAB paira sobre ela:
- * pílula + o respiro do FAB + a altura do FAB. Devolve **152** no celular
- * (68 + 12 + 16 + 56) e **180** no desktop (80 + 20 + 16 + 64), sempre acima do
- * `insets.bottom`. `neonNavClearance` (100/124) cobre só a pílula — com ele o
+ * pílula + o respiro do FAB + a altura do FAB. Devolve **160** no celular
+ * (76 + 12 + 16 + 56) e **188** no desktop (88 + 20 + 16 + 64), sempre acima do
+ * `insets.bottom`. `neonNavClearance` (108/132) cobre só a pílula — com ele o
  * FAB ficava sobre o último card (visual da Home, 2026-10-12).
  */
 export const neonFabClearance = (wide: boolean) =>

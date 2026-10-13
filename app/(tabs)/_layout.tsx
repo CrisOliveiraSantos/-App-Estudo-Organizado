@@ -115,6 +115,7 @@ export default function TabLayout() {
                   tabBarActiveBackgroundColor: 'transparent',
                   tabBarActiveTintColor: colors.primary,
                   tabBarButton: props => <NeonTabButton {...props} compact={compact} />,
+                  tabBarShowLabel: true,
                   tabBarIconStyle: styles.tabIcon,
                   tabBarInactiveTintColor: colors.muted,
                   tabBarItemStyle: styles.tabItem,
@@ -168,8 +169,19 @@ const styles = StyleSheet.create({
     position: 'absolute',
     ...cardShadow('floating'),
   },
-  navTight: { paddingHorizontal: 4, paddingVertical: 8 },
-  navWide: { paddingHorizontal: 10, paddingVertical: 10 },
+  /**
+   * `paddingTop`/`paddingBottom` explícitos, e **não** `paddingVertical`.
+   * O `BottomTabBar` injeta `paddingBottom: insets.bottom` no mesmo array de
+   * estilo (`[{height, paddingBottom: insets.bottom, ...}, tabBarStyle]`), e a
+   * barra já é erguida por `bottom: neonNavBottom() + insets.bottom`: o inset
+   * estava entrando duas vezes. Como `paddingVertical` é uma chave DIFERENTE de
+   * `paddingBottom`, ele não sobrescreve o inset de forma confiável (a expansão
+   * em `paddingTop`/`paddingBottom` disputa a ordem no processamento de estilos)
+   * — com `insets.bottom` de 24-48 px a caixa de conteúdo da pílula caía para
+   * 10-34 px e fatiaba o ícone/sumia com o rótulo. Chave igual, esta vence.
+   */
+  navTight: { paddingBottom: 8, paddingHorizontal: 4, paddingTop: 8 },
+  navWide: { paddingBottom: 10, paddingHorizontal: 10, paddingTop: 10 },
   scene: { flex: 1, minHeight: 0 },
   sceneFill: { backgroundColor: 'transparent' },
   shell: { flex: 1 },
@@ -177,8 +189,20 @@ const styles = StyleSheet.create({
   tabButton: { alignItems: 'center', borderRadius: 16, flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' },
   tabButtonCompact: { gap: 4, paddingHorizontal: 2, paddingVertical: 4 },
   tabButtonWide: { gap: 4, paddingHorizontal: 6, paddingVertical: 6 },
-  tabIcon: { alignItems: 'center', height: 26, justifyContent: 'center', marginBottom: 0 },
-  tabItem: { alignItems: 'center', borderRadius: 16, justifyContent: 'center', marginHorizontal: 3, overflow: 'hidden' },
+  /**
+   * Slot do ícone com 30 px: o glifo do `MaterialIcons` mede exatamente `size`
+   * (fonte `upem = 512`, `ascender = 512`, `descender = 0` → caixa de 26 px em
+   * `size={26}`), então o slot de 26 o encaixava sem folga nenhuma — qualquer
+   * pixel do aparelho (escala de fonte/inset) cortava. 30 dá 4 px de respiro.
+   */
+  tabIcon: { alignItems: 'center', height: 30, justifyContent: 'center', marginBottom: 0 },
+  /**
+   * Sem `overflow: 'hidden'` aqui: o recorte do item é o que fatiaria ícone e
+   * rótulo. O clip que importa (a pílula do gradiente ativo, com raio 16) já
+   * vive em `tabButton`, que tem `overflow: 'hidden'` — e o próprio
+   * `BottomTabItem` usa `overflow: 'visible'` na variante uikit.
+   */
+  tabItem: { alignItems: 'center', borderRadius: 16, justifyContent: 'center', marginHorizontal: 3 },
   tabLabel: { fontWeight: '800', letterSpacing: 0.1, lineHeight: 13 },
   tabLabelCompact: { fontSize: 9 },
   tabPressed: { opacity: 0.75 },
