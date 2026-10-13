@@ -3,6 +3,16 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  API_PROVIDERS,
+  PROVIDER_LIVE_MODEL,
+  isModelInList,
+  normalizeModelId,
+  suggestLiveModel,
+  testProviderModel,
+} from '../lib/api-config';
+import { CrisCallError, describeCrisFailure } from '../lib/cris-client';
+
 // `lib/api-config.ts` importa `react-native` e `expo-secure-store`; nos testes
 // de Node puro nós os substituímos por dublês para exercitar os helpers reais
 // (não só ler o texto-fonte). O `vi.mock` é içado pelo Vitest acima dos imports.
@@ -13,16 +23,6 @@ vi.mock('expo-secure-store', () => ({
   WHEN_UNLOCKED_THIS_DEVICE_ONLY: 'when-unlocked',
 }));
 vi.mock('react-native', () => ({ Platform: { OS: 'web' } }));
-
-import {
-  API_PROVIDERS,
-  PROVIDER_LIVE_MODEL,
-  isModelInList,
-  normalizeModelId,
-  suggestLiveModel,
-  testProviderModel,
-} from '../lib/api-config';
-import { CrisCallError, describeCrisFailure } from '../lib/cris-client';
 
 /**
  * Guarda-corpo contra as regressões reportadas na conexão de IA da Cris

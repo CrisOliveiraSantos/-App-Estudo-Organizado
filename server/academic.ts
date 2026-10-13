@@ -53,7 +53,7 @@ export const academicRouter = router({
   getCourseContents: publicProcedure.input(connectionInput.extend({ courseId: z.number().int().positive() })).mutation(async ({ ctx, input }) => {
     await requireAcademicSession(ctx.req, Boolean(ctx.user));
     try {
-      const payload = await callMoodle(input.baseUrl, input.token, 'core_course_get_contents', { courseid: String(input.courseId) }) as unknown as Array<{ id?: number; name?: string; summary?: string; modules?: Array<{ id?: number; name?: string; description?: string; url?: string; modname?: string; contents?: Array<{ filename?: string; fileurl?: string; filesize?: number; mimetype?: string; type?: string }> }> }>;
+      const payload = await callMoodle(input.baseUrl, input.token, 'core_course_get_contents', { courseid: String(input.courseId) }) as unknown as { id?: number; name?: string; summary?: string; modules?: { id?: number; name?: string; description?: string; url?: string; modname?: string; contents?: { filename?: string; fileurl?: string; filesize?: number; mimetype?: string; type?: string }[] }[] }[];
       const modules = Array.isArray(payload) ? payload.flatMap(section => (section.modules ?? []).map(module => {
         const files = (module.contents ?? []).map(file => ({ name: file.filename ?? 'Arquivo', url: file.fileurl ?? '', mime: file.mimetype ?? '', type: file.type ?? '' }));
         const urls = [module.url ?? '', ...files.map(file => file.url)].filter(Boolean);
@@ -73,14 +73,14 @@ export const academicRouter = router({
     try {
       const site = await callMoodle(input.baseUrl, input.token, 'core_webservice_get_site_info') as { userid?: number; sitename?: string };
       if (!site.userid) throw new TRPCError({ code: 'BAD_GATEWAY', message: 'O Moodle não informou o identificador da conta autorizada.' });
-      const coursePayload = await callMoodle(input.baseUrl, input.token, 'core_enrol_get_users_courses', { userid: String(site.userid) }) as unknown as Array<{ id?: number; fullname?: string; shortname?: string }>;
+      const coursePayload = await callMoodle(input.baseUrl, input.token, 'core_enrol_get_users_courses', { userid: String(site.userid) }) as unknown as { id?: number; fullname?: string; shortname?: string }[];
       const courses = Array.isArray(coursePayload) ? coursePayload.filter(course => course.id).map(course => ({ id: course.id as number, title: course.fullname ?? course.shortname ?? 'Disciplina sem nome', code: course.shortname ?? '' })) : [];
       const courseParams = Object.fromEntries(courses.slice(0, 30).flatMap((course, index) => [[`courseids[${index}]`, String(course.id)]]));
       const warnings: string[] = [];
-      const contentItems: Array<{ courseId: number; courseTitle: string; section: string; title: string; description: string; url: string; type: string; files: Array<{ name: string; url: string; mime: string; type: string }>; youtubeUrl: string }> = [];
+      const contentItems: { courseId: number; courseTitle: string; section: string; title: string; description: string; url: string; type: string; files: { name: string; url: string; mime: string; type: string }[]; youtubeUrl: string }[] = [];
       for (const course of courses.slice(0, 30)) {
         try {
-          const content = await callMoodle(input.baseUrl, input.token, 'core_course_get_contents', { courseid: String(course.id) }) as unknown as Array<{ name?: string; modules?: Array<{ id?: number; name?: string; description?: string; url?: string; modname?: string; contents?: Array<{ filename?: string; fileurl?: string; mimetype?: string; type?: string }> }> }>;
+          const content = await callMoodle(input.baseUrl, input.token, 'core_course_get_contents', { courseid: String(course.id) }) as unknown as { name?: string; modules?: { id?: number; name?: string; description?: string; url?: string; modname?: string; contents?: { filename?: string; fileurl?: string; mimetype?: string; type?: string }[] }[] }[];
           for (const section of content) for (const module of section.modules ?? []) {
             const files = (module.contents ?? []).map(file => ({ name: file.filename ?? 'Arquivo', url: file.fileurl ?? '', mime: file.mimetype ?? '', type: file.type ?? '' }));
             const urls = [module.url ?? '', ...files.map(file => file.url)].filter(Boolean);
@@ -90,11 +90,11 @@ export const academicRouter = router({
           }
         } catch { warnings.push(`Conteúdos de ${course.title} não habilitados`); }
       }
-      let calendar: Array<{ id?: number; name?: string; description?: string; timesort?: number; url?: string; modname?: string }> = [];
-      let assignments: Array<{ id?: number; name?: string; duedate?: number; intro?: string; course?: number; cmid?: number }> = [];
-      let forums: Array<{ id?: number; name?: string; intro?: string; course?: number; cmid?: number }> = [];
+      let calendar: { id?: number; name?: string; description?: string; timesort?: number; url?: string; modname?: string }[] = [];
+      let assignments: { id?: number; name?: string; duedate?: number; intro?: string; course?: number; cmid?: number }[] = [];
+      let forums: { id?: number; name?: string; intro?: string; course?: number; cmid?: number }[] = [];
       try { const result = await callMoodle(input.baseUrl, input.token, 'core_calendar_get_action_events', { timesortfrom: '0', timesortto: '2147483647', limitnum: '100' }) as { events?: typeof calendar }; calendar = result.events ?? []; } catch { warnings.push('Calendário de ações não habilitado'); }
-      try { const result = await callMoodle(input.baseUrl, input.token, 'mod_assign_get_assignments', courseParams) as { courses?: Array<{ assignments?: typeof assignments }> }; assignments = (result.courses ?? []).flatMap(course => course.assignments ?? []); } catch { warnings.push('Tarefas de envio não habilitadas'); }
+      try { const result = await callMoodle(input.baseUrl, input.token, 'mod_assign_get_assignments', courseParams) as { courses?: { assignments?: typeof assignments }[] }; assignments = (result.courses ?? []).flatMap(course => course.assignments ?? []); } catch { warnings.push('Tarefas de envio não habilitadas'); }
       try { const result = await callMoodle(input.baseUrl, input.token, 'mod_forum_get_forums_by_courses', courseParams) as unknown as typeof forums; forums = Array.isArray(result) ? result : []; } catch { warnings.push('Fóruns/avisos não habilitados'); }
       return { ok: true, siteName: site.sitename ?? 'Moodle institucional', courses, calendar, assignments, forums, contentItems, warnings, syncedAt: new Date().toISOString() };
     } catch (error) {
@@ -107,7 +107,7 @@ export const academicRouter = router({
     try {
       const site = await callMoodle(input.baseUrl, input.token, 'core_webservice_get_site_info') as { userid?: number; sitename?: string };
       if (!site.userid) throw new TRPCError({ code: 'BAD_GATEWAY', message: 'O Moodle não informou o identificador da conta autorizada.' });
-      const payload = await callMoodle(input.baseUrl, input.token, 'core_enrol_get_users_courses', { userid: String(site.userid) }) as unknown as Array<{ id?: number; fullname?: string; shortname?: string; summary?: string }>;
+      const payload = await callMoodle(input.baseUrl, input.token, 'core_enrol_get_users_courses', { userid: String(site.userid) }) as unknown as { id?: number; fullname?: string; shortname?: string; summary?: string }[];
       const courses = Array.isArray(payload) ? payload.map(course => ({ id: course.id, title: course.fullname ?? course.shortname ?? 'Disciplina sem nome', code: course.shortname ?? '', summary: course.summary ?? '' })).filter(course => course.id) : [];
       return { ok: true, siteName: site.sitename ?? 'Moodle institucional', courses };
     } catch (error) {

@@ -3,6 +3,18 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import {
+  clearCrisMemory,
+  CRIS_MEMORY_KEY,
+  describeUserMemory,
+  EMPTY_CRIS_MEMORY,
+  getCrisMemory,
+  isCrisMemoryEmpty,
+  normalizeCrisMemory,
+  saveCrisMemory,
+} from '../lib/cris-memory';
+import { buildSystemPrompt, type CrisContext } from '../lib/cris-client';
+
 /** Caminho real do cliente da Cris (a configuração de geração vive lá). */
 const CLIENT_SOURCE = resolve(dirname(fileURLToPath(import.meta.url)), '../lib/cris-client.ts');
 
@@ -21,18 +33,6 @@ vi.mock('@react-native-async-storage/async-storage', () => ({
     removeItem: async (key: string) => { store.delete(key); },
   },
 }));
-
-import {
-  clearCrisMemory,
-  CRIS_MEMORY_KEY,
-  describeUserMemory,
-  EMPTY_CRIS_MEMORY,
-  getCrisMemory,
-  isCrisMemoryEmpty,
-  normalizeCrisMemory,
-  saveCrisMemory,
-} from '../lib/cris-memory';
-import { buildSystemPrompt, type CrisContext } from '../lib/cris-client';
 
 const CONTEXT: CrisContext = {
   route: '/planning',

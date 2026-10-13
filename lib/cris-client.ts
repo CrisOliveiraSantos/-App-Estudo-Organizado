@@ -564,7 +564,7 @@ function tryParseJson(value: string): unknown {
 function extractChatText(payload: unknown, preserveWhitespace = false): string {
   if (!payload || typeof payload !== 'object') return '';
   const source = payload as {
-    choices?: Array<{ message?: { content?: unknown }; delta?: { content?: unknown }; text?: unknown }>;
+    choices?: { message?: { content?: unknown }; delta?: { content?: unknown }; text?: unknown }[];
     message?: { content?: unknown };
     response?: unknown;
   };
