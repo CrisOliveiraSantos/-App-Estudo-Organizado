@@ -2,6 +2,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { Appearance, View } from "react-native";
 import { colorScheme as nativewindColorScheme, vars } from "nativewind";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import * as SystemUI from "expo-system-ui";
 
 import { SchemeColors, isDarkScheme, type ColorScheme } from "@/constants/theme";
 import { schemeForHour } from "@/lib/theme-runtime";
@@ -43,6 +44,15 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     const nativeBaseScheme = isDarkScheme(scheme) ? 'dark' : 'light';
     nativewindColorScheme.set(nativeBaseScheme);
     Appearance.setColorScheme?.(nativeBaseScheme);
+    /**
+     * Fundo da JANELA/raiz segue o tema ativo. Sem isto vale a cor padrão do root
+     * view (branca no Android), que aparece em qualquer sliver que as telas não
+     * pintam — área da barra de navegação do sistema, moldura do edge-to-edge
+     * (`app.config.ts`) e o cross-fade entre abas. Num tema escuro esse sliver é
+     * exatamente a "faixa branca residual". Melhor esforço: se o binário não
+     * tiver o módulo nativo, a promessa é rejeitada e engolida.
+     */
+    void SystemUI.setBackgroundColorAsync(SchemeColors[scheme].background).catch(() => undefined);
     if (typeof document !== "undefined") {
       const root = document.documentElement;
       root.dataset.theme = nativeBaseScheme;

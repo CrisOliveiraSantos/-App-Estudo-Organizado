@@ -75,6 +75,25 @@ export const neonNavBottom = (wide: boolean) => (wide ? NEON_LAYOUT.navBottomWid
  */
 export const neonNavClearance = (wide: boolean) => neonNavHeight(wide) + neonNavBottom(wide) + (wide ? 24 : 20);
 
+/**
+ * Geometria do FAB da Cris (`.fab` do mockup, linhas 165-167 + 209): 64 px no
+ * desktop e 56 no celular, pairando 16 px acima da pílula. Os números vivem
+ * aqui para `components/neon/fab.tsx` (quem posiciona) e as telas (quem reserva
+ * a folga do fim da lista) nunca divergirem.
+ */
+const neonFabGap = 16;
+export const neonFabSize = (wide: boolean) => (wide ? 64 : 56);
+
+/**
+ * Folga que o fim de uma lista precisa reservar quando o FAB paira sobre ela:
+ * pílula + o respiro do FAB + a altura do FAB. Devolve **152** no celular
+ * (68 + 12 + 16 + 56) e **180** no desktop (80 + 20 + 16 + 64), sempre acima do
+ * `insets.bottom`. `neonNavClearance` (100/124) cobre só a pílula — com ele o
+ * FAB ficava sobre o último card (visual da Home, 2026-10-12).
+ */
+export const neonFabClearance = (wide: boolean) =>
+  neonNavHeight(wide) + neonNavBottom(wide) + neonFabGap + neonFabSize(wide);
+
 /** Item de navegação do caminho atual (fallback: Hoje). */
 export function neonItemForPath(pathname: string | null | undefined): NeonNavItem {
   const path = pathname ?? '/';

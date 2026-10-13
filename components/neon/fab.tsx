@@ -13,7 +13,7 @@ import { Animated, Easing, Platform, Pressable, StyleSheet, useWindowDimensions,
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NeonGradient, useAcademicPalette } from '@/components/academic/design-system';
-import { NEON_LAYOUT, neonNavBottom, neonNavHeight } from '@/components/neon/nav-items';
+import { NEON_LAYOUT, neonFabClearance, neonFabSize } from '@/components/neon/nav-items';
 import { glowShadow, neonGradientAngles, neonMotion, neonRadius } from '@/lib/theme-runtime';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
@@ -28,11 +28,16 @@ export function NeonFab({ bottom, onPress, style }: { bottom?: number; onPress: 
   const ringOpacity = useRef(new Animated.Value(0.6)).current;
   const wide = width >= NEON_LAYOUT.breakpoint;
   const grown = hovered || pressed;
-  const size = wide ? 64 : 56;
+  const size = neonFabSize(wide);
   const right = wide ? 24 : width <= 430 ? 14 : 16;
-  /** Sem `bottom` explícito, o FAB flutua 16 px acima da pílula (mesma geometria do layout). */
+  /**
+   * Sem `bottom` explícito, o FAB flutua 16 px acima da pílula. A conta vem de
+   * `neonFabClearance` — a mesma fonte que as telas usam para reservar a folga
+   * do fim da lista — descontada a altura do FAB: 96 px no celular e 116 no
+   * desktop, mais o `insets.bottom` onde ele existe.
+   */
   const resolvedBottom =
-    bottom ?? neonNavHeight(wide) + neonNavBottom(wide) + (Platform.OS === 'web' ? 0 : insets.bottom) + 16;
+    bottom ?? neonFabClearance(wide) - size + (Platform.OS === 'web' ? 0 : insets.bottom);
 
   useEffect(() => {
     const loop = Animated.loop(
