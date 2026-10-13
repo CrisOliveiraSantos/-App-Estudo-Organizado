@@ -5,6 +5,8 @@ node_modules/
 
 # Expo
 .expo/
+# _expo/ = bundle web gerado pelo expo-router (routes.json + JS com source map, ~13 MB)
+_expo/
 dist/
 web-build/
 expo-env.d.ts

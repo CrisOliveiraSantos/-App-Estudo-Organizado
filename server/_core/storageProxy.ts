@@ -39,7 +39,7 @@ export function registerStorageProxy(app: Express) {
 
       res.set("Cache-Control", "no-store");
       res.redirect(307, url);
-    } catch (err) {
+    } catch {
       console.error("[StorageProxy] request failed");
       res.status(502).send("Storage proxy error");
     }

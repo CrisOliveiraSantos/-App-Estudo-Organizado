@@ -83,7 +83,7 @@ export function useAuth(options?: UseAuthOptions) {
   const logout = useCallback(async () => {
     try {
       await Api.logout();
-    } catch (err) {
+    } catch {
       console.error("[Auth] Logout API call failed");
       // Continue with logout even if API call fails
     } finally {

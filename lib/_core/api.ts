@@ -2,11 +2,6 @@ import { Platform } from "react-native";
 import { getApiBaseUrl } from "@/constants/oauth";
 import * as Auth from "./auth";
 
-type ApiResponse<T> = {
-  data?: T;
-  error?: string;
-};
-
 export async function apiCall<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -131,7 +126,7 @@ export async function getMe(): Promise<{
   try {
     const result = await apiCall<{ user: any }>("/api/auth/me");
     return result.user || null;
-  } catch (error) {
+  } catch {
     console.error("[API] getMe failed");
     return null;
   }

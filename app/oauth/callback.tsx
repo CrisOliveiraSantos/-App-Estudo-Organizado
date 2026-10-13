@@ -54,7 +54,7 @@ export default function OAuthCallback() {
               };
               await Auth.setUserInfo(userInfo);
               console.log("[OAuth] User info stored");
-            } catch (err) {
+            } catch {
               console.error("[OAuth] Failed to parse user data");
             }
           }
@@ -123,7 +123,7 @@ export default function OAuthCallback() {
               hasState: !!state,
               sessionToken: sessionToken ? "present" : "missing",
             });
-          } catch (e) {
+          } catch {
             console.log("[OAuth] Failed to parse URL, trying regex");
             // Try parsing as relative URL with query params
             const match = url.match(/[?&](code|state|sessionToken)=([^&]+)/g);

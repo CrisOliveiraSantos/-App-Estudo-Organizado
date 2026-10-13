@@ -1,6 +1,5 @@
 import { getSupabaseEmailRedirectUrl } from './supabase-auth-link';
 import { supabase } from './supabase';
-import { isMessageInConversation, readableSupabaseError } from './chat-utils';
 import type { CloudMessage } from './chat-utils';
 
 export { isMessageInConversation, readableSupabaseError } from './chat-utils';

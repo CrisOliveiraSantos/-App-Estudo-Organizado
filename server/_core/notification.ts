@@ -97,7 +97,7 @@ export async function notifyOwner(payload: NotificationPayload): Promise<boolean
     }
 
     return true;
-  } catch (error) {
+  } catch {
     console.warn("[Notification] Error calling notification service");
     return false;
   }

@@ -39,7 +39,7 @@ function SidebarItem({ item }: { item: NeonNavItem }) {
     >
       {active ? <NeonGradient name="activeNav" style={[StyleSheet.absoluteFill, styles.navItemFill]} /> : null}
       <View style={styles.navIcon}>
-        <IconSymbol color={active ? colors.primary : colors.muted} name={item.icon} size={17} />
+        <IconSymbol color={active ? colors.primary : colors.muted} name={item.icon} size={22} />
       </View>
       <Text style={[styles.navLabel, { color: active ? colors.foreground : colors.muted }]} numberOfLines={1}>
         {item.label}

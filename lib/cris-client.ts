@@ -32,6 +32,8 @@ import { describeUserMemory, type CrisUserMemory } from './cris-memory';
 // assunto do CHAT_STREAM_IDLE_MS (Fix 2, ainda não ligado).
 const CHAT_TIMEOUT_MS = 30000;
 // Silêncio máximo dentro de um stream já aberto (Fix 2, ainda não ligado).
+// Mantida de propósito: `tests/cris-memory.test.ts` trava esta linha literalmente.
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 const CHAT_STREAM_IDLE_MS = 20000;
 // Respostas mais curtas e menos "criativas" (0.3) reduzem o loop de
 // repetição em modelos locais pequenos (LocalAI/llama.cpp). Se a repetição

@@ -10,7 +10,7 @@ export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
       _db = drizzle(process.env.DATABASE_URL);
-    } catch (error) {
+    } catch {
       console.warn("[Database] Failed to connect");
       _db = null;
     }

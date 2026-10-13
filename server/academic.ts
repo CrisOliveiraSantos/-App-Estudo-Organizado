@@ -42,7 +42,6 @@ async function requireAcademicSession(req: Parameters<typeof readSessionToken>[0
 export const academicRouter = router({
   testMoodle: publicProcedure.input(connectionInput).mutation(async ({ ctx, input }) => {
     await requireAcademicSession(ctx.req, Boolean(ctx.user));
-    const endpoint = moodleEndpoint(input.baseUrl);
     try {
       const payload = await callMoodle(input.baseUrl, input.token, 'core_webservice_get_site_info') as { sitename?: string; username?: string };
       return { ok: true, provider: 'moodle' as const, siteName: payload.sitename ?? 'Moodle institucional', username: payload.username ?? 'usuária autorizada' };
