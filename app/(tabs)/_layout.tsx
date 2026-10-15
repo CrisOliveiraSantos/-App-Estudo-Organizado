@@ -147,7 +147,7 @@ export default function TabLayout() {
                     key={item.name}
                     name={item.name}
                     options={{
-                      tabBarIcon: ({ color }) => <IconSymbol color={color} name={item.icon} size={26} />,
+                      tabBarIcon: ({ color }) => <IconSymbol color={color} name={item.icon} size={22} />,
                       title: item.label,
                     }}
                   />
@@ -197,10 +197,13 @@ const styles = StyleSheet.create({
   tabButtonCompact: { gap: 4, paddingHorizontal: 2, paddingVertical: 4 },
   tabButtonWide: { gap: 4, paddingHorizontal: 6, paddingVertical: 6 },
   /**
-   * Slot do ícone com 30 px: o glifo do `MaterialIcons` mede exatamente `size`
-   * (fonte `upem = 512`, `ascender = 512`, `descender = 0` → caixa de 26 px em
-   * `size={26}`), então o slot de 26 o encaixava sem folga nenhuma — qualquer
-   * pixel do aparelho (escala de fonte/inset) cortava. 30 dá 4 px de respiro.
+   * Slot do ícone com altura fixa de 30 px; o glifo é desenhado em 22 px
+   * (`size={22}` no `tabBarIcon`). O `MaterialIcons` mede exatamente `size`
+   * (fonte `upem = 512`, `ascender = 512`, `descender = 0` → caixa de 22 px), então
+   * sobram 4 px de respiro em cima e embaixo. Manter a altura fixa é o que
+   * garante que ícone e rótulo continuem centrados no mesmo lugar — só o glifo
+   * encolhe. O 22 é o meio-termo entre os 18 px do mockup mobile e os 26 px que
+   * vinham do `0098005`.
    */
   tabIcon: { alignItems: 'center', height: 30, justifyContent: 'center', marginBottom: 0 },
   /**
