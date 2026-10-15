@@ -5,6 +5,7 @@ import Svg, { Defs, LinearGradient, Rect, Stop } from 'react-native-svg';
 import { isDarkScheme } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 import { useColors } from '@/hooks/use-colors';
+import { splitCardStyle } from '@/lib/card-style';
 import {
   buildNeonTones,
   cardShadow,
@@ -168,12 +169,22 @@ export function AcademicCard({
   style?: StyleProp<ViewStyle>;
 }) {
   const { colors } = useAcademicPalette();
+  /**
+   * O `style` do chamador chega com layout e conteúdo misturados
+   * (`styles.documentCard` traz `flex: 1`, `marginBottom: 11` e `padding: 15` no
+   * mesmo objeto), então ele é partido em duas caixas: layout/`margin`/`flex`/
+   * medidas vão para a **externa** (é ela que ocupa o espaço e sustenta a sombra)
+   * e `padding*`/`border*`/`backgroundColor`/`overflow` + arranjo do conteúdo
+   * ficam na **interna** (é ela que desenha a borda e espaça o conteúdo). Sem a
+   * partição, um `padding: 15` na caixa externa viraria espaço morto entre a
+   * sombra e a borda, e um `marginBottom: 11` na interna entraria no retângulo que
+   * o `elevation` usa como contorno.
+   */
+  const { box, content } = splitCardStyle(StyleSheet.flatten(style));
   return (
-    <NeonGradient
-      name="panel"
+    <View
       style={[
-        styles.card,
-        padded && styles.cardPadded,
+        styles.cardBox,
         /**
          * Fundo opaco explícito — é ele que mata o "ghost box" do Android.
          * `elevation` desenha a sombra a partir do **outline** da view, e uma view
@@ -184,19 +195,36 @@ export function AcademicCard({
          * contorno volta a ser o retângulo arredondado de 20 px (é o que a pílula
          * da bottom nav já fazia com `hexToRgba(surfaceAlt, 0.9)` e por isso nunca
          * teve o artefato). `surface` é a 1ª parada do gradiente `panel`, então o
-         * visual não muda — só deixa de ser translúcido.
+         * visual não muda — só deixa de ser translúcido. E ele **precisa** ficar na
+         * caixa que carrega a sombra: é o outline dela que o Android projeta.
          */
-        {
-          backgroundColor: colors.surface,
-          borderColor: emphasis ? hexToRgba(colors.primary, 0.42) : colors.border,
-        },
+        { backgroundColor: colors.surface },
         cardShadow(emphasis ? 'floating' : 'card'),
         glow && glowShadow(colors.primary, 'soft'),
-        style,
+        box,
       ]}
     >
-      {children}
-    </NeonGradient>
+      {/*
+       * Caixa interna: é ela que tem `overflow: 'hidden'` (borda, raio e o clip do
+       * SVG) e o gradiente. `elevation` na *mesma* view que tem `overflow` é o que
+       * fazia o Android desenhar o resíduo da sombra dentro do card (cinza claro no
+       * tema claro, cinza escuro no escuro, rente à borda). É o único ponto do app
+       * onde as duas coisas coincidiam: `heroShadow` (Home), os wrappers de
+       * `topbar`/`sidebar` e a pílula da bottom nav também carregam `cardShadow`,
+       * mas nenhum deles tem `overflow` — e nenhum deles mostrou o resíduo.
+       */}
+      <NeonGradient
+        name="panel"
+        style={[
+          styles.card,
+          padded && styles.cardPadded,
+          { borderColor: emphasis ? hexToRgba(colors.primary, 0.42) : colors.border },
+          content,
+        ]}
+      >
+        {children}
+      </NeonGradient>
+    </View>
   );
 }
 
@@ -540,7 +568,20 @@ const styles = StyleSheet.create({
   buttonGradient: { bottom: 0, borderRadius: neonRadius.button, left: 0, position: 'absolute', right: 0, top: 0 },
   buttonText: { color: '#FFFFFF', fontSize: neonType.body.size, fontWeight: '800' },
   buttonTextWithIcon: { marginLeft: 8 },
-  card: { borderRadius: neonRadius.card, borderWidth: 1, overflow: 'hidden' },
+  /**
+   * Caixa **interna** do card: borda viva, raio e recorte (o `Rect` do
+   * `NeonGradient` é quadrado e precisa do clip do raio). `flexGrow` para cobrir a
+   * caixa externa quando ela é esticada por `flex: 1`/`minHeight` do chamador —
+   * `flexGrow` e não `flex: 1` porque `flex: 1` zera o `flexBasis` e zeraria a
+   * altura hipotética do card em containers de altura automática.
+   */
+  card: { borderRadius: neonRadius.card, borderWidth: 1, flexGrow: 1, overflow: 'hidden' },
+  /**
+   * Caixa **externa** do card: só o raio (contorno arredondado para a base opaca e
+   * para o `elevation`) + o que o chamador manda de layout. Borda, gradiente e
+   * `overflow` vivem na interna de propósito.
+   */
+  cardBox: { borderRadius: neonRadius.card },
   cardPadded: { padding: 20 },
   disabled: { opacity: 0.48 },
   emptyDescription: { fontSize: neonType.body.size, lineHeight: 20, marginTop: 6, textAlign: 'center' },
