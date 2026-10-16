@@ -14,8 +14,8 @@
     "format": "prettier --write .",
     "test": "vitest run",
     "db:push": "drizzle-kit generate && drizzle-kit migrate",
-    "android": "expo start --android",
-    "ios": "expo start --ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "qr": "node scripts/generate_qr.mjs",
     "export:github-pages": "cross-env EXPO_PUBLIC_GITHUB_PAGES=true expo export --platform web --source-maps --output-dir dist-github-pages && node scripts/add-nojekyll.cjs"
   },
