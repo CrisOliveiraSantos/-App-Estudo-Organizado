@@ -108,7 +108,28 @@ function useHoverState() {
 
 /**
  * Fundo com gradiente real (SVG) — substitui o `expo-linear-gradient` que não está instalado.
- * Renderiza o gradiente em `absoluteFill` e as crianças por cima.
+ * O gradiente vive numa camada absoluta própria e as crianças vêm por cima.
+ *
+ * Por que uma camada extra (e não o `<Svg>` direto em `absoluteFill`): o
+ * `react-native-svg` 15 injeta `width: '100%'`, `height: '100%'` e `flex: 0` no
+ * `style` do `<Svg>` (`Svg.js`, L107-118) e, no Yoga, `%` resolve contra o
+ * **content box** do pai. Como quase todo chamador aplica `padding` no `style`
+ * deste componente (`styles.card` + `cardPadded: 20`, `hero` 19, `topbar.bar`,
+ * `sidebar`), o SVG saía 2×`padding` mais estreito e mais baixo que o card — a
+ * área que sobrava mostrava a cor de fundo do wrapper: era a "faixa crua" à
+ * direita e embaixo, que num `taskRow` (texto à direita do ícone) cai
+ * exatamente **atrás do texto**. A camada absoluta não tem padding, então
+ * `100%` do SVG = a área inteira do card.
+ *
+ * O `viewBox="0 0 100 100"` também saiu. Com ele, o RNSVG aplicava
+ * `ViewBox.getTransform(..., align = "none", meetOrSlice = MEET)` — escala
+ * **uniforme** por `min(scaleX, scaleY)` com centralização (letterbox) — e o
+ * `Rect` de 100×100 virava um quadrado no meio do card. Sem `viewBox` não há
+ * transform nenhum (`SvgView.drawChildren` só concatena a matriz quando
+ * `mAlign != null`), a unidade do desenho é o px do canvas e o `Rect` com
+ * `100%`/`100%` cobre o canvas inteiro; o gradiente (`gradientUnits` default,
+ * `objectBoundingBox`) passa a correr de ponta a ponta como o
+ * `linear-gradient(...)` do CSS.
  */
 export function NeonGradient({
   angle,
@@ -135,20 +156,17 @@ export function NeonGradient({
   const vector = useMemo(() => gradientVector(spec.angle), [spec.angle]);
   return (
     <View style={style}>
-      <Svg
-        pointerEvents="none"
-        preserveAspectRatio="none"
-        style={StyleSheet.absoluteFill}
-        viewBox="0 0 100 100"
-      >
-        <Defs>
-          <LinearGradient id={gradientId} x1={vector.x1} x2={vector.x2} y1={vector.y1} y2={vector.y2}>
-            <Stop offset="0" stopColor={spec.stops[0]} />
-            <Stop offset="1" stopColor={spec.stops[1]} />
-          </LinearGradient>
-        </Defs>
-        <Rect fill={`url(#${gradientId})`} height="100" width="100" x="0" y="0" />
-      </Svg>
+      <View pointerEvents="none" style={styles.gradientLayer}>
+        <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
+          <Defs>
+            <LinearGradient id={gradientId} x1={vector.x1} x2={vector.x2} y1={vector.y1} y2={vector.y2}>
+              <Stop offset="0" stopColor={spec.stops[0]} />
+              <Stop offset="1" stopColor={spec.stops[1]} />
+            </LinearGradient>
+          </Defs>
+          <Rect fill={`url(#${gradientId})`} height="100%" width="100%" x="0" y="0" />
+        </Svg>
+      </View>
       {children}
     </View>
   );
@@ -197,6 +215,14 @@ export function AcademicCard({
          * teve o artefato). `surface` é a 1ª parada do gradiente `panel`, então o
          * visual não muda — só deixa de ser translúcido. E ele **precisa** ficar na
          * caixa que carrega a sombra: é o outline dela que o Android projeta.
+         *
+         * `panel` é `[hexToRgba(surface, .96), hexToRgba(surfaceAlt, .96)]`, então a
+         * base `surface` **é** a 1ª parada (96% dela sobre ela mesma = a mesma cor) e
+         * a regra "cor do wrapper = 1ª parada do gradiente" já está cumprida aqui. O
+         * que faltava não era a cor, era **área pintada**: o `<Svg>` do `NeonGradient`
+         * saía menor que o card por causa do `padding` e esse `surface` aparecia na
+         * fresta (ver o JSDoc de `NeonGradient`). Deixar o wrapper `transparent`
+         * não taparia a fresta e ainda traria o ghost box de volta.
          */
         { backgroundColor: colors.surface },
         cardShadow(emphasis ? 'floating' : 'card'),
@@ -604,6 +630,7 @@ const styles = StyleSheet.create({
     marginBottom: 4,
     textTransform: 'uppercase',
   },
+  gradientLayer: { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
   lift: { transform: [{ translateY: -2 }] },
   pill: {
     alignItems: 'center',
