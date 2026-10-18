@@ -11,11 +11,17 @@
  * `normalizeScrapedTasks` valida o que volta da página.
  */
 
-export type ScrapedTaskType = 'Tarefa' | 'Prova' | 'Material' | 'Aviso';
+export type ScrapedTaskType = 'Tarefa' | 'Prova' | 'Material' | 'Aviso' | 'Exercício';
 
 export type ScrapedTask = {
   course: string;
   dueDate?: string;
+  /**
+   * Frase exata que o Moodle mostra junto da atividade
+   * (ex.: "está marcado(a) para esta data sexta-feira, 30 outubro, 23:00").
+   * Fica separada do título para a interface exibir tudo sem virar um bloco sujo.
+   */
+  dateDescription?: string;
   /** Nome do(a) professor(a) quando a página do curso informa. */
   teacher?: string;
   title: string;
@@ -122,6 +128,20 @@ export function buildScrapeScript(): string {
     }
     return dateText(textOf(node));
   }
+  function activityInfo(node) {
+    var regions = node.querySelectorAll('.activity-dates, .activity-information, .availabilityinfo, .badge, .date, time, .text-nowrap');
+    for (var i = 0; i < regions.length; i++) {
+      var text = clean(textOf(regions[i]));
+      if (text && (dateText(text) || /\\b(entrega|vencimento|prazo|t[ée]rmino|marcad[oa])\\b/i.test(text))) return text.slice(0, 240);
+    }
+    var title = activityTitle(node);
+    var full = clean(textOf(node));
+    if (title && full.indexOf(title) === 0) full = clean(full.slice(title.length));
+    var marker = full.match(/(?:est[áa]\\s+marcad[oa]\\(a\\)\\s+para|marcad[oa]\\(a\\)\\s+para|(?:com\\s+)?(?:entrega|vencimento|prazo|t[ée]rmino)|\\b\\d+\\s+eventos?\\b|(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)(?:-feira)?)[\\s\\S]*/i);
+    var result = clean(marker ? marker[0] : full).replace(/\\s*(Editar|Excluir|Apagar|Enviar|Corrigir|Concluir)\\s*$/i, '');
+    if (!dateText(result) && !/\\b(entrega|vencimento|prazo|t[ée]rmino|marcad[oa]|eventos?)\\b/i.test(result)) return '';
+    return result.slice(0, 240);
+  }
   function activityTitle(node) {
     var target = node.querySelector('.activityname a, .activityname, .instancename, .tarefa-titulo, .event-name, .eventname, h3, h4, strong');
     var raw = target ? textOf(target) : '';
@@ -175,6 +195,7 @@ export function buildScrapeScript(): string {
       course: (course && course.name) || nearbyCourse(node),
       teacher: (course && course.teacher) || '',
       dueDate: activityDate(node),
+      dateDescription: activityInfo(node),
       url: link ? abs(link.getAttribute('href')) : '',
       type: ''
     });
@@ -390,6 +411,25 @@ function normalizeYear(raw: string | undefined, today: Date): number {
 }
 
 /**
+ * Moodle às vezes mostra o ano com dois dígitos (ex.: "19 outubro 19"). Se a
+ * data cair mais de um ano no passado, tratamos como o ano corrente — prazos
+ * acadêmicos são futuros, e o texto original continua em `dateDescription`.
+ */
+function moveShortYearForward(
+  parsed: string,
+  day: number,
+  month: number,
+  today: Date,
+  rawYear: string | undefined,
+): string {
+  if (!rawYear || rawYear.length > 2) return parsed;
+  const candidate = new Date(`${parsed}T12:00:00Z`);
+  const age = today.getTime() - candidate.getTime();
+  if (age > 1000 * 60 * 60 * 24 * 365) return toIso(today.getFullYear(), month, day) ?? parsed;
+  return parsed;
+}
+
+/**
  * Lê os formatos que aparecem em SIGAA/Moodle: `12/03/2026`, `12/03`,
  * `2026-03-12` e `12 de março`. Quando o ano não vem, usa o ano corrente —
  * e joga para o próximo ano se a data já passou muito (prazo de disciplina).
@@ -410,13 +450,17 @@ export function parseDueDate(value: unknown, today: Date = new Date()): string |
       const candidate = new Date(`${parsed}T12:00:00Z`);
       const diff = today.getTime() - candidate.getTime();
       if (diff > 1000 * 60 * 60 * 24 * 90) return toIso(year + 1, month, day);
+      return parsed;
     }
-    return parsed;
+    return moveShortYearForward(parsed, day, month, today, numeric[3]);
   }
-  const textual = text.match(/\b(\d{1,2})\s*(?:de\s+)?([a-zç]{3,9})(?:\s*(?:de\s+)?(\d{2,4}))?/);
-  if (textual) {
-    const month = MONTHS[textual[2]];
-    if (month) return toIso(normalizeYear(textual[3], today), month, Number(textual[1]));
+  const textual = text.matchAll(/\b(\d{1,2})\s*(?:de\s+)?([a-zç]{3,9})(?:\s*(?:de\s+)?(\d{2,4}))?/g);
+  for (const match of textual) {
+    const month = MONTHS[match[2]];
+    if (!month) continue;
+    const day = Number(match[1]);
+    const parsed = toIso(normalizeYear(match[3], today), month, day);
+    if (parsed) return moveShortYearForward(parsed, day, month, today, match[3]);
   }
   return undefined;
 }
@@ -424,8 +468,9 @@ export function parseDueDate(value: unknown, today: Date = new Date()): string |
 export function classifyScrapedTask(title: string): ScrapedTaskType {
   const text = title.toLowerCase();
   if (/\b(prova|exame|avalia[cç][aã]o|teste|recupera[cç][aã]o)\b/.test(text)) return 'Prova';
-  if (/\b(aviso|comunicado|mensagem|nota\s+informativa)\b/.test(text)) return 'Aviso';
+  if (/\b(aviso|comunicado|mensagem|nota\s+informativa|f[oó]rum)\b/.test(text)) return 'Aviso';
   if (/\b(pdf|material|leitura|texto|cap[ií]tulo|slide|apostila|v[ií]deo)\b/.test(text)) return 'Material';
+  if (/\b(exerc[ií]cio|lista|question[áa]rio|atividade|tarefa)\b/.test(text)) return 'Exercício';
   return 'Tarefa';
 }
 
@@ -476,6 +521,94 @@ export function cleanActivityTitle(value: unknown): string {
     .replace(/^[\s\-–—·|,;:]+/, '')
     .replace(/[\s\-–—·|,;:]+$/, '')
     .replace(/[\s(\[]+$/, '');
+}
+
+/** Marcadores que indicam onde o nome curto termina e a informação de data começa. */
+const SCHEDULE_MARKER =
+  /\b(?:est[áa]\s+marcad[oa]\(a\)\s+para|marcad[oa]\(a\)\s+para|com\s+entrega|data\s+de\s+entrega|entrega|vencimento|prazo|t[ée]rmino|\d+\s+eventos?|(?:segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)(?:-feira)?)\b/i;
+
+/** Só aceitamos como subtítulo um texto que realmente fale de data/prazo. */
+const DATE_DESCRIPTION_HINT =
+  /\d{1,2}[/.]\d{1,2}|\d{4}-\d{2}-\d{2}|\b\d{1,2}\s*(?:de\s+)?(?:jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-zç]*\b|\b(?:entrega|vencimento|prazo|t[ée]rmino|marcad[oa]|eventos?)\b/i;
+
+function tidyDateDescription(value: unknown): string {
+  const text = tidy(value);
+  if (!text) return '';
+  return text.length > 240 ? `${text.slice(0, 237).trimEnd()}…` : text;
+}
+
+/**
+ * Separa "Atividade 1 está marcado(a) para esta data…" em
+ * `{ title: "Atividade 1", schedule: "está marcado(a) para esta data…" }`.
+ * Se não houver marcador, o texto inteiro continua sendo o título.
+ */
+export function splitTitleAndSchedule(value: string): { title: string; schedule: string } {
+  const text = tidy(value);
+  const match = SCHEDULE_MARKER.exec(text);
+  if (!match || match.index === 0) return { title: text, schedule: '' };
+  const title = text.slice(0, match.index).replace(/[\s,;:·|\-–—]+$/g, '').trim();
+  if (title.length < 3) return { title: text, schedule: '' };
+  return { title, schedule: text.slice(match.index).trim() };
+}
+
+/** "1 evento … Término de Prova Final" → "Prova Final". */
+function titleFromScheduleText(value: string): string {
+  const match = value.match(/\b(?:t[ée]rmino|entrega|in[ií]cio|abertura)\s+(?:de|da|do)\s+([^,;|]{3,90})/i);
+  return match ? cleanActivityTitle(match[1]) : '';
+}
+
+/** Prefere o trecho marcado como prazo quando ele realmente contém uma data. */
+function dueDateSource(value: string): string {
+  const text = tidy(value);
+  if (!text) return '';
+  const match = text.match(/(?:prazo|vencimento|data\s+de\s+entrega|entrega|t[ée]rmino|due)\s*[:\-–]?\s*([\s\S]+)$/i);
+  return match && parseDueDate(match[1]) ? match[1] : text;
+}
+
+export type StructuredActivity = {
+  title: string;
+  dateDescription?: string;
+  dueDate?: string;
+};
+
+/**
+ * Estrutura uma atividade sem apagar a informação original:
+ * - `title`: nome curto da atividade;
+ * - `dateDescription`: a frase exata de data/prazo do Moodle;
+ * - `dueDate`: a data numérica (ISO) para o calendário.
+ */
+export function structureActivity(
+  titleValue: unknown,
+  dateValue?: unknown,
+  dueValue?: unknown,
+  today: Date = new Date(),
+): StructuredActivity {
+  const rawTitle = tidy(titleValue);
+  const split = splitTitleAndSchedule(rawTitle);
+  const providedDate = tidyDateDescription(dateValue);
+  const providedSchedule = providedDate ? splitTitleAndSchedule(providedDate).schedule || providedDate : '';
+  const explicitDate = providedSchedule && DATE_DESCRIPTION_HINT.test(providedSchedule) ? providedSchedule : '';
+  const splitSchedule = tidyDateDescription(split.schedule);
+  const scheduleOnly =
+    split.title === rawTitle &&
+    (/est[áa]\s+marcad[oa]\(a\)|marcad[oa]\(a\)\s+para/i.test(rawTitle) ||
+      (SCHEDULE_MARKER.test(rawTitle) && Boolean(parseDueDate(rawTitle, today))));
+  const description = explicitDate || splitSchedule || (scheduleOnly ? tidyDateDescription(rawTitle) : '');
+
+  const candidates = [
+    titleFromScheduleText(rawTitle),
+    cleanActivityTitle(split.title),
+    cleanActivityTitle(rawTitle),
+  ];
+  const title = candidates.find(candidate => candidate.length >= 4) ?? '';
+
+  const explicitDue = tidy(dueValue);
+  const dueDate =
+    parseDueDate(explicitDue, today) ??
+    parseDueDate(dueDateSource(description), today) ??
+    parseDueDate(rawTitle, today);
+
+  return { title, dateDescription: description || undefined, dueDate };
 }
 
 /** Agrupa a captura por matéria para criar uma disciplina por curso. */
@@ -535,14 +668,20 @@ function safeUrl(value: unknown): string | undefined {
 }
 
 /** Valida e limpa a lista que voltou da página. */
-export function normalizeScrapedTasks(input: unknown, limit = IMPORT_MAX_ITEMS): ScrapedTask[] {
+export function normalizeScrapedTasks(input: unknown, limit = IMPORT_MAX_ITEMS, today: Date = new Date()): ScrapedTask[] {
   const list = Array.isArray(input) ? input : [];
   const seen = new Set<string>();
   const tasks: ScrapedTask[] = [];
   for (const raw of list) {
     if (!raw || typeof raw !== 'object') continue;
     const record = raw as Record<string, unknown>;
-    const title = cleanActivityTitle(pick(record, ['title', 'titulo', 'título', 'name', 'nome', 'atividade']));
+    const structured = structureActivity(
+      pick(record, ['title', 'titulo', 'título', 'name', 'nome', 'atividade']),
+      pick(record, ['dateDescription', 'datePhrase', 'schedule', 'descricaoData', 'descriçãoData', 'description', 'descricao']),
+      pick(record, ['dueDate', 'due', 'prazo', 'date', 'data']),
+      today,
+    );
+    const title = structured.title;
     if (title.length < 4 || title.length > 200) continue;
     if (NAVIGATION_LABEL.test(title)) continue;
     const course = cleanCourseName(pick(record, ['course', 'curso', 'disciplina', 'materia', 'matéria'])) || 'Ambiente acadêmico';
@@ -550,7 +689,8 @@ export function normalizeScrapedTasks(input: unknown, limit = IMPORT_MAX_ITEMS):
       title,
       course,
       teacher: tidy(pick(record, ['teacher', 'professor', 'docente', 'professorName'])) || undefined,
-      dueDate: parseDueDate(pick(record, ['dueDate', 'due', 'prazo', 'date', 'data'])),
+      dueDate: structured.dueDate,
+      dateDescription: structured.dateDescription,
       url: safeUrl(pick(record, ['url', 'link', 'href'])),
       type: classifyScrapedTask(title),
     };

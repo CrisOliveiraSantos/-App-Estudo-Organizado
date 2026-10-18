@@ -15,6 +15,7 @@ import {
   normalizeScrapedTasks,
   parseDueDate,
   parseImportMessage,
+  splitTitleAndSchedule,
   summarizeScrapedTasks,
 } from '../lib/academic-import';
 
@@ -47,12 +48,81 @@ describe('datas de prazo', () => {
 });
 
 describe('classificação das atividades', () => {
-  it('separa prova, material, aviso e tarefa', () => {
+  it('separa prova, material, aviso, exercício e tarefa', () => {
     expect(classifyScrapedTask('Prova de Cálculo I')).toBe('Prova');
     expect(classifyScrapedTask('Avaliação substitutiva')).toBe('Prova');
     expect(classifyScrapedTask('Leitura do capítulo 3 em PDF')).toBe('Material');
     expect(classifyScrapedTask('Aviso: aula cancelada')).toBe('Aviso');
-    expect(classifyScrapedTask('Lista de exercícios 2')).toBe('Tarefa');
+    expect(classifyScrapedTask('Avisos Fórum')).toBe('Aviso');
+    expect(classifyScrapedTask('Lista de exercícios 2')).toBe('Exercício');
+    expect(classifyScrapedTask('Questionário 1')).toBe('Exercício');
+    expect(classifyScrapedTask('Trabalho em grupo')).toBe('Tarefa');
+  });
+});
+
+describe('estruturação dos dados do Moodle', () => {
+  const reference = new Date('2026-10-18T12:00:00');
+
+  it('separa o nome curto da frase de data sem perder o texto original', () => {
+    const [task] = normalizeScrapedTasks([
+      { title: 'Atividade 1 está marcado(a) para esta data sexta-feira, 30 outubro, 23:00', course: 'Banco de Dados' },
+    ], 200, reference);
+    expect(task.title).toBe('Atividade 1');
+    expect(task.dateDescription).toBe('está marcado(a) para esta data sexta-feira, 30 outubro, 23:00');
+    expect(task.dueDate).toBe('2026-10-30');
+    expect(task.type).toBe('Exercício');
+  });
+
+  it('reconstrói o nome quando o Moodle manda apenas o evento', () => {
+    const [task] = normalizeScrapedTasks([
+      { title: '1 evento, segunda-feira, 19 outubro 19 Término de Prova Final', course: 'Cálculo I' },
+    ], 200, reference);
+    expect(task.title).toBe('Prova Final');
+    expect(task.dateDescription).toBe('1 evento, segunda-feira, 19 outubro 19 Término de Prova Final');
+    expect(task.dueDate).toBe('2026-10-19');
+    expect(task.type).toBe('Prova');
+  });
+
+  it('usa a frase de data que já veio separada do scraper', () => {
+    const [task] = normalizeScrapedTasks([
+      {
+        title: 'Lista de Exercícios',
+        course: 'POO',
+        dateDescription: 'está marcado(a) para esta data sexta-feira, 30 outubro, 23:00',
+        dueDate: '30 outubro, 23:00',
+      },
+    ], 200, reference);
+    expect(task.title).toBe('Lista de Exercícios');
+    expect(task.dateDescription).toBe('está marcado(a) para esta data sexta-feira, 30 outubro, 23:00');
+    expect(task.dueDate).toBe('2026-10-30');
+    expect(task.type).toBe('Exercício');
+  });
+
+  it('separa título e agenda em uma frase combinada', () => {
+    expect(splitTitleAndSchedule('Atividade 1 está marcado(a) para esta data sexta-feira, 30 outubro, 23:00')).toEqual({
+      title: 'Atividade 1',
+      schedule: 'está marcado(a) para esta data sexta-feira, 30 outubro, 23:00',
+    });
+  });
+
+  it('não transforma uma descrição sem data em subtítulo de prazo', () => {
+    const [task] = normalizeScrapedTasks([
+      { title: 'Atividade 1', course: 'Banco de Dados', description: 'Material complementar da aula' },
+    ], 200, reference);
+    expect(task.title).toBe('Atividade 1');
+    expect(task.dateDescription).toBeUndefined();
+  });
+
+  it('remove o título repetido quando a frase de data chega combinada', () => {
+    const [task] = normalizeScrapedTasks([
+      {
+        title: 'Atividade 1',
+        course: 'Banco de Dados',
+        dateDescription: 'Atividade 1 está marcado(a) para esta data sexta-feira, 30 outubro, 23:00',
+      },
+    ], 200, reference);
+    expect(task.dateDescription).toBe('está marcado(a) para esta data sexta-feira, 30 outubro, 23:00');
+    expect(task.dueDate).toBe('2026-10-30');
   });
 });
 
@@ -176,6 +246,8 @@ describe('ponte com a WebView', () => {
     expect(script).toContain('/course/view.php');
     expect(script).toContain('DOMParser');
     expect(script).toContain('p[áa]gina inicial');
+    expect(script).toContain('activityInfo');
+    expect(script).toContain('dateDescription');
     expect(script).toContain(IMPORT_SOURCE);
     expect(() => new Function(script)).not.toThrow();
   });

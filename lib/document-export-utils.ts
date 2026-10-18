@@ -1,3 +1,5 @@
+import { richTextToPlainText } from './rich-text';
+
 export type ExportBlock = { id: string; type: string; text?: string; data?: string };
 export type ExportableDocument = { title: string; content: string; blocks?: ExportBlock[] };
 
@@ -21,7 +23,7 @@ function plainBlock(block: ExportBlock) {
 }
 
 export function buildPlainTextDocument(document: ExportableDocument) {
-  const sections = [document.title.trim() || 'Sem título', document.content.trim(), ...(document.blocks ?? []).map(plainBlock).filter(Boolean)];
+  const sections = [document.title.trim() || 'Sem título', richTextToPlainText(document.content), ...(document.blocks ?? []).map(plainBlock).filter(Boolean)];
   return sections.filter(Boolean).join('\n\n');
 }
 

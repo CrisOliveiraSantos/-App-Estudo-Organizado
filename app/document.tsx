@@ -1,21 +1,36 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Image, Keyboard, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
 import * as ImagePicker from 'expo-image-picker';
 import { ScreenContainer } from '@/components/screen-container';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicPill, academicColors } from '@/components/academic/design-system';
+import { RichTextEditor } from '@/components/rich-text-editor';
+import type { RichTextCommand, RichTextEditorHandle } from '@/components/rich-text-editor.types';
 import { type RichBlock, useStudyActions, useStudyFolders, useStudyNotes } from '@/lib/study-store';
 import { useColors } from '@/hooks/use-colors';
-import { applyTextFormat, hasTextMarkup, type TextFormat } from '@/lib/editor-formatting';
-import { renderFormattedText } from '@/lib/editor-preview';
+import { richTextToPlainText, toEditorHtml } from '@/lib/rich-text';
 import { exportTextDocument, shareTextDocument } from '@/lib/document-export';
 
 type RibbonTab = 'Arquivo' | 'Página inicial' | 'Inserir' | 'Layout' | 'Referências' | 'Revisão' | 'Exibir' | 'Ajuda';
 
 const newBlock = (type: RichBlock['type'], text = '', data = ''): RichBlock => ({ id: `${Date.now()}-${Math.random()}`, type, text, data });
-const formattingLabels: Record<TextFormat, string> = { bold: 'Negrito aplicado', italic: 'Itálico aplicado', underline: 'Sublinhado aplicado', strike: 'Tachado aplicado', highlight: 'Destaque aplicado', 'bullet-list': 'Lista com marcadores criada', 'numbered-list': 'Lista numerada criada' };
+const commandLabels: Partial<Record<RichTextCommand, string>> = {
+  bold: 'Negrito aplicado',
+  italic: 'Itálico aplicado',
+  underline: 'Sublinhado aplicado',
+  strike: 'Tachado aplicado',
+  highlight: 'Destaque aplicado',
+  'bullet-list': 'Lista com marcadores criada',
+  'numbered-list': 'Lista numerada criada',
+  heading: 'Título aplicado',
+  quote: 'Citação aplicada',
+  code: 'Bloco de código aplicado',
+  undo: 'Última ação desfeita',
+  redo: 'Ação refeita',
+  clear: 'Formatação removida',
+};
 const ribbonTabs: RibbonTab[] = ['Arquivo', 'Página inicial', 'Inserir', 'Layout', 'Referências', 'Revisão', 'Exibir', 'Ajuda'];
 
 export default function EditorScreen() {
@@ -27,35 +42,41 @@ export default function EditorScreen() {
   const requestedNoteId = Array.isArray(id) ? id[0] : id;
   const existing = notes.find(note => note.id === requestedNoteId);
   const noteId = useMemo(() => existing?.id ?? requestedNoteId ?? `note-${Date.now()}`, [existing?.id, requestedNoteId]);
-  const editorInputRef = useRef<TextInput>(null);
+  const richTextRef = useRef<RichTextEditorHandle | null>(null);
+  const contentRef = useRef(toEditorHtml(existing?.content ?? ''));
   const [title, setTitle] = useState(existing?.title ?? 'Novo documento');
-  const [content, setContent] = useState(existing?.content ?? '');
+  const [content, setContent] = useState(() => toEditorHtml(existing?.content ?? ''));
   const [folder, setFolder] = useState(existing?.folder ?? folders[0]?.name ?? 'Sem pasta');
   const [blocks, setBlocks] = useState<RichBlock[]>(existing?.blocks ?? []);
   const [savedAt, setSavedAt] = useState(existing?.updatedAt ?? 'Rascunho');
-  const [selection, setSelection] = useState({ start: 0, end: 0 });
-  const [formattingHint, setFormattingHint] = useState('Selecione um trecho ou posicione o cursor para escrever.');
+  const [formattingHint, setFormattingHint] = useState('Texto rico: selecione um trecho e use a barra para formatar.');
   const [activeTab, setActiveTab] = useState<RibbonTab>('Página inicial');
   const [fontSize, setFontSize] = useState(16);
-  const [history, setHistory] = useState<{ title: string; content: string; folder: string; blocks: RichBlock[] }[]>([{ title: existing?.title ?? 'Novo documento', content: existing?.content ?? '', folder: existing?.folder ?? folders[0]?.name ?? 'Sem pasta', blocks: existing?.blocks ?? [] }]);
-  const [historyIndex, setHistoryIndex] = useState(0);
-  const [preview, setPreview] = useState(false);
-  const restoringHistory = useRef(false);
   /** Última versão realmente gravada — evita `saveNote` redundante no autosave. */
-  const lastSavedRef = useRef(JSON.stringify({ title: existing?.title ?? 'Novo documento', content: existing?.content ?? '', folder: existing?.folder ?? folders[0]?.name ?? 'Sem pasta', blocks: existing?.blocks ?? [] }));
+  const lastSavedRef = useRef(JSON.stringify({ title: existing?.title ?? 'Novo documento', content: toEditorHtml(existing?.content ?? ''), folder: existing?.folder ?? folders[0]?.name ?? 'Sem pasta', blocks: existing?.blocks ?? [] }));
+
+  useEffect(() => { contentRef.current = content; }, [content]);
+
 
   useEffect(() => {
     if (!existing) return;
-    setTitle(existing.title); setContent(existing.content); setFolder(existing.folder); setBlocks(existing.blocks ?? []); setSavedAt(existing.updatedAt);
-    setPreview(false);
-    lastSavedRef.current = JSON.stringify({ title: existing.title, content: existing.content, folder: existing.folder, blocks: existing.blocks ?? [] });
+    const html = toEditorHtml(existing.content);
+    setTitle(existing.title); setContent(html); setFolder(existing.folder); setBlocks(existing.blocks ?? []); setSavedAt(existing.updatedAt);
+    contentRef.current = html;
+    lastSavedRef.current = JSON.stringify({ title: existing.title, content: html, folder: existing.folder, blocks: existing.blocks ?? [] });
+    // O editor pode ter montado antes da hidratação do AsyncStorage.
+    richTextRef.current?.setHtml(html);
     // A troca de documento é identificada pelo ID para não reiniciar a digitação em curso.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [existing?.id]);
 
-  const persist = () => {
-    const payload = { id: noteId, title: title.trim() || 'Sem título', content, folder, updatedAt: 'Agora', kind: existing?.kind ?? 'note', blocks, images: blocks.filter(block => block.type === 'image').map(block => block.data ?? '') };
-    const signature = JSON.stringify({ title: payload.title, content, folder, blocks });
+  /**
+   * Grava o HTML atual. O autosave usa o estado (já atualizado pelo `onChange`
+   * do editor) e o botão Salvar pede o HTML final ao WebView antes de gravar.
+   */
+  const persist = (nextContent: string = content) => {
+    const payload = { id: noteId, title: title.trim() || 'Sem título', content: nextContent, folder, updatedAt: 'Agora', kind: existing?.kind ?? 'note', blocks, images: blocks.filter(block => block.type === 'image').map(block => block.data ?? '') };
+    const signature = JSON.stringify({ title: payload.title, content: nextContent, folder, blocks });
     /**
      * O autosave dispara a cada pausa de digitação; gravar sem comparar criava
      * um novo array de notas (e um re-render global) mesmo sem mudança real.
@@ -66,44 +87,41 @@ export default function EditorScreen() {
     }
     setSavedAt('Salvo agora');
   };
-  /**
-   * Snapshot de histórico com debounce: antes o `JSON.stringify` do documento
-   * inteiro rodava a cada tecla. 400 ms agrupa a digitação contínua em um passo
-   * de desfazer sem custo perceptível.
-   */
+  const saveNow = async () => {
+    let html = content;
+    try {
+      html = (await richTextRef.current?.getHtml()) || content;
+    } catch {
+      // O WebView pode não responder a tempo; o estado local continua válido.
+    }
+    if (html !== content) setContent(html);
+    persist(html);
+  };
+
   useEffect(() => {
-    if (restoringHistory.current) { restoringHistory.current = false; return; }
     const timer = setTimeout(() => {
-      const snapshot = { title, content, folder, blocks };
-      const encoded = JSON.stringify(snapshot);
-      setHistory(current => { const previous = current[current.length - 1]; if (previous && JSON.stringify(previous) === encoded) return current; const next = [...current.slice(0, historyIndex + 1), snapshot].slice(-40); setHistoryIndex(next.length - 1); return next; });
-    }, 400);
-    return () => clearTimeout(timer);
-  }, [title, content, folder, blocks, historyIndex]);
-  const jumpHistory = (target: number) => { const snapshot = history[target]; if (!snapshot) return; restoringHistory.current = true; setTitle(snapshot.title); setContent(snapshot.content); setFolder(snapshot.folder); setBlocks(snapshot.blocks); setHistoryIndex(target); };
-  useEffect(() => { const timer = setTimeout(() => { if (title.trim() || content.trim() || blocks.length) persist(); }, 900); return () => clearTimeout(timer); // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (title.trim() || richTextToPlainText(content).trim() || blocks.length) persist(content);
+    }, 900);
+    return () => clearTimeout(timer); // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title, content, folder, blocks]);
 
-  const formatSelection = (format: TextFormat) => {
-    if (preview) { setFormattingHint('Modo de leitura ativo — toque em 👁 Editar para formatar o texto.'); return; }
-    const result = applyTextFormat(content, selection, format); setContent(result.text); setSelection(result.selection); setFormattingHint(`${formattingLabels[format]} · toque em Visualizar para ver o resultado formatado.`); setTimeout(() => editorInputRef.current?.focus(), 0);
+  const applyFormat = (command: RichTextCommand) => {
+    richTextRef.current?.command(command);
+    setFormattingHint(commandLabels[command] ?? 'Formatação aplicada.');
   };
-  const togglePreview = () => {
-    const next = !preview;
-    Keyboard.dismiss();
-    setPreview(next);
-    setFormattingHint(next ? 'Modo de leitura: a formatação aparece aplicada, sem os marcadores.' : 'Selecione um trecho ou posicione o cursor para escrever.');
+  const changeFontSize = (delta: number) => {
+    const next = Math.max(13, Math.min(24, fontSize + delta));
+    setFontSize(next);
+    richTextRef.current?.setFontSize(next);
   };
-  /** Avisa que há marcações na tela de edição e oferece o modo de leitura. */
-  const hasMarkup = useMemo(() => hasTextMarkup(content), [content]);
-  const addStyle = (type: RichBlock['type'], text: string) => setBlocks(current => [...current, newBlock(type, text)]);
+  const plainContent = useMemo(() => richTextToPlainText(content), [content]);
   const duplicateCurrent = () => { const duplicatedId = duplicateNote(noteId); if (duplicatedId) Alert.alert('Documento duplicado', 'Uma cópia foi criada em Meus documentos.'); };
   const deleteCurrent = () => { const remove = () => { deleteNote(noteId); router.replace('/editor'); }; if (Platform.OS === 'web' && typeof window !== 'undefined') { if (window.confirm(`Excluir “${title.trim() || 'este documento'}”? Esta ação não pode ser desfeita.`)) remove(); return; } Alert.alert('Excluir documento?', 'Esta ação não pode ser desfeita.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: remove }]); };
   const addTable = () => setBlocks(current => [...current, newBlock('table', 'Tabela de revisão', JSON.stringify({ rows: [['Tópico', 'O que entendi', 'Revisar'], ['Conceito', 'Escrever aqui', 'Não']] }))]);
   const addChart = () => setBlocks(current => [...current, newBlock('chart', 'Progresso do estudo', JSON.stringify({ labels: ['Teoria', 'Prática', 'Revisão'], values: [70, 45, 30] }))]);
   const addImage = async () => { const result = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], quality: 0.85 }); if (!result.canceled) setBlocks(current => [...current, newBlock('image', 'Imagem de estudo', result.assets[0].uri)]); };
   const nextFolder = folders[(folders.findIndex(item => item.name === folder) + 1) % Math.max(folders.length, 1)]?.name ?? 'Sem pasta';
-  const words = content.trim() ? content.trim().split(/\s+/).length : 0;
+  const words = plainContent ? plainContent.split(/\s+/).filter(word => /[0-9A-Za-zÀ-ÖØ-öø-ÿ]/.test(word)).length : 0;
   const exportCurrent = async () => {
     try {
       const result = await exportTextDocument({ title, content, blocks });
@@ -126,35 +144,32 @@ export default function EditorScreen() {
       <View style={styles.commandHeader}>
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Voltar para Meus documentos" style={styles.backButton}><Text style={styles.backArrow}>←</Text><Text style={styles.backLabel}>Documentos</Text></TouchableOpacity>
         <View style={styles.commandTitleWrap}><Text numberOfLines={1} style={styles.commandTitle}>{title.trim() || 'Sem título'}</Text><View style={styles.savedRow}><View style={styles.savedDot} /><Text style={styles.savedText}>{savedAt === 'Rascunho' ? 'Rascunho em edição' : `Salvo automaticamente · ${savedAt.replace('Salvo ', '')}`}</Text></View></View>
-        <View style={styles.headerActions}><TouchableOpacity disabled={historyIndex === 0} onPress={() => jumpHistory(historyIndex - 1)} accessibilityRole="button" accessibilityLabel="Desfazer" style={[styles.historyButton, historyIndex === 0 && styles.disabled]}><Text style={styles.historyText}>↶</Text></TouchableOpacity><TouchableOpacity disabled={historyIndex >= history.length - 1} onPress={() => jumpHistory(historyIndex + 1)} accessibilityRole="button" accessibilityLabel="Refazer" style={[styles.historyButton, historyIndex >= history.length - 1 && styles.disabled]}><Text style={styles.historyText}>↷</Text></TouchableOpacity><AcademicButton label="Salvar" onPress={persist} compact /></View>
+        <View style={styles.headerActions}><TouchableOpacity onPress={() => applyFormat('undo')} accessibilityRole="button" accessibilityLabel="Desfazer" style={styles.historyButton}><Text style={styles.historyText}>↶</Text></TouchableOpacity><TouchableOpacity onPress={() => applyFormat('redo')} accessibilityRole="button" accessibilityLabel="Refazer" style={styles.historyButton}><Text style={styles.historyText}>↷</Text></TouchableOpacity><AcademicButton label="Salvar" onPress={() => { void saveNow(); }} compact /></View>
       </View>
 
       <View style={styles.ribbonShell}>
-        <View style={styles.ribbonTabsRow}><ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.ribbonTabsScroll} contentContainerStyle={styles.ribbonTabs}>{ribbonTabs.map(tab => <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} style={[styles.ribbonTab, activeTab === tab && styles.ribbonTabActive]}><Text style={[styles.ribbonTabText, activeTab === tab && styles.ribbonTabTextActive]}>{tab}</Text></TouchableOpacity>)}</ScrollView><TouchableOpacity onPress={togglePreview} accessibilityRole="button" accessibilityState={{ selected: preview }} accessibilityLabel={preview ? 'Voltar para o modo de edição' : 'Visualizar o texto formatado sem marcadores'} style={[styles.previewButton, preview && styles.previewButtonActive]}><Text style={[styles.previewButtonIcon, preview && styles.previewButtonIconActive]}>{preview ? '✎' : '👁'}</Text><Text style={[styles.previewButtonLabel, preview && styles.previewButtonLabelActive]}>{preview ? 'Editar' : 'Visualizar'}</Text></TouchableOpacity></View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbar}>{preview ? <View style={styles.contextHint}><Text style={styles.contextHintTitle}>Modo de leitura</Text><Text style={styles.contextHintText}>A formatação aparece aplicada, sem os marcadores. Toque em Editar para voltar a escrever.</Text></View> : activeTab === 'Página inicial' ? <>
-          <Tool label="N" caption="Negrito" onPress={() => formatSelection('bold')} weight="bold" /><Tool label="I" caption="Itálico" onPress={() => formatSelection('italic')} italic /><Tool label="S" caption="Sublinhar" onPress={() => formatSelection('underline')} underline /><Tool label="abc" caption="Tachado" onPress={() => formatSelection('strike')} strike /><Tool label="▰" caption="Destaque" onPress={() => formatSelection('highlight')} highlight /><ToolbarDivider /><Tool label="•" caption="Lista" onPress={() => formatSelection('bullet-list')} /><Tool label="1." caption="Numerada" onPress={() => formatSelection('numbered-list')} /><Tool label="T1" caption="Título" onPress={() => addStyle('heading', 'Título da seção')} /><ToolbarDivider /><Tool label="A−" caption="Diminuir" onPress={() => setFontSize(size => Math.max(13, size - 1))} /><Tool label="A+" caption="Aumentar" onPress={() => setFontSize(size => Math.min(24, size + 1))} />
-        </> : activeTab === 'Inserir' ? <><Tool label="T" caption="Título" onPress={() => addStyle('heading', 'Título da seção')} /><Tool label="❝" caption="Citação" onPress={() => addStyle('quote', 'Uma ideia importante para lembrar…')} /><Tool label="</>" caption="Código" onPress={() => addStyle('code', 'const estudo = true;')} /><ToolbarDivider /><Tool label="▦" caption="Tabela" onPress={addTable} /><Tool label="▧" caption="Imagem" onPress={() => { void addImage(); }} /><Tool label="▥" caption="Gráfico" onPress={addChart} /></> : activeTab === 'Arquivo' ? <><Tool label="▣" caption="Trocar pasta" onPress={() => setFolder(nextFolder)} /><Tool label="⧉" caption="Duplicar" onPress={duplicateCurrent} /><Tool label="⎙" caption="Copiar texto" onPress={() => { void Clipboard.setStringAsync(content); Alert.alert('Copiado', 'O texto foi copiado para a área de transferência.'); }} /><ToolbarDivider /><Tool label="⇧" caption="Compartilhar" onPress={() => { void shareCurrent(); }} /><Tool label="⇩" caption="Exportar .txt" onPress={() => { void exportCurrent(); }} /><ToolbarDivider /><Tool label="×" caption="Excluir" onPress={deleteCurrent} danger /></> : activeTab === 'Exibir' ? <><Tool label={preview ? '✎' : '👁'} caption={preview ? 'Editar' : 'Visualizar'} onPress={togglePreview} /><ToolbarDivider /><Tool label="A−" caption="Diminuir" onPress={() => setFontSize(size => Math.max(13, size - 1))} /><Tool label="A+" caption="Aumentar" onPress={() => setFontSize(size => Math.min(24, size + 1))} /></> : <View style={styles.contextHint}><Text style={styles.contextHintTitle}>{activeTab}</Text><Text style={styles.contextHintText}>{activeTab === 'Layout' ? 'A folha ajusta a leitura com um tamanho de texto confortável.' : activeTab === 'Referências' ? 'Use citações e blocos de texto para registrar suas fontes.' : activeTab === 'Revisão' ? 'Use desfazer, refazer e a revisão dos seus blocos antes de concluir.' : 'Selecione um menu acima para acessar os recursos disponíveis.'}</Text></View>}</ScrollView>
+        <View style={styles.ribbonTabsRow}><ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.ribbonTabsScroll} contentContainerStyle={styles.ribbonTabs}>{ribbonTabs.map(tab => <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} style={[styles.ribbonTab, activeTab === tab && styles.ribbonTabActive]}><Text style={[styles.ribbonTabText, activeTab === tab && styles.ribbonTabTextActive]}>{tab}</Text></TouchableOpacity>)}</ScrollView></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbar}>{activeTab === 'Página inicial' ? <>
+          <Tool label="N" caption="Negrito" onPress={() => applyFormat('bold')} weight="bold" /><Tool label="I" caption="Itálico" onPress={() => applyFormat('italic')} italic /><Tool label="S" caption="Sublinhar" onPress={() => applyFormat('underline')} underline /><Tool label="abc" caption="Tachado" onPress={() => applyFormat('strike')} strike /><Tool label="▰" caption="Destaque" onPress={() => applyFormat('highlight')} highlight /><ToolbarDivider /><Tool label="•" caption="Lista" onPress={() => applyFormat('bullet-list')} /><Tool label="1." caption="Numerada" onPress={() => applyFormat('numbered-list')} /><Tool label="T1" caption="Título" onPress={() => applyFormat('heading')} /><ToolbarDivider /><Tool label="A−" caption="Diminuir" onPress={() => changeFontSize(-1)} /><Tool label="A+" caption="Aumentar" onPress={() => changeFontSize(1)} />
+        </> : activeTab === 'Inserir' ? <><Tool label="T" caption="Título" onPress={() => applyFormat('heading')} /><Tool label="❝" caption="Citação" onPress={() => applyFormat('quote')} /><Tool label="</>" caption="Código" onPress={() => applyFormat('code')} /><ToolbarDivider /><Tool label="▦" caption="Tabela" onPress={addTable} /><Tool label="▧" caption="Imagem" onPress={() => { void addImage(); }} /><Tool label="▥" caption="Gráfico" onPress={addChart} /></> : activeTab === 'Arquivo' ? <><Tool label="▣" caption="Trocar pasta" onPress={() => setFolder(nextFolder)} /><Tool label="⧉" caption="Duplicar" onPress={duplicateCurrent} /><Tool label="⎙" caption="Copiar texto" onPress={() => { void Clipboard.setStringAsync(plainContent); Alert.alert('Copiado', 'O texto do documento foi copiado para a área de transferência.'); }} /><ToolbarDivider /><Tool label="⇧" caption="Compartilhar" onPress={() => { void shareCurrent(); }} /><Tool label="⇩" caption="Exportar .txt" onPress={() => { void exportCurrent(); }} /><ToolbarDivider /><Tool label="×" caption="Excluir" onPress={deleteCurrent} danger /></> : activeTab === 'Exibir' ? <><Tool label="↶" caption="Desfazer" onPress={() => applyFormat('undo')} /><Tool label="↷" caption="Refazer" onPress={() => applyFormat('redo')} /><ToolbarDivider /><Tool label="A−" caption="Diminuir" onPress={() => changeFontSize(-1)} /><Tool label="A+" caption="Aumentar" onPress={() => changeFontSize(1)} /></> : <View style={styles.contextHint}><Text style={styles.contextHintTitle}>{activeTab}</Text><Text style={styles.contextHintText}>{activeTab === 'Layout' ? 'Ajuste o tamanho do texto com A− e A+. A formatação é aplicada direto no trecho selecionado.' : activeTab === 'Referências' ? 'Use citações e blocos de texto para registrar suas fontes.' : activeTab === 'Revisão' ? 'Use desfazer e refazer para voltar atrás sem perder o texto.' : 'O texto já aparece formatado: negrito, itálico, listas e títulos são exibidos na hora.'}</Text></View>}</ScrollView>
       </View>
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.workspace}>
         <View style={styles.documentTopline}><View style={styles.folderChip}><IconSymbol name="folder.fill" size={15} color={academicColors.indigo} /><Text style={styles.folderText}>{folder}</Text><TouchableOpacity onPress={() => setFolder(nextFolder)} accessibilityRole="button" accessibilityLabel="Trocar pasta" style={styles.folderAction}><Text style={styles.folderActionText}>Trocar</Text></TouchableOpacity></View><Text style={styles.statusText}>{formattingHint}</Text></View>
-        {hasMarkup && !preview ? <TouchableOpacity activeOpacity={0.82} onPress={togglePreview} accessibilityRole="button" accessibilityLabel="Abrir o modo de visualização sem marcadores" style={styles.markupNotice}><Text style={styles.markupNoticeText}>Este texto tem formatação. Os marcadores ** _ ~~ == aparecem no modo de edição.</Text><Text style={styles.markupNoticeAction}>Ver formatado →</Text></TouchableOpacity> : null}
         <View style={styles.ruler}>{Array.from({ length: 11 }, (_, index) => <View key={index} style={styles.rulerUnit}><View style={[styles.rulerTick, index % 2 === 0 && styles.rulerTickLong]} /><Text style={styles.rulerNumber}>{index}</Text></View>)}</View>
         <View style={styles.paper}>
-          {preview ? (
-            <>
-              <Text style={styles.previewTitle}>{title.trim() || 'Sem título'}</Text>
-              <View style={styles.paperRule} />
-              {renderFormattedText(content, { fontSize })}
-            </>
-          ) : (
-            <>
-              <TextInput value={title} onChangeText={setTitle} placeholder="Título do documento" placeholderTextColor="#8C95AA" style={styles.titleInput} accessibilityLabel="Título do documento" />
-              <View style={styles.paperRule} />
-              <TextInput ref={editorInputRef} value={content} onChangeText={setContent} selection={selection} onSelectionChange={({ nativeEvent }) => setSelection(nativeEvent.selection)} multiline textAlignVertical="top" placeholder="Escreva, cole e organize seu conhecimento…" placeholderTextColor="#8C95AA" style={[styles.editorInput, { fontSize, lineHeight: Math.round(fontSize * 1.58) }]} accessibilityLabel="Área de escrita do documento" />
-            </>
-          )}
-          {blocks.length ? <View style={styles.blocksArea}><Text style={styles.blocksHeading}>ELEMENTOS INSERIDOS</Text>{blocks.map(block => <RichBlockView key={block.id} block={block} colors={colors} onRemove={() => setBlocks(current => current.filter(item => item.id !== block.id))} onChange={next => setBlocks(current => current.map(item => item.id === next.id ? next : item))} />)}</View> : preview ? null : <View style={styles.paperPrompt}><Text style={styles.paperPromptTitle}>Comece sua escrita</Text><Text style={styles.paperPromptText}>Use os menus acima para formatar trechos ou inserir tabela, imagem, gráfico e outros elementos.</Text></View>}
+          <TextInput value={title} onChangeText={setTitle} placeholder="Título do documento" placeholderTextColor="#8C95AA" style={styles.titleInput} accessibilityLabel="Título do documento" />
+          <View style={styles.paperRule} />
+          <RichTextEditor
+            documentKey={noteId}
+            editorRef={richTextRef}
+            fontSize={fontSize}
+            initialHtml={content}
+            onChange={setContent}
+            onReady={() => { if (contentRef.current) richTextRef.current?.setHtml(contentRef.current); }}
+            placeholder="Escreva, cole e organize seu conhecimento…"
+          />
+          {blocks.length ? <View style={styles.blocksArea}><Text style={styles.blocksHeading}>ELEMENTOS INSERIDOS</Text>{blocks.map(block => <RichBlockView key={block.id} block={block} colors={colors} onRemove={() => setBlocks(current => current.filter(item => item.id !== block.id))} onChange={next => setBlocks(current => current.map(item => item.id === next.id ? next : item))} />)}</View> : plainContent ? null : <View style={styles.paperPrompt}><Text style={styles.paperPromptTitle}>Comece sua escrita</Text><Text style={styles.paperPromptText}>Use os menus acima para formatar trechos ou inserir tabela, imagem, gráfico e outros elementos.</Text></View>}
         </View>
       </ScrollView>
       <View style={styles.statusBar}><Text style={styles.statusBarText}>Página 1</Text><Text style={styles.statusBarText}>{words} {words === 1 ? 'palavra' : 'palavras'}</Text><Text style={styles.statusBarText}>{blocks.length} {blocks.length === 1 ? 'elemento' : 'elementos'}</Text><View style={styles.statusSpacer} /><AcademicPill label="Português (Brasil)" tone="neutral" /><Text style={styles.zoomText}>{fontSize}px</Text></View>
@@ -202,7 +217,6 @@ const styles = StyleSheet.create({
   contextHintTitle: { color: academicColors.ink, fontSize: 13, fontWeight: '900' },
   disabled: { opacity: 0.35 },
   documentTopline: { alignItems: 'center', alignSelf: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10, maxWidth: 850, width: '100%' },
-  editorInput: { color: academicColors.ink, flex: 1, fontSize: 16, minHeight: 340, padding: 0, textAlignVertical: 'top' },
   fill: { flex: 1 },
   folderAction: { marginLeft: 4, minHeight: 30, paddingHorizontal: 6, justifyContent: 'center' },
   folderActionText: { color: academicColors.indigo, fontSize: 11, fontWeight: '900' },
@@ -216,16 +230,6 @@ const styles = StyleSheet.create({
   paperPromptText: { color: academicColors.muted, fontSize: 12, lineHeight: 18, marginTop: 4, textAlign: 'center' },
   paperPromptTitle: { color: academicColors.ink, fontSize: 13, fontWeight: '900' },
   paperRule: { backgroundColor: '#E9ECF4', height: 1, marginBottom: 18 },
-  markupNotice: { alignItems: 'center', alignSelf: 'center', backgroundColor: '#F3F1FF', borderColor: '#DDD4FF', borderRadius: 10, borderWidth: 1, flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginBottom: 10, maxWidth: 850, paddingHorizontal: 12, paddingVertical: 9, width: '100%' },
-  markupNoticeAction: { color: academicColors.violet, fontSize: 11, fontWeight: '900' },
-  markupNoticeText: { color: academicColors.ink, flex: 1, fontSize: 11, lineHeight: 16 },
-  previewButton: { alignItems: 'center', backgroundColor: '#F3F1FF', borderColor: '#DDD4FF', borderRadius: 9, borderWidth: 1, flexDirection: 'row', gap: 5, marginLeft: 8, paddingHorizontal: 10, paddingVertical: 7 },
-  previewButtonActive: { backgroundColor: academicColors.violet, borderColor: academicColors.violet },
-  previewButtonIcon: { color: academicColors.violet, fontSize: 13, fontWeight: '900' },
-  previewButtonIconActive: { color: '#FFFFFF' },
-  previewButtonLabel: { color: academicColors.violet, fontSize: 11, fontWeight: '900' },
-  previewButtonLabelActive: { color: '#FFFFFF' },
-  previewTitle: { color: academicColors.ink, fontSize: 27, fontWeight: '900', lineHeight: 35, marginBottom: 15, padding: 0 },
   removeBlock: { color: academicColors.danger, fontSize: 11, fontWeight: '900' },
   richCaption: { color: academicColors.muted, fontSize: 11, marginTop: 7 },
   richCard: { backgroundColor: '#FBFCFF', borderColor: '#E4E8F2', borderRadius: 12, borderWidth: 1, marginBottom: 10, padding: 13 },

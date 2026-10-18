@@ -14,6 +14,17 @@ describe('exportação de documento', () => {
     expect(buildPlainTextDocument({ title: 'Resumo', content: '', blocks: [{ id: 'chart', type: 'chart', text: 'Progresso', data: JSON.stringify({ labels: ['Teoria'], values: [80] }) }] })).toContain('Teoria: 80');
   });
 
+  it('remove o HTML do editor rico no arquivo de texto', () => {
+    const text = buildPlainTextDocument({
+      title: 'Anotações',
+      content: '<p>Primeiro <b>parágrafo</b>.</p><ul><li>Item</li></ul>',
+    });
+    expect(text).toContain('Primeiro parágrafo.');
+    expect(text).toContain('• Item');
+    expect(text).not.toContain('<p>');
+    expect(text).not.toContain('<b>');
+  });
+
   it('gera um nome de arquivo seguro com extensão de texto', () => {
     expect(documentTextFilename('Trabalho: Banco de Dados!')).toBe('trabalho-banco-de-dados.txt');
   });

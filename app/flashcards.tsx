@@ -25,6 +25,7 @@ import {
   type FlashcardEngine,
 } from '@/lib/flashcards';
 import { useStudyActions, useStudyNotes } from '@/lib/study-store';
+import { richTextToPlainText } from '@/lib/rich-text';
 
 export default function FlashcardsScreen() {
   const colors = useColors();
@@ -46,7 +47,8 @@ export default function FlashcardsScreen() {
       .map(page => page.extractedText ?? '')
       .filter(Boolean)
       .join('\n\n');
-    return (note?.pdfText || pageText || note?.selectedText || note?.content || params.text || '').trim();
+    const noteText = richTextToPlainText(note?.content);
+    return (note?.pdfText || pageText || note?.selectedText || noteText || params.text || '').trim();
   }, [note, params.text]);
 
   const charCount = source.length;

@@ -23,7 +23,7 @@ import {
   type ScrapedCourse,
   type ScrapedTask,
 } from '@/lib/academic-import';
-import { useStudyActions, useStudyEvents, useStudySubjects } from '@/lib/study-store';
+import { type AcademicEventType, useStudyActions, useStudyEvents, useStudySubjects } from '@/lib/study-store';
 
 const STORAGE_KEY = '@estudo-organizado/import-connection';
 
@@ -126,7 +126,6 @@ export default function AcademicImportScreen() {
     let createdTasks = 0;
     let createdEvents = 0;
     let createdSubjects = 0;
-    let skipped = 0;
     const palette = ['#3949AB', '#7C3AED', '#18865B', '#C13B4A', '#B67500', '#0E7490'];
     const subjectIds = new Map<string, string>();
 
@@ -151,12 +150,10 @@ export default function AcademicImportScreen() {
     };
 
     for (const group of groups) {
-      if (!group.course || group.course === 'Ambiente acadêmico') {
-        skipped += group.tasks.length;
-        continue;
-      }
-      const teacher = group.teacher || teacherByCourse.get(group.course.toLowerCase());
-      const { id: subjectId, created } = ensureSubject(group.course, teacher);
+      /** Tarefas sem matéria identificada ficam em "Ambiente acadêmico" — nada é descartado. */
+      const courseName = group.course?.trim() || 'Ambiente acadêmico';
+      const teacher = group.teacher || teacherByCourse.get(courseName.toLowerCase());
+      const { id: subjectId, created } = ensureSubject(courseName, teacher);
       const existingSubject = created ? undefined : subjects.find(subject => subject.id === subjectId);
       const knownTasks = new Set((existingSubject?.tasks ?? []).map(task => task.title.toLowerCase()));
       const knownEvents = new Set(
@@ -180,12 +177,18 @@ export default function AcademicImportScreen() {
           const date = formatImportedDate(task.dueDate);
           const key = `${task.title.toLowerCase()}|${date}`;
           if (!knownEvents.has(key)) {
+            const eventType: AcademicEventType =
+              task.type === 'Prova'
+                ? 'Prova'
+                : task.type === 'Aviso' || task.type === 'Material'
+                  ? 'Outro'
+                  : 'Exercício';
             addEvent({
               title: task.title,
-              type: task.type === 'Prova' ? 'Prova' : 'Exercício',
+              type: eventType,
               subjectId,
               date,
-              notes: task.url ? `Importado de ${task.url}` : 'Importado do ambiente acadêmico.',
+              notes: [task.dateDescription, task.url ? `Importado de ${task.url}` : 'Importado do ambiente acadêmico.'].filter(Boolean).join('\n'),
               color: '#3949AB',
               emoji: '⌁',
             });
@@ -199,8 +202,7 @@ export default function AcademicImportScreen() {
     // Matérias encontradas na página inicial entram em "Sua faculdade" mesmo sem atividades.
     for (const course of courses) ensureSubject(course.name, course.teacher);
 
-    const skippedNote = skipped ? ` ${skipped} atividade(s) sem matéria identificada foram ignoradas — abra a página do curso no Moodle e capture novamente.` : '';
-    setSaved(`${createdSubjects} matéria(s), ${createdTasks} tarefa(s) e ${createdEvents} prazo(s) salvos em Matérias e Planejamento.${skippedNote}`);
+    setSaved(`${createdSubjects} matéria(s), ${createdTasks} tarefa(s) e ${createdEvents} prazo(s) salvos em Matérias e Planejamento.`);
     setStatus('Importação concluída. Abra Planejamento para ver as tarefas por matéria.');
     setPending([]);
     setCourses([]);
@@ -325,7 +327,7 @@ export default function AcademicImportScreen() {
                           {group.teacher ||
                             teacherByCourse.get(group.course.toLowerCase()) ||
                             (group.course === 'Ambiente acadêmico'
-                              ? 'não será importada'
+                              ? 'será importada em Ambiente acadêmico'
                               : 'Professor(a) não informado')}
                         </Text>
                         <Text style={[styles.groupCount, { color: colors.muted }]}>{group.tasks.length}</Text>
@@ -339,12 +341,32 @@ export default function AcademicImportScreen() {
                             <Text numberOfLines={2} style={[styles.itemTitle, { color: colors.foreground }]}>
                               {task.title}
                             </Text>
-                            <Text numberOfLines={1} style={[styles.itemMeta, { color: colors.muted }]}>
-                              {task.dueDate ? formatImportedDate(task.dueDate) : 'Sem prazo definido'}
-                              {task.teacher ? ` · ${task.teacher}` : ''}
+                            <Text numberOfLines={2} style={[styles.itemSubtitle, { color: colors.muted }]}>
+                              {task.dateDescription ||
+                                (task.dueDate ? `Prazo: ${formatImportedDate(task.dueDate)}` : 'Sem prazo definido')}
                             </Text>
+                            {task.dueDate || task.teacher ? (
+                              <Text numberOfLines={1} style={[styles.itemMeta, { color: colors.muted }]}>
+                                {[task.dueDate ? `Data: ${formatImportedDate(task.dueDate)}` : '', task.teacher]
+                                  .filter(Boolean)
+                                  .join(' · ')}
+                              </Text>
+                            ) : null}
                           </View>
-                          <AcademicPill label={task.type} tone={task.type === 'Prova' ? 'danger' : 'neutral'} />
+                          <AcademicPill
+                            label={task.type}
+                            tone={
+                              task.type === 'Prova'
+                                ? 'danger'
+                                : task.type === 'Aviso'
+                                  ? 'warning'
+                                  : task.type === 'Material'
+                                    ? 'info'
+                                    : task.type === 'Exercício'
+                                      ? 'indigo'
+                                      : 'neutral'
+                            }
+                          />
                         </View>
                       ))}
                     </View>
@@ -397,6 +419,7 @@ const styles = StyleSheet.create({
   item: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', gap: 8, paddingVertical: 9 },
   itemCopy: { flex: 1 },
   itemMeta: { fontSize: 11, marginTop: 3 },
+  itemSubtitle: { fontSize: 11, lineHeight: 16, marginTop: 2 },
   itemTitle: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
   listCard: { padding: 12 },
   listScroll: { maxHeight: 150 },
