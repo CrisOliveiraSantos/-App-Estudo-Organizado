@@ -12,11 +12,15 @@ import {
   IMPORT_PROVIDERS,
   categoryForDueDate,
   formatImportedDate,
+  groupScrapedTasks,
+  mergeScrapedCourses,
   mergeScrapedTasks,
+  normalizeScrapedCourses,
   normalizeScrapedTasks,
   parseImportMessage,
   summarizeScrapedTasks,
   type ImportProviderId,
+  type ScrapedCourse,
   type ScrapedTask,
 } from '@/lib/academic-import';
 import { useStudyActions, useStudyEvents, useStudySubjects } from '@/lib/study-store';
@@ -29,11 +33,12 @@ export default function AcademicImportScreen() {
   const colors = useColors();
   const events = useStudyEvents();
   const subjects = useStudySubjects();
-  const { addEvent, addSubject, addSubjectTask } = useStudyActions();
+  const { addEvent, addSubject, addSubjectTask, updateSubject } = useStudyActions();
   const [provider, setProvider] = useState<ImportProviderId>('sigaa');
   const [url, setUrl] = useState<string>(IMPORT_PROVIDERS[0].url);
   const [draft, setDraft] = useState<string>(IMPORT_PROVIDERS[0].url);
   const [pending, setPending] = useState<ScrapedTask[]>([]);
+  const [courses, setCourses] = useState<ScrapedCourse[]>([]);
   const [status, setStatus] = useState('Entre no ambiente, abra a página de tarefas e toque em Capturar.');
   const [progress, setProgress] = useState(0);
   const [reloadKey, setReloadKey] = useState(0);
@@ -57,6 +62,16 @@ export default function AcademicImportScreen() {
   }, []);
 
   const summary = useMemo(() => summarizeScrapedTasks(pending), [pending]);
+  /** Revisão agrupada por matéria (é assim que as disciplinas serão criadas). */
+  const groups = useMemo(() => groupScrapedTasks(pending), [pending]);
+  const teacherByCourse = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const course of courses) if (course.teacher) map.set(course.name.toLowerCase(), course.teacher);
+    for (const task of pending) {
+      if (task.teacher && !map.has(task.course.toLowerCase())) map.set(task.course.toLowerCase(), task.teacher);
+    }
+    return map;
+  }, [courses, pending]);
 
   const chooseProvider = (next: ImportProviderId) => {
     const preset = IMPORT_PROVIDERS.find(item => item.id === next) ?? IMPORT_PROVIDERS[0];
@@ -83,34 +98,73 @@ export default function AcademicImportScreen() {
     const payload = parseImportMessage(raw);
     if (!payload) return;
     const found = normalizeScrapedTasks(payload.items);
-    if (!found.length) {
-      setStatus('Nenhuma atividade reconhecida nesta página. Abra a lista de tarefas e toque em Capturar de novo.');
+    const foundCourses = normalizeScrapedCourses(payload.courses);
+    if (foundCourses.length) setCourses(current => mergeScrapedCourses(current, foundCourses));
+    if (found.length) setPending(current => mergeScrapedTasks(current, found));
+    if (payload.pageTitle) setPageTitle(payload.pageTitle);
+
+    if (!found.length && !foundCourses.length) {
+      if (!payload.partial) {
+        setStatus('Nenhuma atividade reconhecida nesta página. Abra a lista de tarefas e toque em Capturar de novo.');
+      }
       return;
     }
-    setPending(current => mergeScrapedTasks(current, found));
-    setPageTitle(payload.pageTitle ?? '');
-    setStatus(`${found.length} atividade(s) encontradas. Revise a lista e salve o que quiser manter.`);
+    if (payload.partial) {
+      setStatus(`Lendo as matérias do Moodle… ${found.length} atividade(s) nesta etapa.`);
+      return;
+    }
+    if (!found.length) {
+      setStatus(`${foundCourses.length} matéria(s) encontradas, mas nenhuma atividade com data. Abra cada matéria e capture de novo.`);
+      return;
+    }
+    setStatus(`${found.length} atividade(s) encontradas em ${foundCourses.length || 'várias'} matéria(s). Revise a lista e salve o que quiser manter.`);
     setShowList(true);
   };
 
   const save = () => {
-    if (!pending.length) return;
-    const byCourse = new Map<string, ScrapedTask[]>();
-    for (const task of pending) {
-      byCourse.set(task.course, [...(byCourse.get(task.course) ?? []), task]);
-    }
+    if (!pending.length && !courses.length) return;
     let createdTasks = 0;
     let createdEvents = 0;
-    byCourse.forEach((tasks, course) => {
-      const existingSubject = subjects.find(subject => subject.name.toLowerCase() === course.toLowerCase());
-      const subjectId = existingSubject?.id ?? addSubject(course, 'SIGAA / Moodle', '⌁', '#3949AB');
+    let createdSubjects = 0;
+    let skipped = 0;
+    const palette = ['#3949AB', '#7C3AED', '#18865B', '#C13B4A', '#B67500', '#0E7490'];
+    const subjectIds = new Map<string, string>();
+
+    /** Uma matéria por curso — nunca mais uma disciplina "Página inicial". */
+    const ensureSubject = (name: string, teacher?: string) => {
+      const key = name.trim().toLowerCase();
+      const known = subjectIds.get(key);
+      if (known) return { id: known, created: false };
+      const existing = subjects.find(subject => subject.name.trim().toLowerCase() === key);
+      if (existing) {
+        subjectIds.set(key, existing.id);
+        /** Completa o professor de uma matéria importada antes sem esse dado. */
+        if (teacher?.trim() && /^(SIGAA \/ Moodle|Moodle \/ AVA|Professor(\(a\))? não informado)$/i.test(existing.professor)) {
+          updateSubject(existing.id, { professor: teacher.trim() });
+        }
+        return { id: existing.id, created: false };
+      }
+      const id = addSubject(name, teacher?.trim() || 'Professor(a) não informado', '📚', palette[subjectIds.size % palette.length]);
+      subjectIds.set(key, id);
+      createdSubjects += 1;
+      return { id, created: true };
+    };
+
+    for (const group of groups) {
+      if (!group.course || group.course === 'Ambiente acadêmico') {
+        skipped += group.tasks.length;
+        continue;
+      }
+      const teacher = group.teacher || teacherByCourse.get(group.course.toLowerCase());
+      const { id: subjectId, created } = ensureSubject(group.course, teacher);
+      const existingSubject = created ? undefined : subjects.find(subject => subject.id === subjectId);
       const knownTasks = new Set((existingSubject?.tasks ?? []).map(task => task.title.toLowerCase()));
       const knownEvents = new Set(
         events
           .filter(event => event.subjectId === subjectId)
           .map(event => `${event.title.toLowerCase()}|${event.date}`),
       );
-      for (const task of tasks) {
+      for (const task of group.tasks) {
         if (!knownTasks.has(task.title.toLowerCase())) {
           addSubjectTask(
             subjectId,
@@ -140,15 +194,21 @@ export default function AcademicImportScreen() {
           }
         }
       }
-    });
-    setSaved(`${createdTasks} tarefa(s) e ${createdEvents} prazo(s) salvos em Planejamento e Matérias.`);
+    }
+
+    // Matérias encontradas na página inicial entram em "Sua faculdade" mesmo sem atividades.
+    for (const course of courses) ensureSubject(course.name, course.teacher);
+
+    const skippedNote = skipped ? ` ${skipped} atividade(s) sem matéria identificada foram ignoradas — abra a página do curso no Moodle e capture novamente.` : '';
+    setSaved(`${createdSubjects} matéria(s), ${createdTasks} tarefa(s) e ${createdEvents} prazo(s) salvos em Matérias e Planejamento.${skippedNote}`);
     setStatus('Importação concluída. Abra Planejamento para ver as tarefas por matéria.');
     setPending([]);
+    setCourses([]);
     setShowList(false);
   };
 
   const toggleList = () => {
-    if (pending.length) setShowList(value => !value);
+    if (pending.length || courses.length) setShowList(value => !value);
   };
 
   return (
@@ -213,14 +273,14 @@ export default function AcademicImportScreen() {
             <IconSymbol name="doc.text.fill" size={17} color={colors.primary} />
             <Text style={[styles.captureLabel, { color: colors.foreground }]}>Capturar atividades</Text>
           </Pressable>
-          {pending.length ? (
+          {pending.length || courses.length ? (
             <Pressable
               accessibilityRole="button"
               onPress={toggleList}
               style={[styles.captureButton, { borderColor: colors.border }]}
             >
               <Text style={[styles.captureLabel, { color: colors.foreground }]}>
-                {showList ? 'Ocultar lista' : `Ver lista (${pending.length})`}
+                {showList ? 'Ocultar lista' : `Ver lista (${pending.length || courses.length})`}
               </Text>
             </Pressable>
           ) : null}
@@ -245,37 +305,62 @@ export default function AcademicImportScreen() {
       <ScrollView contentContainerStyle={styles.footer}>
         <Text style={[styles.status, { color: colors.muted }]}>{status}</Text>
         {pageTitle ? <Text style={[styles.pageTitle, { color: colors.muted }]}>Página: {pageTitle}</Text> : null}
-        {pending.length ? (
+        {pending.length || courses.length ? (
           <>
             <View style={styles.summaryRow}>
               <AcademicPill label={`${summary.total} atividades`} tone="indigo" />
               <AcademicPill label={`${summary.dated} com prazo`} tone="success" />
-              <AcademicPill label={`${summary.courses.length} disciplina(s)`} tone="neutral" />
+              <AcademicPill label={`${courses.length || summary.courses.length} matéria(s)`} tone="neutral" />
             </View>
-            {showList ? (
+            {showList && groups.length ? (
               <AcademicCard style={styles.listCard}>
                 <ScrollView nestedScrollEnabled style={styles.listScroll}>
-                  {pending.map(task => (
-                    <View
-                      key={`${task.course}-${task.title}`}
-                      style={[styles.item, { borderBottomColor: colors.border }]}
-                    >
-                      <View style={styles.itemCopy}>
-                        <Text numberOfLines={2} style={[styles.itemTitle, { color: colors.foreground }]}>
-                          {task.title}
+                  {groups.map(group => (
+                    <View key={`group-${group.course}`} style={styles.group}>
+                      <View style={styles.groupHeader}>
+                        <Text numberOfLines={1} style={[styles.groupName, { color: colors.foreground }]}>
+                          {group.course === 'Ambiente acadêmico' ? 'Sem matéria identificada' : group.course}
                         </Text>
-                        <Text numberOfLines={1} style={[styles.itemMeta, { color: colors.muted }]}>
-                          {task.course}
-                          {task.dueDate ? ` · ${formatImportedDate(task.dueDate)}` : ''}
+                        <Text numberOfLines={1} style={[styles.groupTeacher, { color: colors.muted }]}>
+                          {group.teacher ||
+                            teacherByCourse.get(group.course.toLowerCase()) ||
+                            (group.course === 'Ambiente acadêmico'
+                              ? 'não será importada'
+                              : 'Professor(a) não informado')}
                         </Text>
+                        <Text style={[styles.groupCount, { color: colors.muted }]}>{group.tasks.length}</Text>
                       </View>
-                      <AcademicPill label={task.type} tone={task.type === 'Prova' ? 'danger' : 'neutral'} />
+                      {group.tasks.map((task, index) => (
+                        <View
+                          key={`${group.course}-${task.title}-${index}`}
+                          style={[styles.item, { borderBottomColor: colors.border }]}
+                        >
+                          <View style={styles.itemCopy}>
+                            <Text numberOfLines={2} style={[styles.itemTitle, { color: colors.foreground }]}>
+                              {task.title}
+                            </Text>
+                            <Text numberOfLines={1} style={[styles.itemMeta, { color: colors.muted }]}>
+                              {task.dueDate ? formatImportedDate(task.dueDate) : 'Sem prazo definido'}
+                              {task.teacher ? ` · ${task.teacher}` : ''}
+                            </Text>
+                          </View>
+                          <AcademicPill label={task.type} tone={task.type === 'Prova' ? 'danger' : 'neutral'} />
+                        </View>
+                      ))}
                     </View>
                   ))}
                 </ScrollView>
               </AcademicCard>
             ) : null}
-            <AcademicButton label={`Salvar ${pending.length} atividade(s)`} onPress={save} compact />
+            <AcademicButton
+              label={
+                pending.length
+                  ? `Salvar ${pending.length} atividade(s) em ${groups.length} matéria(s)`
+                  : `Criar ${courses.length} matéria(s) em Sua faculdade`
+              }
+              onPress={save}
+              compact
+            />
           </>
         ) : null}
         {saved ? <Text style={[styles.saved, { color: colors.success }]}>{saved}</Text> : null}
@@ -301,6 +386,11 @@ const styles = StyleSheet.create({
   chips: { flexDirection: 'row', gap: 8 },
   controls: { gap: 9, paddingHorizontal: 14, paddingTop: 12 },
   footer: { gap: 10, padding: 14, paddingBottom: 26 },
+  group: { marginBottom: 4 },
+  groupCount: { fontSize: 11, fontWeight: '800' },
+  groupHeader: { alignItems: 'center', flexDirection: 'row', gap: 6, paddingBottom: 4, paddingTop: 8 },
+  groupName: { flexShrink: 1, fontSize: 12, fontWeight: '900' },
+  groupTeacher: { flex: 1, fontSize: 10 },
   header: { alignItems: 'center', borderBottomWidth: 1, flexDirection: 'row', gap: 8, paddingHorizontal: 14, paddingVertical: 10 },
   headerCopy: { flex: 1 },
   hint: { fontSize: 11, lineHeight: 16 },

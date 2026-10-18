@@ -74,9 +74,29 @@ export const academicRouter = router({
       const site = await callMoodle(input.baseUrl, input.token, 'core_webservice_get_site_info') as { userid?: number; sitename?: string };
       if (!site.userid) throw new TRPCError({ code: 'BAD_GATEWAY', message: 'O Moodle não informou o identificador da conta autorizada.' });
       const coursePayload = await callMoodle(input.baseUrl, input.token, 'core_enrol_get_users_courses', { userid: String(site.userid) }) as unknown as { id?: number; fullname?: string; shortname?: string }[];
-      const courses = Array.isArray(coursePayload) ? coursePayload.filter(course => course.id).map(course => ({ id: course.id as number, title: course.fullname ?? course.shortname ?? 'Disciplina sem nome', code: course.shortname ?? '' })) : [];
+      const courses = Array.isArray(coursePayload) ? coursePayload.filter(course => course.id).map(course => ({ id: course.id as number, title: course.fullname ?? course.shortname ?? 'Disciplina sem nome', code: course.shortname ?? '', teacher: '' })) : [];
       const courseParams = Object.fromEntries(courses.slice(0, 30).flatMap((course, index) => [[`courseids[${index}]`, String(course.id)]]));
       const warnings: string[] = [];
+      /**
+       * Nomes dos professores: `core_course_get_courses_by_field` devolve os
+       * contatos do curso. É opcional — se a instituição bloquear a função,
+       * seguimos sem os nomes em vez de falhar a sincronização inteira.
+       */
+      try {
+        const details = await callMoodle(input.baseUrl, input.token, 'core_course_get_courses_by_field', {
+          field: 'ids',
+          value: courses.slice(0, 30).map(course => course.id).join(','),
+        }) as { courses?: { id?: number; contacts?: { fullname?: string }[] }[] };
+        const teachers = new Map(
+          (details.courses ?? []).map(course => [
+            course.id,
+            (course.contacts ?? []).map(contact => contact.fullname).filter(Boolean).join(', '),
+          ]),
+        );
+        for (const course of courses) course.teacher = teachers.get(course.id) ?? '';
+      } catch {
+        warnings.push('Nomes de professores não habilitados no Web Service');
+      }
       const contentItems: { courseId: number; courseTitle: string; section: string; title: string; description: string; url: string; type: string; files: { name: string; url: string; mime: string; type: string }[]; youtubeUrl: string }[] = [];
       for (const course of courses.slice(0, 30)) {
         try {
@@ -108,7 +128,22 @@ export const academicRouter = router({
       const site = await callMoodle(input.baseUrl, input.token, 'core_webservice_get_site_info') as { userid?: number; sitename?: string };
       if (!site.userid) throw new TRPCError({ code: 'BAD_GATEWAY', message: 'O Moodle não informou o identificador da conta autorizada.' });
       const payload = await callMoodle(input.baseUrl, input.token, 'core_enrol_get_users_courses', { userid: String(site.userid) }) as unknown as { id?: number; fullname?: string; shortname?: string; summary?: string }[];
-      const courses = Array.isArray(payload) ? payload.map(course => ({ id: course.id, title: course.fullname ?? course.shortname ?? 'Disciplina sem nome', code: course.shortname ?? '', summary: course.summary ?? '' })).filter(course => course.id) : [];
+      let teachers = new Map<number | undefined, string>();
+      try {
+        const details = await callMoodle(input.baseUrl, input.token, 'core_course_get_courses_by_field', {
+          field: 'ids',
+          value: (Array.isArray(payload) ? payload : []).map(course => course.id).filter(Boolean).slice(0, 30).join(','),
+        }) as { courses?: { id?: number; contacts?: { fullname?: string }[] }[] };
+        teachers = new Map(
+          (details.courses ?? []).map(course => [
+            course.id,
+            (course.contacts ?? []).map(contact => contact.fullname).filter(Boolean).join(', '),
+          ]),
+        );
+      } catch {
+        teachers = new Map();
+      }
+      const courses = Array.isArray(payload) ? payload.map(course => ({ id: course.id, title: course.fullname ?? course.shortname ?? 'Disciplina sem nome', code: course.shortname ?? '', summary: course.summary ?? '', teacher: teachers.get(course.id) ?? '' })).filter(course => course.id) : [];
       return { ok: true, siteName: site.sitename ?? 'Moodle institucional', courses };
     } catch (error) {
       if (error instanceof TRPCError) throw error;

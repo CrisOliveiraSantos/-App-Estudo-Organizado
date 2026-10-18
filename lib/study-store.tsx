@@ -130,8 +130,18 @@ function useSlice<T>(context: React.Context<T | null>, hookName: string): T {
 }
 
 
-/** Sequência para ids de matéria criados no mesmo milissegundo (importação em lote). */
-let subjectSeq = 0;
+let idSequence = 0;
+
+/**
+ * IDs únicos mesmo quando várias entidades são criadas no mesmo milissegundo
+ * (a importação do Moodle cria tarefas em sequência). Isso evita chaves
+ * repetidas nas listas (`Children with the same key`).
+ */
+function createId(prefix: string): string {
+  idSequence += 1;
+  return `${prefix}-${Date.now()}-${idSequence}`;
+}
+
 
 export function StudyProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<StudyState>(initialState);
@@ -304,28 +314,28 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
    * (leitura sempre atual). Assim `useStudyActions()` não re-renderiza nada.
    */
   const actions = useMemo<StudyActions>(() => ({
-    createNote: (title = 'Novo documento', folder = 'Sem pasta') => { const id = `note-${Date.now()}`; setState(s => ({ ...s, notes: [{ id, title, content: '', folder, updatedAt: 'Agora', kind: 'note', blocks: [] }, ...s.notes] })); return id; },
-    duplicateNote: noteId => { const source = stateRef.current.notes.find(note => note.id === noteId); if (!source) return null; const id = `note-${Date.now()}`; setState(s => ({ ...s, notes: [{ ...source, id, title: `${source.title} — cópia`, updatedAt: 'Agora', blocks: source.blocks?.map(block => ({ ...block, id: `${block.id}-${Date.now()}` })) }, ...s.notes] })); return id; },
+    createNote: (title = 'Novo documento', folder = 'Sem pasta') => { const id = createId('note'); setState(s => ({ ...s, notes: [{ id, title, content: '', folder, updatedAt: 'Agora', kind: 'note', blocks: [] }, ...s.notes] })); return id; },
+    duplicateNote: noteId => { const source = stateRef.current.notes.find(note => note.id === noteId); if (!source) return null; const id = createId('note'); setState(s => ({ ...s, notes: [{ ...source, id, title: `${source.title} — cópia`, updatedAt: 'Agora', blocks: source.blocks?.map(block => ({ ...block, id: createId('block') })) }, ...s.notes] })); return id; },
     toggleEvent: eventId => setState(s => ({ ...s, events: s.events.map(event => event.id === eventId ? { ...event, done: !event.done } : event) })),
-    addSubject: (name, professor, emoji = '✦', color = '#3949AB') => { const id = `subject-${Date.now()}-${subjectSeq += 1}`; setState(s => ({ ...s, subjects: [...s.subjects, { id, name, professor, color, emoji }] })); return id; },
+    addSubject: (name, professor, emoji = '✦', color = '#3949AB') => { const id = createId('subject'); setState(s => ({ ...s, subjects: [...s.subjects, { id, name, professor, color, emoji }] })); return id; },
     updateSubject: (subjectId, changes) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, ...changes } : subject) })),
     deleteSubject: subjectId => setState(s => ({ ...s, subjects: s.subjects.filter(subject => subject.id !== subjectId), events: s.events.map(event => event.subjectId === subjectId ? { ...event, subjectId: undefined } : event) })),
-    addSubjectTask: (subjectId, title, priority, deadline, category) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: [...(subject.tasks ?? []), { id: `subject-task-${Date.now()}`, title, priority, deadline, category, done: false }] } : subject) })),
+    addSubjectTask: (subjectId, title, priority, deadline, category) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: [...(subject.tasks ?? []), { id: createId('subject-task'), title, priority, deadline, category, done: false }] } : subject) })),
     toggleSubjectTask: (subjectId, taskId) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: (subject.tasks ?? []).map(task => task.id === taskId ? { ...task, done: !task.done } : task) } : subject) })),
-    addEvent: event => setState(s => ({ ...s, events: [{ ...event, id: Date.now().toString(), done: false }, ...s.events] })),
+    addEvent: event => setState(s => ({ ...s, events: [{ ...event, id: createId('event'), done: false }, ...s.events] })),
     updateEvent: (eventId, changes) => setState(s => ({ ...s, events: s.events.map(event => event.id === eventId ? { ...event, ...changes } : event) })),
     deleteEvent: eventId => setState(s => ({ ...s, events: s.events.filter(event => event.id !== eventId) })),
-    addChatMessage: (text, room) => setState(s => ({ ...s, chatMessages: [...s.chatMessages, { id: Date.now().toString(), author: 'Cris', text, room, createdAt: 'Agora' }] })),
+    addChatMessage: (text, room) => setState(s => ({ ...s, chatMessages: [...s.chatMessages, { id: createId('chat'), author: 'Cris', text, room, createdAt: 'Agora' }] })),
     toggleTask: (goalId, taskId) => setState(s => ({ ...s, goals: s.goals.map(goal => goal.id === goalId ? { ...goal, tasks: goal.tasks.map(task => task.id === taskId ? { ...task, done: !task.done } : task) } : goal) })),
-    addGoal: (title, description, deadline) => setState(s => ({ ...s, goals: [{ id: Date.now().toString(), title, description, deadline, tasks: [] }, ...s.goals] })),
-    addTask: (goalId, title, priority, deadline, category) => setState(s => ({ ...s, goals: s.goals.map(goal => goal.id === goalId ? { ...goal, tasks: [...goal.tasks, { id: Date.now().toString(), title, priority, deadline, category, done: false }] } : goal) })),
+    addGoal: (title, description, deadline) => setState(s => ({ ...s, goals: [{ id: createId('goal'), title, description, deadline, tasks: [] }, ...s.goals] })),
+    addTask: (goalId, title, priority, deadline, category) => setState(s => ({ ...s, goals: s.goals.map(goal => goal.id === goalId ? { ...goal, tasks: [...goal.tasks, { id: createId('task'), title, priority, deadline, category, done: false }] } : goal) })),
     saveNote: note => setState(s => ({ ...s, notes: [{ ...note, updatedAt: 'Agora' }, ...s.notes.filter(entry => entry.id !== note.id)] })),
     deleteNote: noteId => setState(s => ({ ...s, notes: s.notes.filter(note => note.id !== noteId) })),
     renameNote: (noteId, title) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, title, updatedAt: 'Agora' } : note) })),
     moveNote: (noteId, folder) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, folder, updatedAt: 'Agora' } : note) })),
     toggleNoteFavorite: noteId => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, favorite: !note.favorite, updatedAt: 'Agora' } : note) })),
-    addFolder: name => setState(s => ({ ...s, folders: [...s.folders, { id: Date.now().toString(), name }] })),
-    addPdf: (name, uri) => setState(s => ({ ...s, notes: [{ id: Date.now().toString(), title: name, content: `Material importado localmente.\nArquivo: ${uri}`, folder: 'Sem pasta', updatedAt: 'Agora', kind: 'pdf', uri, pdfPages: [{ id: `${Date.now()}-1`, pageNumber: 1, imageUri: undefined }] }, ...s.notes] })),
+    addFolder: name => setState(s => ({ ...s, folders: [...s.folders, { id: createId('folder'), name }] })),
+    addPdf: (name, uri) => setState(s => ({ ...s, notes: [{ id: createId('note'), title: name, content: `Material importado localmente.\nArquivo: ${uri}`, folder: 'Sem pasta', updatedAt: 'Agora', kind: 'pdf', uri, pdfPages: [{ id: createId('page'), pageNumber: 1, imageUri: undefined }] }, ...s.notes] })),
     appendPdfPage: (noteId, page) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, updatedAt: 'Agora', content: `${note.content}\n\nPágina ${page.pageNumber}\n${page.extractedText ?? ''}`, pdfPages: [...(note.pdfPages ?? []), page] } : note) })),
     setPdfText: (noteId, text) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, pdfText: text.slice(0, 120_000) } : note) })),
   }), []);

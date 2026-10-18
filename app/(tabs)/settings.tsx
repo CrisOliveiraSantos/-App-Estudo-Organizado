@@ -13,6 +13,7 @@ import { SchemeColors, type ColorScheme } from '@/constants/theme';
 import { trpc } from '@/lib/trpc';
 import * as WebBrowser from 'expo-web-browser';
 import { clearAcademicToken, readAcademicToken, saveAcademicToken } from '@/lib/academic-credentials';
+import { cleanActivityTitle } from '@/lib/academic-import';
 import { neonFonts } from '@/lib/theme-runtime';
 
 type SettingsKey = 'profile' | 'account' | 'appearance' | 'notifications' | 'connections' | 'ai' | 'editor' | 'studies' | 'privacy' | 'data' | 'about';
@@ -149,10 +150,9 @@ function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }
   const getCourseContents = trpc.academic.getCourseContents.useMutation();
   const syncAcademic = trpc.academic.syncAcademic.useMutation();
   const subjects = useStudySubjects();
-  const goals = useStudyGoals();
   const events = useStudyEvents();
   const notes = useStudyNotes();
-  const { addSubject, createNote, saveNote, addEvent, addTask } = useStudyActions();
+  const { addSubject, createNote, saveNote, addEvent, addSubjectTask } = useStudyActions();
   useEffect(() => {
     AsyncStorage.getItem('@estudo-organizado/academic-connection').then(async raw => {
       if (!raw) return;
@@ -189,13 +189,42 @@ function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }
       await saveAcademicToken(token);
       const result = await syncAcademic.mutateAsync({ baseUrl: url.trim(), token: token.trim() });
       const contents = result.contentItems as MoodleContentItem[];
-      const existingSubjects = new Set(subjects.map(subject => subject.name.toLowerCase()));
-      result.courses.filter(course => !existingSubjects.has(course.title.toLowerCase())).forEach(course => addSubject(course.title, 'Moodle / AVA', '⌘', '#3949AB'));
+      const courses = result.courses as { id?: number; title: string; code?: string; teacher?: string }[];
+      /** Uma matéria por curso, com o nome do professor quando o Moodle informa. */
+      const subjectIds = new Map<string, string>();
+      const ensureSubject = (title: string, teacher?: string) => {
+        const key = title.trim().toLowerCase();
+        const known = subjectIds.get(key);
+        if (known) return known;
+        const existing = subjects.find(subject => subject.name.trim().toLowerCase() === key);
+        const id = existing?.id ?? addSubject(title, teacher?.trim() || 'Moodle / AVA', '⌘', '#3949AB');
+        subjectIds.set(key, id);
+        return id;
+      };
+      courses.forEach(course => ensureSubject(course.title, course.teacher));
+      const courseById = new Map(courses.filter(course => course.id).map(course => [course.id as number, course]));
       const existingEvents = new Set(events.map(event => event.title.toLowerCase()));
       result.calendar.filter(item => item.name && !existingEvents.has(item.name.toLowerCase())).forEach(item => addEvent({ title: item.name!, type: 'Outro', date: item.timesort ? new Date(item.timesort * 1000).toLocaleDateString('pt-BR') : 'A definir', notes: item.description ?? '', color: '#3949AB', emoji: '⌁' }));
-      const targetGoal = goals[0];
-      const existingTasks = new Set(goals.flatMap(goal => goal.tasks).map(task => task.title.toLowerCase()));
-      if (targetGoal) result.assignments.filter(item => item.name && !existingTasks.has(item.name.toLowerCase())).forEach(item => addTask(targetGoal.id, item.name!, 'Alta', item.duedate ? new Date(item.duedate * 1000).toLocaleDateString('pt-BR') : undefined, 'Próximas'));
+      /**
+       * Tarefas de envio entram na matéria do curso (antes iam todas para a
+       * primeira meta). Títulos são limpos do "1 evento, segunda-feira…".
+       */
+      const existingTasks = new Set(subjects.flatMap(subject => subject.tasks ?? []).map(task => task.title.toLowerCase()));
+      result.assignments
+        .filter(item => item.name && !existingTasks.has(item.name.toLowerCase()))
+        .forEach(item => {
+          const course = (item.course ? courseById.get(item.course) : undefined) ?? (courses.length === 1 ? courses[0] : undefined);
+          if (!course) return;
+          const subjectId = ensureSubject(course.title, course.teacher);
+          addSubjectTask(
+            subjectId,
+            cleanActivityTitle(item.name!),
+            'Alta',
+            item.duedate ? new Date(item.duedate * 1000).toLocaleDateString('pt-BR') : undefined,
+            'Próximas',
+          );
+          existingTasks.add(item.name!.toLowerCase());
+        });
       const existingNotes = new Set(notes.map(note => note.title.toLowerCase()));
       result.forums.filter(item => item.name && !existingNotes.has(`[moodle] ${item.name}`.toLowerCase())).forEach(item => { const noteId = createNote(`[Moodle] ${item.name}`, 'Moodle / AVA'); saveNote({ id: noteId, title: `[Moodle] ${item.name}`, content: item.intro ?? 'Aviso ou fórum importado do Moodle.', folder: 'Moodle / AVA', updatedAt: 'Agora', kind: 'note', blocks: [{ id: `moodle-forum-${Date.now()}-${item.id ?? item.name}`, type: 'paragraph', text: item.intro ?? item.name! }] }); });
       contents.filter(item => item.title && !existingNotes.has(`[moodle] ${item.courseTitle} — ${item.title}`.toLowerCase())).forEach(item => { const source = item.youtubeUrl || item.url || item.files?.find(file => file.url)?.url || ''; const content = `${item.description ? `${item.description}\\n\\n` : ''}${source ? `Fonte autorizada no Moodle: ${source}` : 'Conteúdo textual importado do Moodle.'}`; const noteId = createNote(`[Moodle] ${item.courseTitle} — ${item.title}`, 'Moodle / AVA'); saveNote({ id: noteId, title: `[Moodle] ${item.courseTitle} — ${item.title}`, content, folder: 'Moodle / AVA', updatedAt: 'Agora', kind: item.type === 'pdf' ? 'pdf' : 'note', uri: source || undefined, blocks: [{ id: `moodle-content-${Date.now()}-${item.courseId}-${item.title}`, type: item.type === 'pdf' ? 'quote' : 'paragraph', text: item.description || item.title }] }); });

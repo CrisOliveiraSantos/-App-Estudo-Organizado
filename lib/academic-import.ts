@@ -16,16 +16,35 @@ export type ScrapedTaskType = 'Tarefa' | 'Prova' | 'Material' | 'Aviso';
 export type ScrapedTask = {
   course: string;
   dueDate?: string;
+  /** Nome do(a) professor(a) quando a página do curso informa. */
+  teacher?: string;
   title: string;
   type: ScrapedTaskType;
   url?: string;
 };
 
+/** Matéria encontrada na página inicial do Moodle (mesmo sem tarefas). */
+export type ScrapedCourse = {
+  id?: string;
+  name: string;
+  teacher?: string;
+  url?: string;
+};
+
 export type ScrapePayload = {
   items: unknown[];
+  courses?: unknown[];
+  /** Verdadeiro quando o script ainda está lendo outras matérias. */
+  partial?: boolean;
   pageTitle?: string;
   source?: string;
   url?: string;
+};
+
+export type ScrapedCourseGroup = {
+  course: string;
+  teacher?: string;
+  tasks: ScrapedTask[];
 };
 
 export const IMPORT_SOURCE = 'estudo-organizado-import';
@@ -50,76 +69,260 @@ export const IMPORT_PROVIDERS = [
 export type ImportProviderId = (typeof IMPORT_PROVIDERS)[number]['id'];
 
 /**
- * Script injetado na página. Percorre os padrões de SIGAA (tabelas de tarefas)
- * e Moodle (`li.activity`, eventos do calendário), monta uma lista única e
- * envia para o app. Devolve a quantidade encontrada (o Android ignora o
- * retorno, mas ajuda em depuração no console).
+ * Script injetado na página. Ele identifica a matéria da página atual
+ * (breadcrumb/cabeçalho) e, quando está no painel do Moodle, percorre os links
+ * dos cursos, baixa cada página (`fetch` na mesma sessão já autenticada) e lê
+ * as atividades com prazo e professor. Nada sai do aparelho: o resultado volta
+ * por `postMessage` para o app, que cria as matérias e vincula as tarefas.
  */
 export function buildScrapeScript(): string {
   return `(function () {
   var SOURCE = ${JSON.stringify(IMPORT_SOURCE)};
   var MAX = ${IMPORT_MAX_ITEMS};
+  var MAX_COURSES = 12;
+  var SCAN_TIMEOUT = 25000;
+  /** Cada injeção invalida a anterior: uma leitura atrasada não sobrescreve a nova. */
+  var runId = (window.__estudoImportRun = (window.__estudoImportRun || 0) + 1);
   function clean(value) { return String(value == null ? '' : value).replace(/\\s+/g, ' ').trim(); }
+  function textOf(node) { return node ? clean(node.textContent) : ''; }
   function abs(href) { try { return href ? new URL(href, location.href).href : ''; } catch (e) { return ''; } }
-  function courseOf(node) {
-    var box = node.closest ? node.closest('.course, .course-content, [data-courseid], [class*=disciplina], [class*=Disciplina]') : null;
-    if (box) {
-      var heading = box.querySelector('h1, h2, h3, .course-title, .tituloDisciplina');
-      var text = clean(heading ? heading.textContent : '');
-      if (text) return text;
+  function genericName(value) {
+    var name = clean(value).replace(/\\s*[|·]\\s*(moodle|ava|sigaa).*$/i, '').replace(/\\s*[-–]\\s*(moodle|ava|sigaa).*$/i, '').trim();
+    if (!name) return '';
+    if (/^(p[áa]gina inicial|in[ií]cio|home|meu painel|painel|painel do usu[áa]rio|dashboard|meus cursos|calend[áa]rio|tarefas|atividades|notas|perfil|mensagens|ava|moodle|sigaa|ambiente acad[êe]mico|disciplinas)$/i.test(name)) return '';
+    return name;
+  }
+  function cleanTitle(value) {
+    return clean(value)
+      .replace(/\\s*(Editar|Excluir|Apagar|Enviar|Corrigir|Concluir)\\s*$/gi, '')
+      .replace(/\\s*[-–—·|]\\s*(Vencimento|Prazo|Data de entrega|Entrega|Due)\\b[\\s\\S]*$/gi, '')
+      .replace(/\\b(Vencimento|Prazo|Data de entrega|Entrega|Due)\\s*:[\\s\\S]*$/gi, '')
+      .replace(/\\b\\d+\\s+eventos?\\b[\\s\\S]*$/gi, '')
+      .replace(/[,;:·|-]?\\s*(segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)(-feira)?\\b[\\s\\S]*$/gi, '')
+      .replace(/\\s+/g, ' ')
+      .replace(/^[\\s\\-–—·|,;:]+/, '')
+      .replace(/[\\s\\-–—·|,;:]+$/, '')
+      .replace(/[\\s(\\[]+$/, '');
+  }
+  function dateText(value) {
+    var text = clean(value);
+    var iso = text.match(/\\d{4}-\\d{2}-\\d{2}/);
+    if (iso) return iso[0];
+    var numeric = text.match(/\\b\\d{1,2}[\\/.]\\d{1,2}(?:[\\/.]\\d{2,4})?\\b/);
+    if (numeric) return numeric[0];
+    var textual = text.match(/\\b\\d{1,2}\\s*(de\\s+)?(jan|fev|mar|abr|mai|jun|jul|ago|set|out|nov|dez)[a-zç]*\\.?(\\s*(de\\s+)?\\d{2,4})?/i);
+    return textual ? textual[0] : '';
+  }
+  function activityDate(node) {
+    var regions = node.querySelectorAll('.activity-dates, .activity-information, .availabilityinfo, .badge, .date, time, .text-nowrap');
+    for (var i = 0; i < regions.length; i++) {
+      var attribute = regions[i].getAttribute('datetime') || '';
+      var found = dateText(attribute) || dateText(textOf(regions[i]));
+      if (found) return found;
     }
-    var page = clean(document.title).split(' - ')[0];
-    return page || 'Ambiente acadêmico';
+    return dateText(textOf(node));
   }
-  function dateOf(text) {
-    var match = String(text).match(/\\b(\\d{1,2})[\\/.](\\d{1,2})(?:[\\/.](\\d{2,4}))?\\b/);
-    if (!match) return '';
-    var year = match[3] || String(new Date().getFullYear());
-    if (String(year).length === 2) year = '20' + year;
-    return String(year) + '-' + ('0' + match[2]).slice(-2) + '-' + ('0' + match[1]).slice(-2);
+  function activityTitle(node) {
+    var target = node.querySelector('.activityname a, .activityname, .instancename, .tarefa-titulo, .event-name, .eventname, h3, h4, strong');
+    var raw = target ? textOf(target) : '';
+    if (!raw && node.getAttribute) raw = node.getAttribute('data-activityname') || '';
+    if (!raw) raw = textOf(node);
+    return cleanTitle(raw);
   }
-  function titleOf(node) {
-    var target = node.querySelector ? node.querySelector('.instancename, .activityname, .tarefa-titulo, .title, strong, b, td') : null;
-    var text = clean((target || node).textContent);
-    return text.replace(/\\s*(Editar|Excluir|Enviar|Corrigir|Ver|Acessar)\\s*$/i, '');
+  function teacherName(value) {
+    var match = String(value || '').match(/(Professor(?:a|es|as)?|Docente(?:s)?|Teacher(?:s)?)\\s*[:\\-–]\\s*([^\\n.;|]{3,90})/i);
+    return match ? cleanTitle(match[2]) : '';
   }
-  function add(list, node) {
+  function teacherFrom(root) {
+    if (!root) return '';
+    var selectors = ['[class*="course-teacher"]', '[class*="teachers"]', '[class*="professor"]', '.course-teacher', '.teachers', '.course-summary', '.summary'];
+    for (var i = 0; i < selectors.length; i++) {
+      var name = teacherName(textOf(root.querySelector(selectors[i])));
+      if (name) return name;
+    }
+    return '';
+  }
+  function pageCourse() {
+    var crumb = document.querySelector('.breadcrumb a[href*="/course/view.php"]');
+    var fromCrumb = genericName(crumb ? textOf(crumb) : '');
+    if (fromCrumb) return { name: fromCrumb, teacher: teacherFrom(document) };
+    if (location.href.indexOf('/course/view.php') === -1) return null;
+    var headings = ['#page-header h1', '.page-header-headings h1', 'h1.page-title', '.course-title', '.page-title h1'];
+    for (var i = 0; i < headings.length; i++) {
+      var name = genericName(textOf(document.querySelector(headings[i])));
+      if (name) return { name: name, teacher: teacherFrom(document) };
+    }
+    return null;
+  }
+  function isMoodle() {
+    var href = location.href;
+    var moodlePath = href.indexOf('/course/') !== -1 || href.indexOf('/my/') !== -1 || href.indexOf('/mod/') !== -1 || href.indexOf('/login/index.php') !== -1;
+    return moodlePath || !!document.querySelector('#page-course-view, body.path-my, body.path-course-view, .moodlelogo');
+  }
+  function nearbyCourse(node) {
+    var box = node.closest ? node.closest('[class*="disciplina"], [class*="Disciplina"], .course, .course-content, [data-courseid]') : null;
+    if (!box) return '';
+    var heading = box.querySelector('h1, h2, h3, .tituloDisciplina, .course-title');
+    return genericName(textOf(heading));
+  }
+  function collect(list, node, course) {
     if (!node || list.length >= MAX) return;
-    var title = titleOf(node);
+    var title = activityTitle(node);
     if (title.length < 4 || title.length > 180) return;
-    var link = node.tagName === 'A' ? node : node.querySelector('a[href]');
+    var link = node.querySelector('a[href*="/mod/"]') || node.querySelector('a[href]');
     list.push({
       title: title,
-      course: courseOf(node),
-      dueDate: dateOf(clean(node.textContent)),
+      course: (course && course.name) || nearbyCourse(node),
+      teacher: (course && course.teacher) || '',
+      dueDate: activityDate(node),
       url: link ? abs(link.getAttribute('href')) : '',
       type: ''
     });
   }
+  function localActivities(course) {
+    var items = [];
+    var selectors = ['li.activity', '.activity', '.tarefa', '[class*="tarefa"]', '[class*="atividade"]', '[data-region="event-list-item"]', '.event', '#tarefas tr', '.assign', '.quiz'];
+    for (var s = 0; s < selectors.length; s++) {
+      var nodes = document.querySelectorAll(selectors[s]);
+      for (var i = 0; i < nodes.length; i++) collect(items, nodes[i], course);
+    }
+    var rows = document.querySelectorAll('table tr');
+    for (var r = 0; r < rows.length; r++) {
+      if (!rows[r].querySelector || !rows[r].querySelector('a[href]')) continue;
+      if (rows[r].querySelectorAll('td').length < 2) continue;
+      collect(items, rows[r], course);
+    }
+    return items;
+  }
+  function collectCourses() {
+    var found = {};
+    var list = [];
+    function add(id, name, url, teacher) {
+      var safeName = genericName(name);
+      var key = String(id || safeName).toLowerCase();
+      if (!safeName && !id) return;
+      if (found[key]) { if (!found[key].teacher && teacher) found[key].teacher = teacher; return; }
+      found[key] = { id: String(id || ''), name: safeName || '', url: url || '', teacher: teacher || '' };
+      list.push(found[key]);
+    }
+    function cardOf(node) { return node.closest ? node.closest('[data-courseid], [data-course-id], .card, .coursebox, .course-info-container') : null; }
+    var anchors = document.querySelectorAll('a[href*="/course/view.php?id="]');
+    for (var i = 0; i < anchors.length; i++) {
+      var href = abs(anchors[i].getAttribute('href'));
+      var idMatch = /[?&]id=(\\d+)/.exec(href);
+      var card = cardOf(anchors[i]);
+      var name = textOf(anchors[i]);
+      if (genericName(name) || /^(\\d+|ir para|acessar|ver curso|abrir)/i.test(name)) name = card ? textOf(card.querySelector('.coursename, .course-name, [class*="coursename"], h3, h4, .card-title')) : '';
+      add(idMatch ? idMatch[1] : '', name, href, card ? teacherFrom(card) : '');
+    }
+    var cards = document.querySelectorAll('[data-courseid], [data-course-id]');
+    for (var c = 0; c < cards.length; c++) {
+      var id = cards[c].getAttribute('data-courseid') || cards[c].getAttribute('data-course-id');
+      var link = cards[c].querySelector('a[href*="/course/view.php"]');
+      var title = textOf(cards[c].querySelector('.coursename, .course-name, [class*="coursename"], .card-title, h3, h4'));
+      add(id, title || (link ? textOf(link) : ''), link ? abs(link.getAttribute('href')) : '', teacherFrom(cards[c]));
+    }
+    var result = [];
+    for (var k = 0; k < list.length; k++) if (list[k].name && list[k].url) result.push(list[k]);
+    return result.slice(0, MAX_COURSES);
+  }
+  function activitiesFromDoc(doc, course) {
+    var items = [];
+    var nodes = doc.querySelectorAll('li.activity, [data-region="activity-card"], .activity, #tarefas tr, .tarefa');
+    for (var i = 0; i < nodes.length; i++) collect(items, nodes[i], course);
+    return items;
+  }
+  function teacherInDoc(doc) {
+    var selectors = ['.course-teacher', '.teachers', '[class*="course-teacher"]', '[class*="professor"]', '.course-summary', '.summary'];
+    for (var i = 0; i < selectors.length; i++) {
+      var name = teacherName(textOf(doc.querySelector(selectors[i])));
+      if (name) return name;
+    }
+    return '';
+  }
+  function fetchText(url) {
+    return fetch(url, { credentials: 'same-origin', headers: { Accept: 'text/html' } })
+      .then(function (response) { return response.ok ? response.text() : ''; })
+      .catch(function () { return ''; });
+  }
+  function scanCourses(list, onProgress, done) {
+    var scanned = [];
+    var index = 0;
+    function step() {
+      if (index >= list.length) { done(scanned); return; }
+      var course = list[index];
+      index += 1;
+      if (!course.url) { step(); return; }
+      fetchText(course.url).then(function (html) {
+        if (html) {
+          try {
+            var doc = new DOMParser().parseFromString(html, 'text/html');
+            var heading = doc.querySelector('#page-header h1, .page-header-headings h1, .course-title');
+            var courseName = genericName(heading ? textOf(heading) : '') || course.name;
+            var teacher = course.teacher || teacherInDoc(doc);
+            scanned = scanned.concat(activitiesFromDoc(doc, { name: courseName, teacher: teacher }));
+          } catch (e) {}
+        }
+        onProgress(scanned);
+        step();
+      });
+    }
+    step();
+  }
+  var current = null;
   var items = [];
-  var selectors = [
-    'li.activity', '.activity', '.tarefa', '.tarefa-titulo', '[class*=tarefa]', '[class*=atividade]',
-    '[data-region=event-list-item]', '.event', '.assign', '.quiz', '#tarefas tr'
-  ];
-  for (var s = 0; s < selectors.length; s++) {
-    var nodes = document.querySelectorAll(selectors[s]);
-    for (var i = 0; i < nodes.length; i++) add(items, nodes[i]);
+  var courses = [];
+  function bootstrap() {
+    current = pageCourse();
+    items = localActivities(current || { name: '', teacher: '' });
+    courses = collectCourses();
+    if (current) {
+      var matched = false;
+      for (var m = 0; m < courses.length; m++) {
+        if (courses[m].name.toLowerCase() === current.name.toLowerCase()) {
+          matched = true;
+          courses[m].teacher = courses[m].teacher || current.teacher;
+        }
+      }
+      if (!matched) courses.unshift({ id: '', name: current.name, url: '', teacher: current.teacher || '' });
+    }
+    return courses.length > 0;
   }
-  var rows = document.querySelectorAll('table tr');
-  for (var r = 0; r < rows.length; r++) {
-    if (!rows[r].querySelector || !rows[r].querySelector('a[href]')) continue;
-    if (rows[r].querySelectorAll('td').length < 2) continue;
-    add(items, rows[r]);
+  var deepItems = [];
+  var finished = false;
+  function send(list, partial) {
+    if (window.__estudoImportRun !== runId) return;
+    if (!list.length && !courses.length) return;
+    var payload = { source: SOURCE, type: 'scrape', url: location.href, pageTitle: clean(document.title), items: list.slice(0, MAX), courses: courses.slice(0, MAX_COURSES) };
+    if (partial) payload.partial = true;
+    try { window.ReactNativeWebView.postMessage(JSON.stringify(payload)); } catch (e) {}
   }
-  var payload = {
-    source: SOURCE,
-    type: 'scrape',
-    url: location.href,
-    pageTitle: clean(document.title),
-    items: items.slice(0, MAX)
-  };
-  try { window.ReactNativeWebView.postMessage(JSON.stringify(payload)); } catch (e) {}
-  return items.length;
+  function finish() {
+    if (finished) return;
+    finished = true;
+    var merged = items.concat(deepItems);
+    if (!merged.length && !courses.length) return;
+    send(merged, false);
+  }
+  function scan() {
+    var timer = setTimeout(finish, SCAN_TIMEOUT);
+    scanCourses(courses, function (partial) {
+      deepItems = partial;
+      if (!finished) send(items.concat(deepItems), true);
+    }, function (all) {
+      clearTimeout(timer);
+      deepItems = all;
+      finish();
+    });
+  }
+  if (bootstrap()) { scan(); return; }
+  // SIGAA (fora do Moodle) já trouxe o que existia na página.
+  if (items.length && !isMoodle()) { finish(); return; }
+  // O painel do Moodle carrega os cartões de curso por AJAX: tenta mais uma vez.
+  setTimeout(function () {
+    if (bootstrap()) { scan(); return; }
+    finish();
+  }, 1500);
 })();`;
 }
 
@@ -194,7 +397,7 @@ function normalizeYear(raw: string | undefined, today: Date): number {
 export function parseDueDate(value: unknown, today: Date = new Date()): string | undefined {
   const text = tidy(value).toLowerCase();
   if (!text) return undefined;
-  const iso = text.match(/\b(\d{4})-(\d{2})-(\d{2})\b/);
+  const iso = text.match(/\b(\d{4})-(\d{2})-(\d{2})/);
   if (iso) return toIso(Number(iso[1]), Number(iso[2]), Number(iso[3]));
   const numeric = text.match(/\b(\d{1,2})[/.](\d{1,2})(?:[/.](\d{2,4}))?\b/);
   if (numeric) {
@@ -239,6 +442,93 @@ export function scrapedTaskKey(task: Pick<ScrapedTask, 'course' | 'title' | 'url
   return [slug(task.course), slug(task.title), url].join('|');
 }
 
+/** Cabeçalhos genéricos que não são matérias (painel, calendário, menus…). */
+const GENERIC_COURSE_NAME =
+  /^(p[áa]gina inicial|in[ií]cio|home|meu painel|painel|painel do usu[áa]rio|dashboard|meus cursos|calend[áa]rio|tarefas|atividades|notas|perfil|mensagens|ava|moodle|sigaa|ambiente acad[êe]mico|disciplinas)$/i;
+
+/**
+ * O título da página do Moodle ("Página inicial | AVA") não é uma matéria:
+ * devolvemos string vazia para o app não criar uma disciplina falsa.
+ */
+export function cleanCourseName(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  const name = tidy(value)
+    .replace(/\s*[|·]\s*(moodle|ava|sigaa).*$/i, '')
+    .replace(/\s*[-–]\s*(moodle|ava|sigaa).*$/i, '')
+    .trim();
+  return GENERIC_COURSE_NAME.test(name) ? '' : name;
+}
+
+/**
+ * Limpa o texto que o Moodle coloca junto do nome da atividade:
+ * "1 evento, segunda-feira, 20 outubro 2025, 23:59",
+ * "Trabalho 1 - Vencimento: 12/03/2026", "Editar", etc.
+ */
+export function cleanActivityTitle(value: unknown): string {
+  if (typeof value !== 'string') return '';
+  return tidy(value)
+    .replace(/\s*(Editar|Excluir|Apagar|Enviar|Corrigir|Concluir)\s*$/gi, '')
+    .replace(/\s*[-–—·|]\s*(Vencimento|Prazo|Data de entrega|Entrega|Due)\b[\s\S]*$/gi, '')
+    .replace(/\b(Vencimento|Prazo|Data de entrega|Entrega|Due)\s*:[\s\S]*$/gi, '')
+    .replace(/\b\d+\s+eventos?\b[\s\S]*$/gi, '')
+    .replace(/[,;:·|-]?\s*(segunda|ter[çc]a|quarta|quinta|sexta|s[áa]bado|domingo)(-feira)?\b[\s\S]*$/gi, '')
+    .replace(/\s+/g, ' ')
+    .replace(/^[\s\-–—·|,;:]+/, '')
+    .replace(/[\s\-–—·|,;:]+$/, '')
+    .replace(/[\s(\[]+$/, '');
+}
+
+/** Agrupa a captura por matéria para criar uma disciplina por curso. */
+export function groupScrapedTasks(tasks: ScrapedTask[]): ScrapedCourseGroup[] {
+  const groups = new Map<string, ScrapedCourseGroup>();
+  for (const task of tasks) {
+    const group = groups.get(task.course) ?? { course: task.course, tasks: [] };
+    if (!group.teacher && task.teacher) group.teacher = task.teacher;
+    group.tasks.push(task);
+    groups.set(task.course, group);
+  }
+  return Array.from(groups.values()).sort((left, right) => left.course.localeCompare(right.course, 'pt-BR'));
+}
+
+/** Valida a lista de matérias que voltou da página inicial do Moodle. */
+export function normalizeScrapedCourses(input: unknown, limit = 40): ScrapedCourse[] {
+  const list = Array.isArray(input) ? input : [];
+  const seen = new Set<string>();
+  const courses: ScrapedCourse[] = [];
+  for (const raw of list) {
+    if (!raw || typeof raw !== 'object') continue;
+    const record = raw as Record<string, unknown>;
+    const name = cleanCourseName(pick(record, ['name', 'nome', 'course', 'curso', 'title', 'titulo', 'título', 'fullname']));
+    if (!name || seen.has(name.toLowerCase())) continue;
+    seen.add(name.toLowerCase());
+    courses.push({
+      name,
+      id: tidy(pick(record, ['id', 'courseId', 'courseid'])) || undefined,
+      teacher: tidy(pick(record, ['teacher', 'professor', 'docente', 'teachers'])) || undefined,
+      url: safeUrl(pick(record, ['url', 'link'])),
+    });
+    if (courses.length >= limit) break;
+  }
+  return courses;
+}
+
+/** Junta as matérias de várias capturas mantendo o professor encontrado. */
+export function mergeScrapedCourses(current: ScrapedCourse[], incoming: ScrapedCourse[]): ScrapedCourse[] {
+  const byName = new Map(current.map(course => [course.name.toLowerCase(), { ...course }]));
+  for (const course of incoming) {
+    const key = course.name.toLowerCase();
+    const existing = byName.get(key);
+    if (existing) {
+      if (!existing.teacher && course.teacher) existing.teacher = course.teacher;
+      if (!existing.url && course.url) existing.url = course.url;
+    } else {
+      byName.set(key, { ...course });
+    }
+  }
+  return Array.from(byName.values());
+}
+
+
 function safeUrl(value: unknown): string | undefined {
   const text = tidy(value);
   return /^https?:\/\//i.test(text) ? text : undefined;
@@ -252,13 +542,14 @@ export function normalizeScrapedTasks(input: unknown, limit = IMPORT_MAX_ITEMS):
   for (const raw of list) {
     if (!raw || typeof raw !== 'object') continue;
     const record = raw as Record<string, unknown>;
-    const title = tidy(pick(record, ['title', 'titulo', 'título', 'name', 'nome', 'atividade']));
+    const title = cleanActivityTitle(pick(record, ['title', 'titulo', 'título', 'name', 'nome', 'atividade']));
     if (title.length < 4 || title.length > 200) continue;
     if (NAVIGATION_LABEL.test(title)) continue;
-    const course = tidy(pick(record, ['course', 'curso', 'disciplina', 'materia', 'matéria'])) || 'Ambiente acadêmico';
+    const course = cleanCourseName(pick(record, ['course', 'curso', 'disciplina', 'materia', 'matéria'])) || 'Ambiente acadêmico';
     const task: ScrapedTask = {
       title,
       course,
+      teacher: tidy(pick(record, ['teacher', 'professor', 'docente', 'professorName'])) || undefined,
       dueDate: parseDueDate(pick(record, ['dueDate', 'due', 'prazo', 'date', 'data'])),
       url: safeUrl(pick(record, ['url', 'link', 'href'])),
       type: classifyScrapedTask(title),
@@ -342,6 +633,8 @@ export function parseImportMessage(raw: string | null | undefined): ScrapePayloa
   if (!Array.isArray(source.items)) return null;
   return {
     items: source.items,
+    courses: Array.isArray(source.courses) ? source.courses : undefined,
+    partial: source.partial === true,
     source: typeof source.source === 'string' ? source.source : undefined,
     url: typeof source.url === 'string' ? source.url : undefined,
     pageTitle: typeof source.pageTitle === 'string' ? source.pageTitle : undefined,

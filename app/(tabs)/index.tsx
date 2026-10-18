@@ -146,7 +146,7 @@ export default function HomeScreen() {
       <View style={[styles.splitGrid, tablet && styles.splitGridTablet]}>
         <View style={styles.primaryColumn}>
           <AcademicSection eyebrow="AGORA" title="Seu próximo passo" actionLabel="Ver planejamento" onAction={() => router.push('/planning')}>
-            {openTasks.length ? <View style={styles.taskStack}>{openTasks.slice(0, 3).map(task => <TaskRow key={task.id} title={task.title} subtitle={task.goalTitle} priority={task.priority} done={task.done} onToggle={() => toggleTask(task.goalId, task.id)} styles={styles} />)}</View> : <AcademicEmptyState title="Nenhuma tarefa pendente" description="Seu plano está livre por enquanto. Que tal planejar o próximo passo?" actionLabel="Criar meta" onAction={() => router.push('/planning')} />}
+            {openTasks.length ? <View style={styles.taskStack}>{openTasks.slice(0, 3).map((task, index) => <TaskRow key={`${task.goalId}-${task.id}-${index}`} title={task.title} subtitle={task.goalTitle} priority={task.priority} done={task.done} onToggle={() => toggleTask(task.goalId, task.id)} styles={styles} />)}</View> : <AcademicEmptyState title="Nenhuma tarefa pendente" description="Seu plano está livre por enquanto. Que tal planejar o próximo passo?" actionLabel="Criar meta" onAction={() => router.push('/planning')} />}
           </AcademicSection>
 
           <AcademicSection eyebrow="MATÉRIAS" title="Sua faculdade" actionLabel={showSubjectForm ? 'Fechar' : '+ Nova matéria'} onAction={() => setShowSubjectForm(value => !value)}>

@@ -8,7 +8,8 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicPill, academicColors } from '@/components/academic/design-system';
 import { type RichBlock, useStudyActions, useStudyFolders, useStudyNotes } from '@/lib/study-store';
 import { useColors } from '@/hooks/use-colors';
-import { applyTextFormat, parsePreviewBlocks, type InlineSegment, type PreviewBlock, type TextFormat } from '@/lib/editor-formatting';
+import { applyTextFormat, hasTextMarkup, type TextFormat } from '@/lib/editor-formatting';
+import { renderFormattedText } from '@/lib/editor-preview';
 import { exportTextDocument, shareTextDocument } from '@/lib/document-export';
 
 type RibbonTab = 'Arquivo' | 'Página inicial' | 'Inserir' | 'Layout' | 'Referências' | 'Revisão' | 'Exibir' | 'Ajuda';
@@ -85,7 +86,7 @@ export default function EditorScreen() {
 
   const formatSelection = (format: TextFormat) => {
     if (preview) { setFormattingHint('Modo de leitura ativo — toque em 👁 Editar para formatar o texto.'); return; }
-    const result = applyTextFormat(content, selection, format); setContent(result.text); setSelection(result.selection); setFormattingHint(formattingLabels[format]); setTimeout(() => editorInputRef.current?.focus(), 0);
+    const result = applyTextFormat(content, selection, format); setContent(result.text); setSelection(result.selection); setFormattingHint(`${formattingLabels[format]} · toque em Visualizar para ver o resultado formatado.`); setTimeout(() => editorInputRef.current?.focus(), 0);
   };
   const togglePreview = () => {
     const next = !preview;
@@ -93,7 +94,8 @@ export default function EditorScreen() {
     setPreview(next);
     setFormattingHint(next ? 'Modo de leitura: a formatação aparece aplicada, sem os marcadores.' : 'Selecione um trecho ou posicione o cursor para escrever.');
   };
-  const previewBlocks = useMemo(() => parsePreviewBlocks(content), [content]);
+  /** Avisa que há marcações na tela de edição e oferece o modo de leitura. */
+  const hasMarkup = useMemo(() => hasTextMarkup(content), [content]);
   const addStyle = (type: RichBlock['type'], text: string) => setBlocks(current => [...current, newBlock(type, text)]);
   const duplicateCurrent = () => { const duplicatedId = duplicateNote(noteId); if (duplicatedId) Alert.alert('Documento duplicado', 'Uma cópia foi criada em Meus documentos.'); };
   const deleteCurrent = () => { const remove = () => { deleteNote(noteId); router.replace('/editor'); }; if (Platform.OS === 'web' && typeof window !== 'undefined') { if (window.confirm(`Excluir “${title.trim() || 'este documento'}”? Esta ação não pode ser desfeita.`)) remove(); return; } Alert.alert('Excluir documento?', 'Esta ação não pode ser desfeita.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: remove }]); };
@@ -128,21 +130,22 @@ export default function EditorScreen() {
       </View>
 
       <View style={styles.ribbonShell}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.ribbonTabs}>{ribbonTabs.map(tab => <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} style={[styles.ribbonTab, activeTab === tab && styles.ribbonTabActive]}><Text style={[styles.ribbonTabText, activeTab === tab && styles.ribbonTabTextActive]}>{tab}</Text></TouchableOpacity>)}</ScrollView>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbar}>{activeTab === 'Página inicial' ? <>
-          <Tool label="N" caption="Negrito" onPress={() => formatSelection('bold')} weight="bold" /><Tool label="I" caption="Itálico" onPress={() => formatSelection('italic')} italic /><Tool label="S" caption="Sublinhar" onPress={() => formatSelection('underline')} underline /><Tool label="abc" caption="Tachado" onPress={() => formatSelection('strike')} strike /><Tool label="▰" caption="Destaque" onPress={() => formatSelection('highlight')} highlight /><ToolbarDivider /><Tool label="•" caption="Lista" onPress={() => formatSelection('bullet-list')} /><Tool label="1." caption="Numerada" onPress={() => formatSelection('numbered-list')} /><Tool label="T1" caption="Título" onPress={() => addStyle('heading', 'Título da seção')} /><ToolbarDivider /><Tool label="A−" caption="Diminuir" onPress={() => setFontSize(size => Math.max(13, size - 1))} /><Tool label="A+" caption="Aumentar" onPress={() => setFontSize(size => Math.min(24, size + 1))} /><ToolbarDivider /><Tool label="👁" caption={preview ? 'Editar' : 'Visualizar'} onPress={togglePreview} />
-        </> : activeTab === 'Inserir' ? <><Tool label="T" caption="Título" onPress={() => addStyle('heading', 'Título da seção')} /><Tool label="❝" caption="Citação" onPress={() => addStyle('quote', 'Uma ideia importante para lembrar…')} /><Tool label="</>" caption="Código" onPress={() => addStyle('code', 'const estudo = true;')} /><ToolbarDivider /><Tool label="▦" caption="Tabela" onPress={addTable} /><Tool label="▧" caption="Imagem" onPress={() => { void addImage(); }} /><Tool label="▥" caption="Gráfico" onPress={addChart} /></> : activeTab === 'Arquivo' ? <><Tool label="▣" caption="Trocar pasta" onPress={() => setFolder(nextFolder)} /><Tool label="⧉" caption="Duplicar" onPress={duplicateCurrent} /><Tool label="⎙" caption="Copiar texto" onPress={() => { void Clipboard.setStringAsync(content); Alert.alert('Copiado', 'O texto foi copiado para a área de transferência.'); }} /><ToolbarDivider /><Tool label="⇧" caption="Compartilhar" onPress={() => { void shareCurrent(); }} /><Tool label="⇩" caption="Exportar .txt" onPress={() => { void exportCurrent(); }} /><ToolbarDivider /><Tool label="×" caption="Excluir" onPress={deleteCurrent} danger /></> : <View style={styles.contextHint}><Text style={styles.contextHintTitle}>{activeTab}</Text><Text style={styles.contextHintText}>{activeTab === 'Layout' ? 'A folha ajusta a leitura com um tamanho de texto confortável.' : activeTab === 'Referências' ? 'Use citações e blocos de texto para registrar suas fontes.' : activeTab === 'Revisão' ? 'Use desfazer, refazer e a revisão dos seus blocos antes de concluir.' : activeTab === 'Exibir' ? 'A página foi organizada para leitura e escrita sem distrações.' : 'Selecione um menu acima para acessar os recursos disponíveis.'}</Text></View>}</ScrollView>
+        <View style={styles.ribbonTabsRow}><ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.ribbonTabsScroll} contentContainerStyle={styles.ribbonTabs}>{ribbonTabs.map(tab => <TouchableOpacity key={tab} onPress={() => setActiveTab(tab)} accessibilityRole="tab" accessibilityState={{ selected: activeTab === tab }} style={[styles.ribbonTab, activeTab === tab && styles.ribbonTabActive]}><Text style={[styles.ribbonTabText, activeTab === tab && styles.ribbonTabTextActive]}>{tab}</Text></TouchableOpacity>)}</ScrollView><TouchableOpacity onPress={togglePreview} accessibilityRole="button" accessibilityState={{ selected: preview }} accessibilityLabel={preview ? 'Voltar para o modo de edição' : 'Visualizar o texto formatado sem marcadores'} style={[styles.previewButton, preview && styles.previewButtonActive]}><Text style={[styles.previewButtonIcon, preview && styles.previewButtonIconActive]}>{preview ? '✎' : '👁'}</Text><Text style={[styles.previewButtonLabel, preview && styles.previewButtonLabelActive]}>{preview ? 'Editar' : 'Visualizar'}</Text></TouchableOpacity></View>
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.toolbar}>{preview ? <View style={styles.contextHint}><Text style={styles.contextHintTitle}>Modo de leitura</Text><Text style={styles.contextHintText}>A formatação aparece aplicada, sem os marcadores. Toque em Editar para voltar a escrever.</Text></View> : activeTab === 'Página inicial' ? <>
+          <Tool label="N" caption="Negrito" onPress={() => formatSelection('bold')} weight="bold" /><Tool label="I" caption="Itálico" onPress={() => formatSelection('italic')} italic /><Tool label="S" caption="Sublinhar" onPress={() => formatSelection('underline')} underline /><Tool label="abc" caption="Tachado" onPress={() => formatSelection('strike')} strike /><Tool label="▰" caption="Destaque" onPress={() => formatSelection('highlight')} highlight /><ToolbarDivider /><Tool label="•" caption="Lista" onPress={() => formatSelection('bullet-list')} /><Tool label="1." caption="Numerada" onPress={() => formatSelection('numbered-list')} /><Tool label="T1" caption="Título" onPress={() => addStyle('heading', 'Título da seção')} /><ToolbarDivider /><Tool label="A−" caption="Diminuir" onPress={() => setFontSize(size => Math.max(13, size - 1))} /><Tool label="A+" caption="Aumentar" onPress={() => setFontSize(size => Math.min(24, size + 1))} />
+        </> : activeTab === 'Inserir' ? <><Tool label="T" caption="Título" onPress={() => addStyle('heading', 'Título da seção')} /><Tool label="❝" caption="Citação" onPress={() => addStyle('quote', 'Uma ideia importante para lembrar…')} /><Tool label="</>" caption="Código" onPress={() => addStyle('code', 'const estudo = true;')} /><ToolbarDivider /><Tool label="▦" caption="Tabela" onPress={addTable} /><Tool label="▧" caption="Imagem" onPress={() => { void addImage(); }} /><Tool label="▥" caption="Gráfico" onPress={addChart} /></> : activeTab === 'Arquivo' ? <><Tool label="▣" caption="Trocar pasta" onPress={() => setFolder(nextFolder)} /><Tool label="⧉" caption="Duplicar" onPress={duplicateCurrent} /><Tool label="⎙" caption="Copiar texto" onPress={() => { void Clipboard.setStringAsync(content); Alert.alert('Copiado', 'O texto foi copiado para a área de transferência.'); }} /><ToolbarDivider /><Tool label="⇧" caption="Compartilhar" onPress={() => { void shareCurrent(); }} /><Tool label="⇩" caption="Exportar .txt" onPress={() => { void exportCurrent(); }} /><ToolbarDivider /><Tool label="×" caption="Excluir" onPress={deleteCurrent} danger /></> : activeTab === 'Exibir' ? <><Tool label={preview ? '✎' : '👁'} caption={preview ? 'Editar' : 'Visualizar'} onPress={togglePreview} /><ToolbarDivider /><Tool label="A−" caption="Diminuir" onPress={() => setFontSize(size => Math.max(13, size - 1))} /><Tool label="A+" caption="Aumentar" onPress={() => setFontSize(size => Math.min(24, size + 1))} /></> : <View style={styles.contextHint}><Text style={styles.contextHintTitle}>{activeTab}</Text><Text style={styles.contextHintText}>{activeTab === 'Layout' ? 'A folha ajusta a leitura com um tamanho de texto confortável.' : activeTab === 'Referências' ? 'Use citações e blocos de texto para registrar suas fontes.' : activeTab === 'Revisão' ? 'Use desfazer, refazer e a revisão dos seus blocos antes de concluir.' : 'Selecione um menu acima para acessar os recursos disponíveis.'}</Text></View>}</ScrollView>
       </View>
 
       <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={styles.workspace}>
         <View style={styles.documentTopline}><View style={styles.folderChip}><IconSymbol name="folder.fill" size={15} color={academicColors.indigo} /><Text style={styles.folderText}>{folder}</Text><TouchableOpacity onPress={() => setFolder(nextFolder)} accessibilityRole="button" accessibilityLabel="Trocar pasta" style={styles.folderAction}><Text style={styles.folderActionText}>Trocar</Text></TouchableOpacity></View><Text style={styles.statusText}>{formattingHint}</Text></View>
+        {hasMarkup && !preview ? <TouchableOpacity activeOpacity={0.82} onPress={togglePreview} accessibilityRole="button" accessibilityLabel="Abrir o modo de visualização sem marcadores" style={styles.markupNotice}><Text style={styles.markupNoticeText}>Este texto tem formatação. Os marcadores ** _ ~~ == aparecem no modo de edição.</Text><Text style={styles.markupNoticeAction}>Ver formatado →</Text></TouchableOpacity> : null}
         <View style={styles.ruler}>{Array.from({ length: 11 }, (_, index) => <View key={index} style={styles.rulerUnit}><View style={[styles.rulerTick, index % 2 === 0 && styles.rulerTickLong]} /><Text style={styles.rulerNumber}>{index}</Text></View>)}</View>
         <View style={styles.paper}>
           {preview ? (
             <>
               <Text style={styles.previewTitle}>{title.trim() || 'Sem título'}</Text>
               <View style={styles.paperRule} />
-              <PreviewDocument blocks={previewBlocks} fontSize={fontSize} />
+              {renderFormattedText(content, { fontSize })}
             </>
           ) : (
             <>
@@ -161,47 +164,6 @@ export default function EditorScreen() {
 
 function Tool({ label, caption, onPress, weight, italic, underline, strike, highlight, danger = false }: { label: string; caption: string; onPress: () => void; weight?: 'bold'; italic?: boolean; underline?: boolean; strike?: boolean; highlight?: boolean; danger?: boolean }) { return <TouchableOpacity onPress={onPress} accessibilityRole="button" accessibilityLabel={caption} style={styles.tool}><Text style={[styles.toolLabel, weight && styles.toolBold, italic && styles.toolItalic, underline && styles.toolUnderline, strike && styles.toolStrike, highlight && styles.toolHighlight, danger && styles.toolDanger]}>{label}</Text><Text style={[styles.toolCaption, danger && styles.toolCaptionDanger]}>{caption}</Text></TouchableOpacity>; }
 function ToolbarDivider() { return <View style={styles.toolbarDivider} />; }
-
-/**
- * Modo de leitura: as mesmas marcações que `applyTextFormat` injeta (`**`, `_`,
- * `__`, `~~`, `==`, `• `, `1. `) são interpretadas e renderizadas com `<Text>`
- * aninhado — o usuário vê o texto formatado, nunca os asteriscos.
- */
-function previewSegmentStyle(segment: InlineSegment) {
-  const decorations: ('underline' | 'line-through')[] = [];
-  if (segment.underline) decorations.push('underline');
-  if (segment.strike) decorations.push('line-through');
-  return {
-    ...(segment.bold ? { fontWeight: '700' as const } : null),
-    ...(segment.italic ? { fontStyle: 'italic' as const } : null),
-    ...(segment.highlight ? { backgroundColor: '#FFE58A', color: '#1B2235' } : null),
-    ...(decorations.length ? { textDecorationLine: decorations.join(' ') as 'underline' | 'line-through' | 'underline line-through' } : null),
-  };
-}
-
-function PreviewSegments({ segments }: { segments: InlineSegment[] }) {
-  return <>{segments.map((segment, index) => <Text key={index} style={previewSegmentStyle(segment)}>{segment.text}</Text>)}</>;
-}
-
-function PreviewDocument({ blocks, fontSize }: { blocks: PreviewBlock[]; fontSize: number }) {
-  if (!blocks.length) return <Text style={styles.previewEmpty}>Nada para visualizar ainda. Volte ao modo de edição e comece a escrever.</Text>;
-  const lineHeight = Math.round(fontSize * 1.58);
-  return (
-    <View accessibilityLabel="Pré-visualização do documento" style={styles.previewDocument}>
-      {blocks.map((block, index) => {
-        if (!block.segments.length) return <View key={index} style={styles.previewBlank} />;
-        if (block.type === 'heading') return <Text key={index} style={[styles.previewHeading, { fontSize: fontSize + 6, lineHeight: Math.round((fontSize + 6) * 1.35) }]}><PreviewSegments segments={block.segments} /></Text>;
-        if (block.type === 'bullet' || block.type === 'numbered') return (
-          <View key={index} style={styles.previewListRow}>
-            <Text style={[styles.previewMarker, { fontSize, lineHeight }]}>{block.type === 'bullet' ? '•' : `${block.index}.`}</Text>
-            <Text style={[styles.previewText, { fontSize, lineHeight }]}><PreviewSegments segments={block.segments} /></Text>
-          </View>
-        );
-        return <Text key={index} style={[styles.previewText, { fontSize, lineHeight }]}><PreviewSegments segments={block.segments} /></Text>;
-      })}
-    </View>
-  );
-}
 
 function RichBlockView({ block, colors, onRemove, onChange }: { block: RichBlock; colors: ReturnType<typeof useColors>; onRemove: () => void; onChange: (block: RichBlock) => void }) {
   const removeButton = <TouchableOpacity onPress={onRemove} accessibilityRole="button"><Text style={styles.removeBlock}>Remover</Text></TouchableOpacity>;
@@ -254,13 +216,15 @@ const styles = StyleSheet.create({
   paperPromptText: { color: academicColors.muted, fontSize: 12, lineHeight: 18, marginTop: 4, textAlign: 'center' },
   paperPromptTitle: { color: academicColors.ink, fontSize: 13, fontWeight: '900' },
   paperRule: { backgroundColor: '#E9ECF4', height: 1, marginBottom: 18 },
-  previewBlank: { height: 9 },
-  previewDocument: { paddingBottom: 6 },
-  previewEmpty: { color: academicColors.muted, fontSize: 14, lineHeight: 21, paddingVertical: 22 },
-  previewHeading: { color: academicColors.ink, fontWeight: '900', marginBottom: 2, marginTop: 6 },
-  previewListRow: { flexDirection: 'row', gap: 6 },
-  previewMarker: { color: academicColors.indigo, fontWeight: '900' },
-  previewText: { color: academicColors.ink },
+  markupNotice: { alignItems: 'center', alignSelf: 'center', backgroundColor: '#F3F1FF', borderColor: '#DDD4FF', borderRadius: 10, borderWidth: 1, flexDirection: 'row', gap: 10, justifyContent: 'space-between', marginBottom: 10, maxWidth: 850, paddingHorizontal: 12, paddingVertical: 9, width: '100%' },
+  markupNoticeAction: { color: academicColors.violet, fontSize: 11, fontWeight: '900' },
+  markupNoticeText: { color: academicColors.ink, flex: 1, fontSize: 11, lineHeight: 16 },
+  previewButton: { alignItems: 'center', backgroundColor: '#F3F1FF', borderColor: '#DDD4FF', borderRadius: 9, borderWidth: 1, flexDirection: 'row', gap: 5, marginLeft: 8, paddingHorizontal: 10, paddingVertical: 7 },
+  previewButtonActive: { backgroundColor: academicColors.violet, borderColor: academicColors.violet },
+  previewButtonIcon: { color: academicColors.violet, fontSize: 13, fontWeight: '900' },
+  previewButtonIconActive: { color: '#FFFFFF' },
+  previewButtonLabel: { color: academicColors.violet, fontSize: 11, fontWeight: '900' },
+  previewButtonLabelActive: { color: '#FFFFFF' },
   previewTitle: { color: academicColors.ink, fontSize: 27, fontWeight: '900', lineHeight: 35, marginBottom: 15, padding: 0 },
   removeBlock: { color: academicColors.danger, fontSize: 11, fontWeight: '900' },
   richCaption: { color: academicColors.muted, fontSize: 11, marginTop: 7 },
@@ -273,6 +237,8 @@ const styles = StyleSheet.create({
   ribbonTabActive: { borderBottomColor: academicColors.violet },
   ribbonTabText: { color: academicColors.muted, fontSize: 12, fontWeight: '700' },
   ribbonTabTextActive: { color: academicColors.violet, fontWeight: '900' },
+  ribbonTabsRow: { alignItems: 'center', flexDirection: 'row', paddingRight: 12 },
+  ribbonTabsScroll: { flex: 1 },
   ribbonTabs: { paddingHorizontal: 18 },
   ruler: { alignSelf: 'center', backgroundColor: '#EEF0F7', borderColor: '#E1E5EF', borderRadius: 4, borderWidth: 1, flexDirection: 'row', height: 26, marginBottom: 10, maxWidth: 850, overflow: 'hidden', width: '100%' },
   rulerNumber: { color: '#A2A9BA', fontSize: 8, marginTop: 1 },

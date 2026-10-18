@@ -158,6 +158,18 @@ const BULLET_LINE = /^[•\-*]\s+(.+)$/;
 const NUMBERED_LINE = /^(\d+)[.)]\s+(.+)$/;
 
 /**
+ * Atalho barato (sem percorrer o documento inteiro) para avisar na interface
+ * que existem marcações visíveis no modo de edição. Usa as mesmas regras do
+ * parser: negrito, sublinhado, tachado, destaque, itálico, título e listas.
+ */
+const MARKUP_PATTERN =
+  /(\*\*[^\s*][^\n]*?\*\*|__[^\s_][^\n]*?__|~~[^\s~][^\n]*?~~|==[^\s=][^\n]*?==|(?:^|[\s(])_[^\s_][^\n]*?_(?=\s|$|[.,;:!?)])|^\s*(?:#{1,3}\s+|•\s+|\d+[.)]\s+))/m;
+
+export function hasTextMarkup(text: string): boolean {
+  return MARKUP_PATTERN.test(text);
+}
+
+/**
  * Divide o documento em blocos de leitura. Cada linha vira um parágrafo, item
  * de lista, item numerado ou título — as mesmas marcações que os botões da
  * toolbar injetam (`• `, `1. `, `# `).

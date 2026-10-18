@@ -1,5 +1,25 @@
 import { describe, expect, it } from 'vitest';
-import { parseInline, parsePreviewBlocks, type InlineSegment } from '../lib/editor-formatting';
+import { hasTextMarkup, parseInline, parsePreviewBlocks, type InlineSegment } from '../lib/editor-formatting';
+
+describe('hasTextMarkup', () => {
+  it('detecta marcações que aparecem cruas no modo de edição', () => {
+    expect(hasTextMarkup('Estudar **React Native** hoje')).toBe(true);
+    expect(hasTextMarkup('__sublinhado__')).toBe(true);
+    expect(hasTextMarkup('~~tachado~~')).toBe(true);
+    expect(hasTextMarkup('==destaque==')).toBe(true);
+    expect(hasTextMarkup('uma _palavra_ no meio')).toBe(true);
+    expect(hasTextMarkup('• item de lista')).toBe(true);
+    expect(hasTextMarkup('1. item numerado')).toBe(true);
+    expect(hasTextMarkup('# Título')).toBe(true);
+  });
+
+  it('não confunde texto comum com formatação', () => {
+    expect(hasTextMarkup('Estudar React Native hoje')).toBe(false);
+    expect(hasTextMarkup('snake_case_name')).toBe(false);
+    expect(hasTextMarkup('**sem fechar')).toBe(false);
+    expect(hasTextMarkup('')).toBe(false);
+  });
+});
 
 function plainText(segments: InlineSegment[]): string {
   return segments.map(segment => segment.text).join('');
