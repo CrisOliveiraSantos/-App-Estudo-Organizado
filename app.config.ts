@@ -64,6 +64,14 @@ const config: ExpoConfig = {
       }
   },
   android: {
+    /**
+     * Play Store: `versionCode` é o número inteiro usado para ordenar as
+     * atualizações. Ele NUNCA pode se repetir em um AAB enviado à loja —
+     * incremente de 1 em 1 a cada novo envio (`1`, `2`, `3`, ...).
+     * Como `eas.json` usa `appVersionSource: "local"`, esse valor é lido
+     * daqui e não é alterado automaticamente pelo EAS.
+     */
+    versionCode: 1,
     adaptiveIcon: {
       backgroundColor: "#E6F4FE",
       foregroundImage: "./assets/images/android-icon-foreground.png",
