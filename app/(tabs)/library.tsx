@@ -8,13 +8,15 @@ import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, academicColors } from '@/components/academic/design-system';
-import { type Note, useStudy } from '@/lib/study-store';
+import { type Note, useStudyActions, useStudyFolders, useStudyNotes } from '@/lib/study-store';
 import { neonFonts } from '@/lib/theme-runtime';
 
 type Filter = 'Todos' | 'Notas' | 'PDFs';
 
 export default function LibraryScreen() {
-  const { notes, folders, addPdf, addFolder, deleteNote, renameNote, moveNote } = useStudy();
+  const notes = useStudyNotes();
+  const folders = useStudyFolders();
+  const { addPdf, addFolder, deleteNote, renameNote, moveNote } = useStudyActions();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   /**

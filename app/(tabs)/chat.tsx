@@ -5,7 +5,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useStudy, type ChatMessage } from '@/lib/study-store';
+import { useStudyActions, useStudyChatMessages, type ChatMessage } from '@/lib/study-store';
 import { useColors } from '@/hooks/use-colors';
 import { readLocalChatAccount, saveLocalChatAccount, type LocalChatAccount } from '@/lib/local-chat-auth';
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
@@ -37,7 +37,8 @@ export default function ChatScreen() {
    */
   const insets = useSafeAreaInsets();
   const navClearance = neonFabClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom + 8;
-  const { chatMessages, addChatMessage } = useStudy();
+  const chatMessages = useStudyChatMessages();
+  const { addChatMessage } = useStudyActions();
   const [localAccount, setLocalAccount] = useState<LocalChatAccount | null>(null);
   const [cloudUser, setCloudUser] = useState<CloudUser | null>(null);
   const [cloudMessages, setCloudMessages] = useState<CloudMessage[]>([]);

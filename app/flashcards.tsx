@@ -24,13 +24,14 @@ import {
   type Flashcard,
   type FlashcardEngine,
 } from '@/lib/flashcards';
-import { useStudy } from '@/lib/study-store';
+import { useStudyActions, useStudyNotes } from '@/lib/study-store';
 
 export default function FlashcardsScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
   const params = useLocalSearchParams<{ noteId?: string; text?: string; topic?: string }>();
-  const { createNote, notes, saveNote } = useStudy();
+  const notes = useStudyNotes();
+  const { createNote, saveNote } = useStudyActions();
   const note = notes.find(item => item.id === params.noteId);
   const topic = params.topic?.trim() || note?.title || 'Material de estudo';
   const [cards, setCards] = useState<Flashcard[]>([]);

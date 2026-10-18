@@ -5,14 +5,15 @@ import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, AcademicProgress, AcademicSection, academicColors } from '@/components/academic/design-system';
-import { type Goal, type Task, type TaskCategory, useStudy } from '@/lib/study-store';
+import { type Goal, type Task, type TaskCategory, useStudyActions, useStudyGoals } from '@/lib/study-store';
 import { goalProgress } from '@/lib/study-utils';
 
 type TaskFilter = TaskCategory | 'Concluídas';
 const filters: TaskFilter[] = ['Hoje', 'Amanhã', 'Próximas', 'Atrasadas', 'Concluídas'];
 
 export default function PlanningScreen() {
-  const { goals, addGoal, addTask, toggleTask } = useStudy();
+  const goals = useStudyGoals();
+  const { addGoal, addTask, toggleTask } = useStudyActions();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   /**

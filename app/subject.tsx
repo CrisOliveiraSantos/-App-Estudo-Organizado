@@ -4,7 +4,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, AcademicProgress, AcademicSection, academicColors } from '@/components/academic/design-system';
-import { type AcademicEventType, type Task, type TaskCategory, useStudy } from '@/lib/study-store';
+import { type AcademicEventType, type Task, type TaskCategory, useStudyActions, useStudyEvents, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 
 const categories: TaskCategory[] = ['Hoje', 'Amanhã', 'Próximas', 'Atrasadas'];
 const eventTypes: AcademicEventType[] = ['Aula', 'Exercício', 'Prova', 'Teste', 'Visita', 'Outro'];
@@ -12,7 +12,10 @@ const eventColors: Record<AcademicEventType, string> = { Aula: '#3346A8', Exerc�
 
 export default function SubjectScreen() {
   const params = useLocalSearchParams<{ id?: string }>();
-  const { subjects, events, notes, createNote, addSubjectTask, toggleSubjectTask, addEvent, toggleEvent, updateSubject } = useStudy();
+  const subjects = useStudySubjects();
+  const events = useStudyEvents();
+  const notes = useStudyNotes();
+  const { createNote, addSubjectTask, toggleSubjectTask, addEvent, toggleEvent, updateSubject } = useStudyActions();
   const subject = subjects.find(item => item.id === params.id);
   const [showTaskForm, setShowTaskForm] = useState(false);
   const [showEventForm, setShowEventForm] = useState(false);

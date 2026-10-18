@@ -7,14 +7,17 @@ import { AcademicButton, AcademicCard, AcademicPill, academicColors } from '@/co
 import { EMPTY_CRIS_MEMORY, getCrisMemory, isCrisMemoryEmpty, saveCrisMemory, type CrisUserMemory } from '@/lib/cris-memory';
 import { getCurrentAccountProfile, readableSupabaseError, signOutFromSupabase, updateCurrentAccountProfile, type AccountProfile } from '@/lib/supabase-chat';
 import { isSupabaseConfigured } from '@/lib/supabase';
-import { useStudy } from '@/lib/study-store';
+import { useStudyEvents, useStudyGoals, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 
 /** Sugestões de papel — mesmos rótulos de `/cris-profile` (a memória é uma só). */
 const ROLE_SUGGESTIONS = ['Estudante', 'Criadora do app', 'Professor(a)', 'Outro'];
 
 export default function ProfileScreen() {
   const colors = useColors();
-  const { subjects, goals, events, notes } = useStudy();
+  const subjects = useStudySubjects();
+  const goals = useStudyGoals();
+  const events = useStudyEvents();
+  const notes = useStudyNotes();
   const openTasks = useMemo(() => goals.flatMap(goal => goal.tasks).filter(task => !task.done).length, [goals]);
   const stats = [
     { label: 'Matérias', value: subjects.length },

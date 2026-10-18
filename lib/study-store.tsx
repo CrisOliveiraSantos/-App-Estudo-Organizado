@@ -103,7 +103,32 @@ type Store = StudyState & {
   /** Texto extraído do PDF inteiro (leitor com PDF.js) para busca e flashcards. */
   setPdfText: (noteId: string, text: string) => void;
 };
+export type StudyActions = Omit<Store, keyof StudyState>;
+
+/**
+ * Contextos por fatia — o equivalente a `useStore(state => state.tasks)` sem
+ * adicionar Zustand ao projeto.
+ *
+ * Antes existia um único contexto com `state` inteiro. Como `useStudy()` era
+ * consumido por todas as abas montadas, concluir uma tarefa na Home re-renderizava
+ * também Chat, Planejamento, Biblioteca, Editor e Ajustes. Agora cada tela
+ * assina só a fatia que usa e as ações vivem num contexto separado e estável.
+ */
 const StudyContext = createContext<Store | null>(null);
+const StudyActionsContext = createContext<StudyActions | null>(null);
+const NotesContext = createContext<Note[] | null>(null);
+const FoldersContext = createContext<Folder[] | null>(null);
+const GoalsContext = createContext<Goal[] | null>(null);
+const SubjectsContext = createContext<Subject[] | null>(null);
+const EventsContext = createContext<AcademicEvent[] | null>(null);
+const ChatMessagesContext = createContext<ChatMessage[] | null>(null);
+
+function useSlice<T>(context: React.Context<T | null>, hookName: string): T {
+  const value = useContext(context);
+  if (value === null) throw new Error(`${hookName} must be used inside StudyProvider`);
+  return value;
+}
+
 
 /** Sequência para ids de matéria criados no mesmo milissegundo (importação em lote). */
 let subjectSeq = 0;
@@ -225,10 +250,26 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
+  /**
+   * Persistência local com debounce: `JSON.stringify(state)` é síncrono e caro
+   * (notas com texto de PDF passam de 100 mil caracteres). Antes ele rodava a
+   * cada atualização de estado — inclusive a cada autosave do editor. Agrupar
+   * as rajadas em 250 ms tira esse trabalho do caminho da digitação/navegação.
+   */
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const latestStateRef = useRef(state);
+
   useEffect(() => {
     if (!hydrated) return;
     stateRef.current = state;
-    void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(state)).catch(() => undefined);
+    latestStateRef.current = state;
+
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(latestStateRef.current)).catch(() => undefined);
+    }, 250);
+
     if (!supabase) return;
     const nextSnapshot = makeSnapshot(state);
     if (!snapshotReadyRef.current) {
@@ -249,10 +290,22 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     }
   }, [state, hydrated, queueRecords]);
 
-  const value = useMemo<Store>(() => ({
-    ...state,
+  /** Última gravação pendente não pode ser perdida ao fechar a tela. */
+  useEffect(() => () => {
+    if (!persistTimerRef.current) return;
+    clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = null;
+    void AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(latestStateRef.current)).catch(() => undefined);
+  }, []);
+
+
+  /**
+   * `[]` de propósito: as ações só usam `setState` (estável) e `stateRef`
+   * (leitura sempre atual). Assim `useStudyActions()` não re-renderiza nada.
+   */
+  const actions = useMemo<StudyActions>(() => ({
     createNote: (title = 'Novo documento', folder = 'Sem pasta') => { const id = `note-${Date.now()}`; setState(s => ({ ...s, notes: [{ id, title, content: '', folder, updatedAt: 'Agora', kind: 'note', blocks: [] }, ...s.notes] })); return id; },
-    duplicateNote: noteId => { const source = state.notes.find(note => note.id === noteId); if (!source) return null; const id = `note-${Date.now()}`; setState(s => ({ ...s, notes: [{ ...source, id, title: `${source.title} — cópia`, updatedAt: 'Agora', blocks: source.blocks?.map(block => ({ ...block, id: `${block.id}-${Date.now()}` })) }, ...s.notes] })); return id; },
+    duplicateNote: noteId => { const source = stateRef.current.notes.find(note => note.id === noteId); if (!source) return null; const id = `note-${Date.now()}`; setState(s => ({ ...s, notes: [{ ...source, id, title: `${source.title} — cópia`, updatedAt: 'Agora', blocks: source.blocks?.map(block => ({ ...block, id: `${block.id}-${Date.now()}` })) }, ...s.notes] })); return id; },
     toggleEvent: eventId => setState(s => ({ ...s, events: s.events.map(event => event.id === eventId ? { ...event, done: !event.done } : event) })),
     addSubject: (name, professor, emoji = '✦', color = '#3949AB') => { const id = `subject-${Date.now()}-${subjectSeq += 1}`; setState(s => ({ ...s, subjects: [...s.subjects, { id, name, professor, color, emoji }] })); return id; },
     updateSubject: (subjectId, changes) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, ...changes } : subject) })),
@@ -275,12 +328,65 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     addPdf: (name, uri) => setState(s => ({ ...s, notes: [{ id: Date.now().toString(), title: name, content: `Material importado localmente.\nArquivo: ${uri}`, folder: 'Sem pasta', updatedAt: 'Agora', kind: 'pdf', uri, pdfPages: [{ id: `${Date.now()}-1`, pageNumber: 1, imageUri: undefined }] }, ...s.notes] })),
     appendPdfPage: (noteId, page) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, updatedAt: 'Agora', content: `${note.content}\n\nPágina ${page.pageNumber}\n${page.extractedText ?? ''}`, pdfPages: [...(note.pdfPages ?? []), page] } : note) })),
     setPdfText: (noteId, text) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, pdfText: text.slice(0, 120_000) } : note) })),
-  }), [state]);
-  return <StudyContext.Provider value={value}>{children}</StudyContext.Provider>;
+  }), []);
+
+  /**
+   * Compatibilidade: `useStudy()` continua devolvendo estado + ações, mas as
+   * telas assinam as fatias abaixo para não re-renderizar o app inteiro.
+   */
+  const value = useMemo<Store>(() => ({ ...state, ...actions }), [state, actions]);
+
+  return (
+    <StudyActionsContext.Provider value={actions}>
+      <NotesContext.Provider value={state.notes}>
+        <FoldersContext.Provider value={state.folders}>
+          <GoalsContext.Provider value={state.goals}>
+            <SubjectsContext.Provider value={state.subjects}>
+              <EventsContext.Provider value={state.events}>
+                <ChatMessagesContext.Provider value={state.chatMessages}>
+                  <StudyContext.Provider value={value}>{children}</StudyContext.Provider>
+                </ChatMessagesContext.Provider>
+              </EventsContext.Provider>
+            </SubjectsContext.Provider>
+          </GoalsContext.Provider>
+        </FoldersContext.Provider>
+      </NotesContext.Provider>
+    </StudyActionsContext.Provider>
+  );
 }
 
 export function useStudy() {
   const value = useContext(StudyContext);
   if (!value) throw new Error('useStudy must be used inside StudyProvider');
   return value;
+}
+
+/** Ações estáveis — nunca disparam re-render por mudança de estado. */
+export function useStudyActions() {
+  return useSlice(StudyActionsContext, 'useStudyActions');
+}
+
+/** Fatias: cada tela assina apenas o dado que renderiza. */
+export function useStudyNotes() {
+  return useSlice(NotesContext, 'useStudyNotes');
+}
+
+export function useStudyFolders() {
+  return useSlice(FoldersContext, 'useStudyFolders');
+}
+
+export function useStudyGoals() {
+  return useSlice(GoalsContext, 'useStudyGoals');
+}
+
+export function useStudySubjects() {
+  return useSlice(SubjectsContext, 'useStudySubjects');
+}
+
+export function useStudyEvents() {
+  return useSlice(EventsContext, 'useStudyEvents');
+}
+
+export function useStudyChatMessages() {
+  return useSlice(ChatMessagesContext, 'useStudyChatMessages');
 }

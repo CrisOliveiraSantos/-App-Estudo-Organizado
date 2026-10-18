@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { Image, Pressable, ScrollView, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import * as Clipboard from 'expo-clipboard';
 
 import { ScreenContainer } from '@/components/screen-container';
@@ -8,7 +9,7 @@ import { IconSymbol } from '@/components/ui/icon-symbol';
 import { PdfWebView } from '@/components/pdf-webview';
 import { useColors } from '@/hooks/use-colors';
 import { pdfSourceKind } from '@/lib/pdf-source';
-import { useStudy } from '@/lib/study-store';
+import { useStudyActions, useStudyNotes } from '@/lib/study-store';
 
 /**
  * Leitor de PDF com seleção de texto.
@@ -21,9 +22,17 @@ import { useStudy } from '@/lib/study-store';
  */
 export default function PdfViewerScreen() {
   const { id } = useLocalSearchParams<{ id?: string }>();
-  const { notes, setPdfText } = useStudy();
+  const notes = useStudyNotes();
+  const { setPdfText } = useStudyActions();
   const colors = useColors();
   const { height } = useWindowDimensions();
+  /**
+   * A WebView do PDF.js consome CPU/memória enquanto está montada — inclusive
+   * atrás de outra tela (ex.: ao abrir Flashcards a partir do leitor). Quando a
+   * tela perde o foco, o componente é desmontado (a view nativa é destruída) e
+   * remontado ao voltar.
+   */
+  const isFocused = useIsFocused();
   const pdf = notes.find(note => note.id === id);
   const pages = pdf?.pdfPages ?? [];
   const [pageText, setPageText] = useState('');
@@ -99,7 +108,7 @@ export default function PdfViewerScreen() {
       </View>
 
       <ScrollView contentContainerStyle={styles.content}>
-        {hasViewer && pdf?.uri ? (
+        {hasViewer && pdf?.uri && isFocused ? (
           <PdfWebView
             height={viewerHeight}
             onCopy={text => void copy(text)}

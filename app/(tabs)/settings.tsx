@@ -6,7 +6,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { useColors } from '@/hooks/use-colors';
 import { useThemeContext, type ThemePreference } from '@/lib/theme-provider';
-import { useStudy } from '@/lib/study-store';
+import { useStudyActions, useStudyEvents, useStudyGoals, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 import { AcademicButton, AcademicPill, academicColors } from '@/components/academic/design-system';
 import { scheduleTestNotification } from '@/lib/notifications';
 import { SchemeColors, type ColorScheme } from '@/constants/theme';
@@ -39,7 +39,10 @@ export default function SettingsScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
   const { themePreference, setThemePreference, colorScheme } = useThemeContext();
-  const { notes, goals, subjects, events } = useStudy();
+  const notes = useStudyNotes();
+  const goals = useStudyGoals();
+  const subjects = useStudySubjects();
+  const events = useStudyEvents();
   const params = useLocalSearchParams<{ section?: string }>();
   const [activeKey, setActiveKey] = useState<SettingsKey>(settingsItems.find(item => item.key === params.section)?.key ?? 'profile');
   const isWide = width >= 780;
@@ -145,7 +148,11 @@ function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }
   const listCourses = trpc.academic.listCourses.useMutation();
   const getCourseContents = trpc.academic.getCourseContents.useMutation();
   const syncAcademic = trpc.academic.syncAcademic.useMutation();
-  const { subjects, goals, events, notes, addSubject, createNote, saveNote, addEvent, addTask } = useStudy();
+  const subjects = useStudySubjects();
+  const goals = useStudyGoals();
+  const events = useStudyEvents();
+  const notes = useStudyNotes();
+  const { addSubject, createNote, saveNote, addEvent, addTask } = useStudyActions();
   useEffect(() => {
     AsyncStorage.getItem('@estudo-organizado/academic-connection').then(async raw => {
       if (!raw) return;

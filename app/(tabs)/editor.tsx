@@ -6,7 +6,7 @@ import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, academicColors } from '@/components/academic/design-system';
-import { type Note, type RichBlock, useStudy } from '@/lib/study-store';
+import { type Note, type RichBlock, useStudyActions, useStudyFolders, useStudyNotes } from '@/lib/study-store';
 
 type ViewMode = 'grid' | 'list';
 type Order = 'recent' | 'az';
@@ -34,7 +34,9 @@ export default function EditorDocumentsScreen() {
    * + o inset de baixo do aparelho (o `ScreenContainer` só reserva top/left/right).
    */
   const navClearance = neonFabClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom + 8;
-  const { notes, folders, createNote, duplicateNote, deleteNote, renameNote, moveNote, toggleNoteFavorite, saveNote } = useStudy();
+  const notes = useStudyNotes();
+  const folders = useStudyFolders();
+  const { createNote, duplicateNote, deleteNote, renameNote, moveNote, toggleNoteFavorite, saveNote } = useStudyActions();
   const [query, setQuery] = useState('');
   const [activeFilter, setActiveFilter] = useState('Todos');
   const [order, setOrder] = useState<Order>('recent');

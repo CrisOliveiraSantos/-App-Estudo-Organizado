@@ -50,7 +50,7 @@ import type { AiConfig } from '@/lib/api-config';
 import { shouldSendChatOnEnter } from '@/lib/chat-utils';
 import { describeScreen, streamCris, type CrisContext, type CrisFailure, type CrisReply } from '@/lib/cris-client';
 import { EMPTY_CRIS_MEMORY, getCrisMemory, isCrisMemoryEmpty, type CrisUserMemory } from '@/lib/cris-memory';
-import { useStudy } from '@/lib/study-store';
+import { useStudyEvents } from '@/lib/study-store';
 
 /* ------------------------------------------------------------------ *
  * Constantes
@@ -185,7 +185,7 @@ export default function CrisPopup() {
   const insets = useSafeAreaInsets();
   const pathname = usePathname();
   const { width } = useWindowDimensions();
-  const { events } = useStudy();
+  const events = useStudyEvents();
 
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');

@@ -117,6 +117,12 @@ export default function TabLayout() {
                 screenOptions={{
                   /** v7 do bottom-tabs: cross-fade entre abas, sem salto seco (Etapa 3). */
                   animation: 'fade',
+                  /**
+                   * Abas fora de foco ficam congeladas (react-native-screens): sem
+                   * isso, cada mudança de estado re-renderizava TODAS as abas
+                   * montadas, mesmo invisíveis — a causa do atraso ao trocar de aba.
+                   */
+                  freezeOnBlur: true,
                   headerShown: false,
                   sceneStyle: styles.sceneFill,
                   tabBarActiveBackgroundColor: 'transparent',

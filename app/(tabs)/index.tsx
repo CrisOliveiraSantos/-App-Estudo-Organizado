@@ -7,7 +7,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, AcademicProgress, AcademicSection, NeonGradient, useAcademicColors } from '@/components/academic/design-system';
 import { cardShadow, hexToRgba, neonRadius, neonType } from '@/lib/theme-runtime';
-import { type AcademicEvent, type AcademicEventType, type Subject, useStudy } from '@/lib/study-store';
+import { heroTheme } from '@/lib/hero-theme';
+import { type AcademicEvent, type AcademicEventType, type Subject, useStudyActions, useStudyEvents, useStudyGoals, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 
 const eventTypes: AcademicEventType[] = ['Aula', 'Exercício', 'Prova', 'Teste', 'Visita', 'Outro'];
 const eventColors: Record<AcademicEventType, string> = { Aula: '#3346A8', Exercício: '#18865B', Prova: '#C13B4A', Teste: '#B67500', Visita: '#7C3AED', Outro: '#687088' };
@@ -46,7 +47,11 @@ export default function HomeScreen() {
    * pílula e deixava ~52 px de sobreposição.
    */
   const navClearance = neonFabClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom + 8;
-  const { subjects, events, goals, notes, addSubject, updateSubject, deleteSubject, addEvent, toggleEvent, deleteEvent, toggleTask } = useStudy();
+  const subjects = useStudySubjects();
+  const events = useStudyEvents();
+  const goals = useStudyGoals();
+  const notes = useStudyNotes();
+  const { addSubject, updateSubject, deleteSubject, addEvent, toggleEvent, deleteEvent, toggleTask } = useStudyActions();
   const c = useAcademicColors();
   const styles = useMemo(() => createStyles(c), [c]);
   const [today] = useState(() => new Date());
@@ -229,8 +234,8 @@ type HomeStyles = ReturnType<typeof createStyles>;
  */
 function createStyles(c: HomePalette) {
   return StyleSheet.create({
-    avatar: { alignItems: 'center', backgroundColor: hexToRgba(c.violet, 0.16), borderColor: hexToRgba(c.violet, 0.32), borderRadius: 18, borderWidth: 1, height: 52, justifyContent: 'center', width: 52 },
-    avatarText: { color: c.violet, fontSize: 21, fontWeight: '900' },
+    avatar: { alignItems: 'center', backgroundColor: heroTheme.avatarFill, borderColor: heroTheme.avatarBorder, borderRadius: 18, borderWidth: 1, height: 52, justifyContent: 'center', width: 52 },
+    avatarText: { color: heroTheme.avatarText, fontSize: 21, fontWeight: '900' },
     calendarArrow: { alignItems: 'center', backgroundColor: hexToRgba(c.muted, 0.14), borderRadius: 10, height: 34, justifyContent: 'center', width: 34 },
     calendarArrowText: { color: c.primary, fontSize: 25, fontWeight: '500', lineHeight: 28 },
     calendarCard: { padding: 14 },
@@ -264,21 +269,22 @@ function createStyles(c: HomePalette) {
     eventStack: { gap: 9 },
     eventTime: { color: c.muted, fontSize: 12, fontWeight: '700', marginLeft: 8 },
     eventTitle: { color: c.ink, fontSize: 14, fontWeight: '800', lineHeight: 20 },
-    hero: { alignItems: 'flex-start', borderColor: c.line, borderRadius: neonRadius.card, borderWidth: 1, flexDirection: 'row', gap: 12, overflow: 'hidden', padding: 19 },
+    hero: { alignItems: 'flex-start', borderColor: heroTheme.border, borderRadius: neonRadius.card, borderWidth: 1, flexDirection: 'row', gap: 12, overflow: 'hidden', padding: 19 },
     heroCopy: { flex: 1 },
     /**
      * `backgroundColor` aqui pelo mesmo motivo do `AcademicCard`: este é o
-     * container que carrega `cardShadow('floating')` e ele era 100% transparente
-     * (o fundo vivia só no filho `NeonGradient`, com `hero` = ciano/rosa a 0.14).
-     * Sombra de `elevation` em container transparente = quadrado fantasma do
-     * Android. A base usa `c.canvas` (= `colors.background`, o mesmo tom que o
-     * `styles.shell` de `app/(tabs)/_layout.tsx` pinta por trás do hero): o hero é
-     * o único card translúcido do app, então o tom sobre a página continua
-     * idêntico — só as partículas atrás dele deixam de atravessar.
+     * container que carrega `cardShadow('floating')` e ele era 100% transparente.
+     * Sombra de `elevation` em container transparente = quadrado fantasma do Android.
+     *
+     * A base é `heroTheme.base` (roxa escura FIXA, não `c.canvas`): o HeroCard é o
+     * único bloco do app que não segue o tema, porque o texto é branco em todos os
+     * temas (Claro, Escuro, Neon, Violeta…). O `NeonGradient` "hero" só acrescenta
+     * um véu de cor sobre essa base — antes, em temas de fundo escuro, `c.ink`
+     * caía sobre o gradiente escuro e o título ficava ilegível.
      */
-    heroShadow: { backgroundColor: c.canvas, borderRadius: neonRadius.card, marginBottom: 20 },
-    heroText: { color: c.muted, fontSize: 13, lineHeight: 19, marginTop: 6 },
-    heroTitle: { color: c.ink, fontSize: 23, fontWeight: '900', letterSpacing: -0.6, lineHeight: 29, marginTop: 4 },
+    heroShadow: { backgroundColor: heroTheme.base, borderRadius: neonRadius.card, marginBottom: 20 },
+    heroText: { color: heroTheme.text, fontSize: 13, lineHeight: 19, marginTop: 6 },
+    heroTitle: { color: heroTheme.title, fontSize: 23, fontWeight: '900', letterSpacing: -0.6, lineHeight: 29, marginTop: 4 },
     iconAction: { minHeight: 32, paddingLeft: 10 },
     iconActionText: { color: c.primary, fontSize: 12, fontWeight: '800' },
     inlineInput: { backgroundColor: hexToRgba(c.surfaceAlt, 0.92), borderColor: c.line, borderRadius: 10, borderWidth: 1, color: c.ink, fontSize: 14, marginBottom: 8, minHeight: 42, paddingHorizontal: 11 },
@@ -297,7 +303,7 @@ function createStyles(c: HomePalette) {
     noteRow: { alignItems: 'center', borderBottomColor: c.line, borderBottomWidth: 1, flexDirection: 'row', minHeight: 65, paddingVertical: 10 },
     noteTitle: { color: c.ink, fontSize: 14, fontWeight: '800' },
     notesPanel: { backgroundColor: 'transparent', paddingHorizontal: 0 },
-    overline: { color: c.primary, fontSize: neonType.eyebrow.size, fontWeight: '800', letterSpacing: neonType.eyebrow.letterSpacing },
+    overline: { color: heroTheme.overline, fontSize: neonType.eyebrow.size, fontWeight: '800', letterSpacing: neonType.eyebrow.letterSpacing },
     primaryColumn: { flex: 1 },
     priorityDot: { borderRadius: 99, height: 9, marginRight: 6, width: 9 },
     priorityIndicator: { alignItems: 'center', flexDirection: 'row', marginLeft: 8 },

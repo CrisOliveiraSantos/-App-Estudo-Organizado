@@ -19,7 +19,7 @@ import {
   type ImportProviderId,
   type ScrapedTask,
 } from '@/lib/academic-import';
-import { useStudy } from '@/lib/study-store';
+import { useStudyActions, useStudyEvents, useStudySubjects } from '@/lib/study-store';
 
 const STORAGE_KEY = '@estudo-organizado/import-connection';
 
@@ -27,7 +27,9 @@ type SavedConnection = { provider?: ImportProviderId; url?: string };
 
 export default function AcademicImportScreen() {
   const colors = useColors();
-  const { addEvent, addSubject, addSubjectTask, events, subjects } = useStudy();
+  const events = useStudyEvents();
+  const subjects = useStudySubjects();
+  const { addEvent, addSubject, addSubjectTask } = useStudyActions();
   const [provider, setProvider] = useState<ImportProviderId>('sigaa');
   const [url, setUrl] = useState<string>(IMPORT_PROVIDERS[0].url);
   const [draft, setDraft] = useState<string>(IMPORT_PROVIDERS[0].url);
