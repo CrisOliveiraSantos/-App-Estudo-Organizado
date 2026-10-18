@@ -9,6 +9,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, academicColors } from '@/components/academic/design-system';
 import { type Note, useStudy } from '@/lib/study-store';
+import { neonFonts } from '@/lib/theme-runtime';
 
 type Filter = 'Todos' | 'Notas' | 'PDFs';
 
@@ -43,7 +44,7 @@ export default function LibraryScreen() {
         Alert.alert('Falha ao importar PDF', 'O navegador não forneceu os dados do arquivo.');
         return;
       }
-      addPdf(asset.name, asset.base64);
+      addPdf(asset.name, `data:application/pdf;base64,${asset.base64}`);
       Alert.alert('PDF importado', 'O arquivo foi salvo para visualização e extração de texto.');
       return;
     }
@@ -79,14 +80,14 @@ export default function LibraryScreen() {
         <View style={styles.listHeader}><View><Text style={styles.sectionTitle}>Seus materiais</Text><Text style={styles.sectionDescription}>{shown.length} {shown.length === 1 ? 'item encontrado' : 'itens encontrados'}</Text></View><AcademicPill label={filter} tone="indigo" /></View>
       </View>}
       ListEmptyComponent={<AcademicEmptyState title={query ? 'Nenhum material encontrado' : 'Sua Biblioteca está pronta'} description={query ? 'Tente outro termo ou outro filtro.' : 'Importe um PDF ou crie uma nota para começar.'} actionLabel={query ? undefined : 'Importar PDF'} onAction={query ? undefined : () => { void pickPdf(); }} />}
-      renderItem={({ item }) => <LibraryItem item={item} folders={folders.map(folder => folder.name)} editing={editingId === item.id} draftTitle={draftTitle} setDraftTitle={setDraftTitle} onOpen={() => router.push(item.kind === 'pdf' ? { pathname: '/pdf', params: { id: item.id } } : { pathname: '/document', params: { id: item.id } })} onRename={() => { setEditingId(item.id); setDraftTitle(item.title); }} onSaveRename={finishRename} onMove={() => moveNote(item.id, folders[(folders.findIndex(folder => folder.name === item.folder) + 1) % Math.max(folders.length, 1)]?.name ?? 'Sem pasta')} onDelete={() => { const remove = () => deleteNote(item.id); if (Platform.OS === 'web' && typeof window !== 'undefined') { if (window.confirm(`Excluir “${item.title}”? Esta ação não pode ser desfeita.`)) remove(); return; } Alert.alert('Excluir material?', 'Esta ação remove o material dos dados locais.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: remove }]); }} />}
+      renderItem={({ item }) => <LibraryItem item={item} folders={folders.map(folder => folder.name)} editing={editingId === item.id} draftTitle={draftTitle} setDraftTitle={setDraftTitle} onOpen={() => router.push(item.kind === 'pdf' ? { pathname: '/pdf', params: { id: item.id } } : { pathname: '/document', params: { id: item.id } })} onRename={() => { setEditingId(item.id); setDraftTitle(item.title); }} onSaveRename={finishRename} onMove={() => moveNote(item.id, folders[(folders.findIndex(folder => folder.name === item.folder) + 1) % Math.max(folders.length, 1)]?.name ?? 'Sem pasta')} onFlashcards={() => router.push({ pathname: '/flashcards', params: { noteId: item.id } })} onDelete={() => { const remove = () => deleteNote(item.id); if (Platform.OS === 'web' && typeof window !== 'undefined') { if (window.confirm(`Excluir “${item.title}”? Esta ação não pode ser desfeita.`)) remove(); return; } Alert.alert('Excluir material?', 'Esta ação remove o material dos dados locais.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: remove }]); }} />}
     />
   </ScreenContainer>;
 }
 
-function LibraryItem({ item, editing, draftTitle, setDraftTitle, onOpen, onRename, onSaveRename, onMove, onDelete }: { item: Note; folders: string[]; editing: boolean; draftTitle: string; setDraftTitle: (value: string) => void; onOpen: () => void; onRename: () => void; onSaveRename: () => void; onMove: () => void; onDelete: () => void }) {
+function LibraryItem({ item, editing, draftTitle, setDraftTitle, onOpen, onRename, onSaveRename, onMove, onDelete, onFlashcards }: { item: Note; folders: string[]; editing: boolean; draftTitle: string; setDraftTitle: (value: string) => void; onOpen: () => void; onRename: () => void; onSaveRename: () => void; onMove: () => void; onDelete: () => void; onFlashcards: () => void }) {
   const isPdf = item.kind === 'pdf';
-  return <AcademicCard style={styles.materialCard}><TouchableOpacity onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${item.title}`} activeOpacity={0.76} style={styles.materialOpen}><View style={[styles.materialIcon, { backgroundColor: isPdf ? '#FDECEF' : '#E8EBFF' }]}><IconSymbol name={isPdf ? 'doc.text.fill' : 'note.text'} size={23} color={isPdf ? academicColors.danger : academicColors.indigo} /></View><View style={styles.materialCopy}><View style={styles.materialTitleRow}><Text numberOfLines={1} style={styles.materialTitle}>{item.title}</Text><AcademicPill label={isPdf ? 'PDF' : 'Nota'} tone={isPdf ? 'danger' : 'indigo'} /></View><Text style={styles.materialMeta}>{item.folder || 'Sem pasta'} · {item.updatedAt}</Text><Text numberOfLines={2} style={styles.materialPreview}>{item.content || (isPdf ? 'Material em PDF pronto para visualização.' : 'Documento vazio — toque para começar a escrever.')}</Text></View><IconSymbol name="chevron.right" size={19} color={academicColors.muted} /></TouchableOpacity>{editing ? <View style={styles.renameBox}><TextInput value={draftTitle} onChangeText={setDraftTitle} autoFocus onSubmitEditing={onSaveRename} placeholder="Título do material" placeholderTextColor={academicColors.muted} style={styles.input} /><AcademicButton label="Salvar nome" onPress={onSaveRename} compact /></View> : <View style={styles.actions}><TouchableOpacity onPress={onRename} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Renomear</Text></TouchableOpacity><TouchableOpacity onPress={onMove} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Mover</Text></TouchableOpacity><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${item.title}`} style={styles.deleteAction}><Text style={styles.deleteActionText}>Excluir</Text></TouchableOpacity></View>}</AcademicCard>;
+  return <AcademicCard style={styles.materialCard}><TouchableOpacity onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${item.title}`} activeOpacity={0.76} style={styles.materialOpen}><View style={[styles.materialIcon, { backgroundColor: isPdf ? '#FDECEF' : '#E8EBFF' }]}><IconSymbol name={isPdf ? 'doc.text.fill' : 'note.text'} size={23} color={isPdf ? academicColors.danger : academicColors.indigo} /></View><View style={styles.materialCopy}><View style={styles.materialTitleRow}><Text numberOfLines={1} style={styles.materialTitle}>{item.title}</Text><AcademicPill label={isPdf ? 'PDF' : 'Nota'} tone={isPdf ? 'danger' : 'indigo'} /></View><Text style={styles.materialMeta}>{item.folder || 'Sem pasta'} · {item.updatedAt}</Text><Text numberOfLines={2} style={styles.materialPreview}>{item.content || (isPdf ? 'Material em PDF pronto para visualização.' : 'Documento vazio — toque para começar a escrever.')}</Text></View><IconSymbol name="chevron.right" size={19} color={academicColors.muted} /></TouchableOpacity>{editing ? <View style={styles.renameBox}><TextInput value={draftTitle} onChangeText={setDraftTitle} autoFocus onSubmitEditing={onSaveRename} placeholder="Título do material" placeholderTextColor={academicColors.muted} style={styles.input} /><AcademicButton label="Salvar nome" onPress={onSaveRename} compact /></View> : <View style={styles.actions}><TouchableOpacity onPress={onFlashcards} accessibilityRole="button" accessibilityLabel={`Gerar flashcards de ${item.title}`} style={styles.action}><Text style={styles.actionText}>Flashcards</Text></TouchableOpacity><TouchableOpacity onPress={onRename} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Renomear</Text></TouchableOpacity><TouchableOpacity onPress={onMove} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Mover</Text></TouchableOpacity><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${item.title}`} style={styles.deleteAction}><Text style={styles.deleteActionText}>Excluir</Text></TouchableOpacity></View>}</AcademicCard>;
 }
 
 const styles = StyleSheet.create({
@@ -119,20 +120,20 @@ const styles = StyleSheet.create({
   importTitle: { color: academicColors.ink, fontSize: 13, fontWeight: '900', lineHeight: 17 },
   input: { backgroundColor: '#F9FAFE', borderColor: academicColors.line, borderRadius: 11, borderWidth: 1, color: academicColors.ink, fontSize: 14, marginBottom: 9, minHeight: 43, paddingHorizontal: 11 },
   listHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 11 },
-  materialCard: { marginBottom: 10, padding: 14 },
+  materialCard: { marginBottom: 16, padding: 14 },
   materialCopy: { flex: 1, minWidth: 0, paddingHorizontal: 11 },
   materialIcon: { alignItems: 'center', borderRadius: 13, height: 46, justifyContent: 'center', width: 46 },
   materialMeta: { color: academicColors.muted, fontSize: 11, marginTop: 3 },
   materialOpen: { alignItems: 'center', flexDirection: 'row' },
   materialPreview: { color: academicColors.muted, fontSize: 12, lineHeight: 17, marginTop: 7 },
-  materialTitle: { color: academicColors.ink, flex: 1, fontSize: 15, fontWeight: '900', paddingRight: 7 },
+  materialTitle: { color: academicColors.ink, flex: 1, fontFamily: neonFonts.strong, fontSize: 15, fontWeight: 'normal', paddingRight: 7 },
   materialTitleRow: { alignItems: 'center', flexDirection: 'row' },
   overline: { color: academicColors.violet, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
   renameBox: { borderTopColor: academicColors.line, borderTopWidth: 1, marginTop: 13, paddingTop: 11 },
   searchBox: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: academicColors.line, borderRadius: 12, borderWidth: 1, flexDirection: 'row', marginBottom: 11, minHeight: 47, paddingHorizontal: 12 },
   searchInput: { color: academicColors.ink, flex: 1, fontSize: 14, minHeight: 46, paddingLeft: 8 },
   sectionDescription: { color: academicColors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
-  sectionTitle: { color: academicColors.ink, fontSize: 18, fontWeight: '900', letterSpacing: -0.2 },
+  sectionTitle: { color: academicColors.ink, fontFamily: neonFonts.display, fontSize: 18, fontWeight: 'normal', letterSpacing: -0.3 },
   subtitle: { color: academicColors.muted, fontSize: 14, lineHeight: 20, marginTop: 7 },
-  title: { color: academicColors.ink, fontSize: 31, fontWeight: '900', letterSpacing: -0.9, lineHeight: 38, marginTop: 4 },
+  title: { color: academicColors.ink, fontFamily: neonFonts.display, fontSize: 31, fontWeight: 'normal', letterSpacing: -0.9, lineHeight: 38, marginTop: 4 },
 });

@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest';
 
-describe('Supabase connection', () => {
+const hasSupabaseEnv = Boolean(process.env.EXPO_PUBLIC_SUPABASE_URL && process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY);
+
+/** Teste de integração real: só roda quando o `.env` traz as credenciais. */
+describe.skipIf(!hasSupabaseEnv)('Supabase connection', () => {
   it('accepts the configured public URL and anon key', async () => {
     const url = process.env.EXPO_PUBLIC_SUPABASE_URL;
     const key = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;

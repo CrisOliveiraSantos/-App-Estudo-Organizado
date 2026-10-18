@@ -20,6 +20,13 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import CrisPopup from "@/components/cris-popup";
+import {
+  Inter_400Regular,
+  Inter_600SemiBold,
+  Inter_700Bold,
+  Inter_800ExtraBold,
+  useFonts,
+} from "@expo-google-fonts/inter";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -31,6 +38,17 @@ export const unstable_settings = {
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
+
+  /**
+   * Inter para os títulos (design da Tarefa 4). Sem a fonte carregada, o app
+   * ficaria com "flash" de fonte do sistema: seguramos a primeira pintura.
+   */
+  const [fontsLoaded, fontError] = useFonts({
+    Inter_400Regular,
+    Inter_600SemiBold,
+    Inter_700Bold,
+    Inter_800ExtraBold,
+  });
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
   const [frame, setFrame] = useState<Rect>(initialFrame);
@@ -96,6 +114,9 @@ export default function RootLayout() {
             <Stack.Screen name="ai-settings" />
             <Stack.Screen name="api-settings" />
             <Stack.Screen name="cris-profile" />
+            <Stack.Screen name="pdf" />
+            <Stack.Screen name="import" />
+            <Stack.Screen name="flashcards" />
           </Stack>
           <CrisPopup />
           <StatusBar style="auto" />
@@ -105,6 +126,8 @@ export default function RootLayout() {
   );
 
   const shouldOverrideSafeArea = Platform.OS === "web";
+
+  if (!fontsLoaded && !fontError) return null;
 
   if (shouldOverrideSafeArea) {
     return (

@@ -16,6 +16,7 @@ import {
   neonMotion,
   neonRadius,
   neonType,
+  neonFonts,
   type AcademicTone,
   type NeonGradientName,
 } from '@/lib/theme-runtime';
@@ -244,7 +245,7 @@ export function AcademicCard({
         style={[
           styles.card,
           padded && styles.cardPadded,
-          { borderColor: emphasis ? hexToRgba(colors.primary, 0.42) : colors.border },
+          { borderColor: emphasis ? hexToRgba(colors.primary, 0.42) : hexToRgba(colors.border, 0.5) },
           content,
         ]}
       >
@@ -601,13 +602,13 @@ const styles = StyleSheet.create({
    * `flexGrow` e não `flex: 1` porque `flex: 1` zera o `flexBasis` e zeraria a
    * altura hipotética do card em containers de altura automática.
    */
-  card: { borderRadius: neonRadius.card, borderWidth: 1, flexGrow: 1, overflow: 'hidden' },
+  card: { borderRadius: neonRadius.card, borderWidth: 0.5, flexGrow: 1, overflow: 'hidden' },
   /**
    * Caixa **externa** do card: só o raio (contorno arredondado para a base opaca e
    * para o `elevation`) + o que o chamador manda de layout. Borda, gradiente e
    * `overflow` vivem na interna de propósito.
    */
-  cardBox: { borderRadius: neonRadius.card },
+  cardBox: { borderRadius: neonRadius.card, marginBottom: 16 },
   cardPadded: { padding: 20 },
   disabled: { opacity: 0.48 },
   emptyDescription: { fontSize: neonType.body.size, lineHeight: 20, marginTop: 6, textAlign: 'center' },
@@ -649,7 +650,7 @@ const styles = StyleSheet.create({
   progressTrack: { borderRadius: 999, overflow: 'hidden', width: '100%' },
   section: { marginBottom: 26 },
   sectionHeading: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 12 },
-  sectionTitle: { fontSize: 20, fontWeight: '800', letterSpacing: -0.25 },
+  sectionTitle: { fontFamily: neonFonts.display, fontSize: 20, fontWeight: 'normal', letterSpacing: -0.4 },
   sectionTitleWrap: { flex: 1, paddingRight: 12 },
   tab: {
     alignItems: 'center',

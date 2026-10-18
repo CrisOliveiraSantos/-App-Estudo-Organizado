@@ -109,6 +109,14 @@ export const neonType = {
   pill: { size: 11, weight: '800' },
 } as const;
 
+/** Tipografia do tema: Inter carregada no `RootLayout` (fallback = fonte do sistema). */
+export const neonFonts = {
+  body: 'Inter_400Regular',
+  medium: 'Inter_600SemiBold',
+  strong: 'Inter_700Bold',
+  display: 'Inter_800ExtraBold',
+} as const;
+
 /** Partículas de fundo (`#particles`: 40 nós, `float 12s`, 4px, opacidade .15–.4). */
 export const neonParticles = {
   count: 40,

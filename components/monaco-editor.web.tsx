@@ -1,5 +1,5 @@
 import Editor from "@monaco-editor/react";
-import { View } from "react-native";
+import { View, type DimensionValue } from "react-native";
 import { useThemeContext } from "@/lib/theme-provider";
 
 export type MonacoEditorProps = {
@@ -23,7 +23,7 @@ export function MonacoEditor({
   const resolvedTheme = theme ?? (colorScheme === "dark" ? "dark" : "light");
 
   return (
-    <View style={{ height, width: "100%" }}>
+    <View style={{ height: height as DimensionValue, width: "100%" }}>
       <Editor
         height="100%"
         width="100%"

@@ -13,6 +13,7 @@ import { SchemeColors, type ColorScheme } from '@/constants/theme';
 import { trpc } from '@/lib/trpc';
 import * as WebBrowser from 'expo-web-browser';
 import { clearAcademicToken, readAcademicToken, saveAcademicToken } from '@/lib/academic-credentials';
+import { neonFonts } from '@/lib/theme-runtime';
 
 type SettingsKey = 'profile' | 'account' | 'appearance' | 'notifications' | 'connections' | 'ai' | 'editor' | 'studies' | 'privacy' | 'data' | 'about';
 
@@ -204,7 +205,8 @@ function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }
   }, [syncMode, token]); // eslint-disable-line react-hooks/exhaustive-deps
   const openContent = async (item: MoodleContentItem) => { const urlToOpen = item.youtubeUrl || item.url || item.files?.find(file => file.url)?.url; if (urlToOpen) await WebBrowser.openBrowserAsync(urlToOpen); };
   return <View style={styles.contentStack}>
-    <Text style={[styles.body, { color: colors.muted }]}>Conecte um ambiente acadêmico autorizado para trazer disciplinas, avisos, materiais e prazos. O Estudo Organizado não deve receber sua senha em texto aberto nem raspar uma página protegida.</Text>
+    <Text style={[styles.body, { color: colors.muted }]}>Conecte um ambiente acadêmico autorizado para trazer disciplinas, avisos, materiais e prazos. O app nunca recebe sua senha: o login acontece no site oficial dentro do próprio aplicativo e a leitura da página só acontece quando você toca em Capturar.</Text>
+    <AcademicButton label="Importar do SIGAA/Moodle pelo navegador" onPress={() => router.push('/import')} compact />
     <View style={styles.connectionOptions}>{(['moodle', 'sigaa'] as const).map(item => <TouchableOpacity key={item} onPress={() => setProvider(item)} style={[styles.connectionOption, { borderColor: colors.border }, provider === item && { borderColor: academicColors.violet, backgroundColor: academicColors.violetSoft }]}><Text style={[styles.connectionOptionTitle, { color: colors.foreground }]}>{item === 'moodle' ? 'Moodle / AVA' : 'SIGAA'}</Text><Text style={[styles.connectionOptionDetail, { color: colors.muted }]}>{item === 'moodle' ? 'Cursos, materiais e atividades' : 'Disciplinas e dados acadêmicos'}</Text></TouchableOpacity>)}</View>
     <Text style={[styles.inputLabel, { color: colors.foreground }]}>Endereço institucional</Text>
     <TextInput value={url} onChangeText={setUrl} autoCapitalize="none" autoCorrect={false} keyboardType="url" style={[styles.connectionInput, { color: colors.foreground, borderColor: colors.border, backgroundColor: colors.surface }]} placeholder="https://..." placeholderTextColor={colors.muted} />
@@ -280,7 +282,7 @@ function Stat({ label, value, colors }: { label: string; value: number; colors: 
 const styles = StyleSheet.create({
   aboutMark: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 18, height: 52, justifyContent: 'center', width: 52 },
   aboutMarkText: { color: academicColors.violet, fontSize: 25, fontWeight: '800' },
-  aboutTitle: { fontSize: 20, fontWeight: '900', letterSpacing: -0.3, marginTop: 16 },
+  aboutTitle: { fontFamily: neonFonts.display, fontSize: 20, fontWeight: 'normal', letterSpacing: -0.4, marginTop: 16 },
   aboutLead: { fontSize: 15, fontWeight: '800', marginTop: -8 },
   contactCard: { backgroundColor: '#F8F9FA', borderColor: academicColors.line, borderRadius: 14, borderWidth: 1, gap: 9, padding: 13 },
   contactTitle: { fontSize: 14, fontWeight: '900' },
@@ -350,7 +352,7 @@ const styles = StyleSheet.create({
   themeLabel: { fontSize: 14, fontWeight: '900', marginTop: 10 },
   themeSwatch: { borderRadius: 10, borderWidth: 1, height: 35, width: 35 },
   version: { fontSize: 11, marginTop: 8 },
-  title: { fontSize: 31, fontWeight: '900', letterSpacing: -0.8, lineHeight: 38, marginTop: 4 },
+  title: { fontFamily: neonFonts.display, fontSize: 31, fontWeight: 'normal', letterSpacing: -0.8, lineHeight: 38, marginTop: 4 },
   workspace: { flexDirection: 'column' },
   workspaceWide: { flexDirection: 'row', gap: 30 },
   moodleSyncButton: { alignItems: 'center', borderRadius: 14, flexDirection: 'row', gap: 12, minHeight: 68, paddingHorizontal: 15, paddingVertical: 12 },

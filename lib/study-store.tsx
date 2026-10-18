@@ -10,7 +10,7 @@ export type Goal = { id: string; title: string; description: string; deadline?: 
 export type RichBlockType = 'paragraph' | 'heading' | 'quote' | 'code' | 'bullet' | 'table' | 'image' | 'chart';
 export type RichBlock = { id: string; type: RichBlockType; text?: string; data?: string };
 export type PdfPage = { id: string; pageNumber: number; imageUri?: string; extractedText?: string };
-export type Note = { id: string; title: string; content: string; folder: string; updatedAt: string; kind: 'note' | 'pdf'; uri?: string; blocks?: RichBlock[]; images?: string[]; pdfPages?: PdfPage[]; selectedText?: string; favorite?: boolean };
+export type Note = { id: string; title: string; content: string; folder: string; updatedAt: string; kind: 'note' | 'pdf'; uri?: string; blocks?: RichBlock[]; images?: string[]; pdfPages?: PdfPage[]; selectedText?: string; favorite?: boolean; pdfText?: string };
 export type Folder = { id: string; name: string };
 export type Subject = { id: string; name: string; professor: string; color: string; emoji: string; description?: string; tasks?: Task[] };
 export type AcademicEventType = 'Aula' | 'Exercício' | 'Prova' | 'Teste' | 'Visita' | 'Outro';
@@ -81,7 +81,7 @@ type Store = StudyState & {
   duplicateNote: (noteId: string) => string | null;
   toggleTask: (goalId: string, taskId: string) => void;
   toggleEvent: (eventId: string) => void;
-  addSubject: (name: string, professor: string, emoji?: string, color?: string) => void;
+  addSubject: (name: string, professor: string, emoji?: string, color?: string) => string;
   updateSubject: (subjectId: string, changes: Partial<Subject>) => void;
   deleteSubject: (subjectId: string) => void;
   addSubjectTask: (subjectId: string, title: string, priority: Task['priority'], deadline?: string, category?: TaskCategory) => void;
@@ -100,8 +100,13 @@ type Store = StudyState & {
   addFolder: (name: string) => void;
   addPdf: (name: string, uri: string) => void;
   appendPdfPage: (noteId: string, page: PdfPage) => void;
+  /** Texto extraído do PDF inteiro (leitor com PDF.js) para busca e flashcards. */
+  setPdfText: (noteId: string, text: string) => void;
 };
 const StudyContext = createContext<Store | null>(null);
+
+/** Sequência para ids de matéria criados no mesmo milissegundo (importação em lote). */
+let subjectSeq = 0;
 
 export function StudyProvider({ children }: { children: React.ReactNode }) {
   const [state, setState] = useState<StudyState>(initialState);
@@ -249,7 +254,7 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     createNote: (title = 'Novo documento', folder = 'Sem pasta') => { const id = `note-${Date.now()}`; setState(s => ({ ...s, notes: [{ id, title, content: '', folder, updatedAt: 'Agora', kind: 'note', blocks: [] }, ...s.notes] })); return id; },
     duplicateNote: noteId => { const source = state.notes.find(note => note.id === noteId); if (!source) return null; const id = `note-${Date.now()}`; setState(s => ({ ...s, notes: [{ ...source, id, title: `${source.title} — cópia`, updatedAt: 'Agora', blocks: source.blocks?.map(block => ({ ...block, id: `${block.id}-${Date.now()}` })) }, ...s.notes] })); return id; },
     toggleEvent: eventId => setState(s => ({ ...s, events: s.events.map(event => event.id === eventId ? { ...event, done: !event.done } : event) })),
-    addSubject: (name, professor, emoji = '✦', color = '#3949AB') => setState(s => ({ ...s, subjects: [...s.subjects, { id: Date.now().toString(), name, professor, color, emoji }] })),
+    addSubject: (name, professor, emoji = '✦', color = '#3949AB') => { const id = `subject-${Date.now()}-${subjectSeq += 1}`; setState(s => ({ ...s, subjects: [...s.subjects, { id, name, professor, color, emoji }] })); return id; },
     updateSubject: (subjectId, changes) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, ...changes } : subject) })),
     deleteSubject: subjectId => setState(s => ({ ...s, subjects: s.subjects.filter(subject => subject.id !== subjectId), events: s.events.map(event => event.subjectId === subjectId ? { ...event, subjectId: undefined } : event) })),
     addSubjectTask: (subjectId, title, priority, deadline, category) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: [...(subject.tasks ?? []), { id: `subject-task-${Date.now()}`, title, priority, deadline, category, done: false }] } : subject) })),
@@ -269,6 +274,7 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     addFolder: name => setState(s => ({ ...s, folders: [...s.folders, { id: Date.now().toString(), name }] })),
     addPdf: (name, uri) => setState(s => ({ ...s, notes: [{ id: Date.now().toString(), title: name, content: `Material importado localmente.\nArquivo: ${uri}`, folder: 'Sem pasta', updatedAt: 'Agora', kind: 'pdf', uri, pdfPages: [{ id: `${Date.now()}-1`, pageNumber: 1, imageUri: undefined }] }, ...s.notes] })),
     appendPdfPage: (noteId, page) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, updatedAt: 'Agora', content: `${note.content}\n\nPágina ${page.pageNumber}\n${page.extractedText ?? ''}`, pdfPages: [...(note.pdfPages ?? []), page] } : note) })),
+    setPdfText: (noteId, text) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, pdfText: text.slice(0, 120_000) } : note) })),
   }), [state]);
   return <StudyContext.Provider value={value}>{children}</StudyContext.Provider>;
 }

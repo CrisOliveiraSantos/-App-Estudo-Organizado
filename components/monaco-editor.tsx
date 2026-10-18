@@ -1,4 +1,4 @@
-import { Text, View } from "react-native";
+import { Text, View, type DimensionValue } from "react-native";
 
 export type MonacoEditorProps = {
   value: string;
@@ -14,7 +14,7 @@ export function MonacoEditor({ height = 420 }: MonacoEditorProps) {
     <View
       style={{
         alignItems: "center",
-        height,
+        height: height as DimensionValue,
         justifyContent: "center",
         width: "100%",
       }}
