@@ -141,7 +141,7 @@ export default function EditorScreen() {
 
   return <ScreenContainer edges={['top', 'bottom', 'left', 'right']} style={styles.screen}>
     <KeyboardAvoidingView
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      behavior="padding"
       keyboardVerticalOffset={0}
       style={styles.fill}
     >

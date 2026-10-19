@@ -46,7 +46,7 @@ export default function AiSettingsScreen() {
         <Text style={styles.sectionTitle}>APIs de IA</Text>
         <Text style={styles.settingDescription}>Escolha entre IA local (Ollama, LM Studio e outras) ou uma API de terceiros (Groq, Gemini, OpenAI, OpenRouter). As chaves ficam somente neste dispositivo.</Text>
         <View style={{ marginTop: 12 }}>
-          <AcademicButton label="Configurar APIs de IA" onPress={() => router.push('/api-settings')} />
+          <AcademicButton label="Configurar APIs de IA" onPress={() => router.navigate('/api-settings')} />
         </View>
       </View>
       <Text style={styles.status}>{status}</Text>

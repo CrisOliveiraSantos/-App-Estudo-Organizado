@@ -89,7 +89,7 @@ export default function SettingsScreen() {
             {activeKey === 'appearance' ? <AppearanceContent colors={colors} preference={themePreference} resolved={colorScheme} onChange={setThemePreference} /> : null}
             {activeKey === 'notifications' ? <NotificationsContent colors={colors} /> : null}
             {activeKey === 'connections' ? <ConnectionsContent colors={colors} /> : null}
-            {activeKey === 'ai' ? <AiContent colors={colors} onOpen={() => router.push('/api-settings')} /> : null}
+            {activeKey === 'ai' ? <AiContent colors={colors} onOpen={() => router.navigate('/api-settings')} /> : null}
             {activeKey === 'editor' ? <EditorContent colors={colors} /> : null}
             {activeKey === 'studies' ? <StudiesContent colors={colors} notes={notes.length} goals={goals.length} subjects={subjects.length} events={events.length} /> : null}
             {activeKey === 'privacy' ? <InfoContent colors={colors} title="Privacidade em primeiro lugar" description="O conteúdo de estudos permanece no armazenamento do aplicativo e só é sincronizado com a conta conectada quando esse recurso está disponível. O Chat permanece separado desta central." /> : null}

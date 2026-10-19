@@ -7,7 +7,7 @@ import { ScreenContainer } from '@/components/screen-container';
 import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, academicColors } from '@/components/academic/design-system';
+import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, useAcademicColors } from '@/components/academic/design-system';
 import { type Note, useStudyActions, useStudyFolders, useStudyNotes } from '@/lib/study-store';
 import { excerptFromContent, richTextToPlainText } from '@/lib/rich-text';
 import { neonFonts } from '@/lib/theme-runtime';
@@ -17,6 +17,8 @@ type Filter = 'Todos' | 'Notas' | 'PDFs';
 export default function LibraryScreen() {
   const notes = useStudyNotes();
   const folders = useStudyFolders();
+  const c = useAcademicColors();
+  const styles = useStyles();
   const { addPdf, addFolder, deleteNote, renameNote, moveNote } = useStudyActions();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -74,12 +76,12 @@ export default function LibraryScreen() {
       contentContainerStyle={[styles.content, { paddingBottom: navClearance }]}
       ListHeaderComponent={<View>
         <View style={styles.header}><View style={styles.headerCopy}><Text style={styles.overline}>MATERIAIS DE ESTUDO</Text><Text style={styles.title}>Biblioteca</Text><Text style={styles.subtitle}>Guarde PDFs e anotações importantes para revisar quando precisar.</Text></View><AcademicButton label="Novo texto" onPress={() => router.push('/editor')} compact /></View>
-        <View style={styles.importGrid}><TouchableOpacity onPress={() => { void pickPdf(); }} accessibilityRole="button" accessibilityLabel="Importar PDF" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#FDECEF' }]}><IconSymbol name="doc.text.fill" size={21} color={academicColors.danger} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>Importar PDF</Text><Text style={styles.importDescription}>Guarde e consulte materiais em PDF.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity></View>
-        <View style={styles.searchBox}><IconSymbol name="magnifyingglass" size={20} color={academicColors.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="Buscar em títulos, pastas e conteúdo" placeholderTextColor={academicColors.muted} style={styles.searchInput} /></View>
+        <View style={styles.importGrid}><TouchableOpacity onPress={() => { void pickPdf(); }} accessibilityRole="button" accessibilityLabel="Importar PDF" activeOpacity={0.78} style={styles.importCard}><View style={[styles.importIcon, { backgroundColor: '#FDECEF' }]}><IconSymbol name="doc.text.fill" size={21} color={c.danger} /></View><View style={styles.importCopy}><Text style={styles.importTitle}>Importar PDF</Text><Text style={styles.importDescription}>Guarde e consulte materiais em PDF.</Text></View><Text style={styles.importArrow}>→</Text></TouchableOpacity></View>
+        <View style={styles.searchBox}><IconSymbol name="magnifyingglass" size={20} color={c.muted} /><TextInput value={query} onChangeText={setQuery} placeholder="Buscar em títulos, pastas e conteúdo" placeholderTextColor={c.muted} style={styles.searchInput} /></View>
         <View style={styles.filterBar}>{(['Todos', 'Notas', 'PDFs'] as Filter[]).map(item => <TouchableOpacity key={item} onPress={() => setFilter(item)} accessibilityRole="button" accessibilityState={{ selected: filter === item }} style={[styles.filter, filter === item && styles.filterActive]}><Text style={[styles.filterText, filter === item && styles.filterTextActive]}>{item}</Text></TouchableOpacity>)}</View>
         <View style={styles.folderHeader}><View><Text style={styles.sectionTitle}>Pastas</Text><Text style={styles.sectionDescription}>Mantenha seus materiais em um lugar fácil de encontrar.</Text></View><TouchableOpacity onPress={() => setShowFolderForm(value => !value)} accessibilityRole="button" style={styles.folderToggle}><Text style={styles.folderToggleText}>{showFolderForm ? 'Fechar' : '+ Nova pasta'}</Text></TouchableOpacity></View>
-        {showFolderForm ? <AcademicCard style={styles.folderForm}><TextInput value={folderName} onChangeText={setFolderName} placeholder="Nome da nova pasta" placeholderTextColor={academicColors.muted} style={styles.input} /><AcademicButton label="Criar pasta" onPress={createFolder} compact /></AcademicCard> : null}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderScroller}>{folders.map(folder => <View key={folder.id} style={styles.folderChip}><IconSymbol name="folder.fill" size={15} color={academicColors.violet} /><Text style={styles.folderText}>{folder.name}</Text></View>)}{!folders.length ? <AcademicPill label="Sem pastas criadas" tone="neutral" /> : null}</ScrollView>
+        {showFolderForm ? <AcademicCard style={styles.folderForm}><TextInput value={folderName} onChangeText={setFolderName} placeholder="Nome da nova pasta" placeholderTextColor={c.muted} style={styles.input} /><AcademicButton label="Criar pasta" onPress={createFolder} compact /></AcademicCard> : null}
+        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.folderScroller}>{folders.map(folder => <View key={folder.id} style={styles.folderChip}><IconSymbol name="folder.fill" size={15} color={c.violet} /><Text style={styles.folderText}>{folder.name}</Text></View>)}{!folders.length ? <AcademicPill label="Sem pastas criadas" tone="neutral" /> : null}</ScrollView>
         <View style={styles.listHeader}><View><Text style={styles.sectionTitle}>Seus materiais</Text><Text style={styles.sectionDescription}>{shown.length} {shown.length === 1 ? 'item encontrado' : 'itens encontrados'}</Text></View><AcademicPill label={filter} tone="indigo" /></View>
       </View>}
       ListEmptyComponent={<AcademicEmptyState title={query ? 'Nenhum material encontrado' : 'Sua Biblioteca está pronta'} description={query ? 'Tente outro termo ou outro filtro.' : 'Importe um PDF ou crie uma nota para começar.'} actionLabel={query ? undefined : 'Importar PDF'} onAction={query ? undefined : () => { void pickPdf(); }} />}
@@ -89,54 +91,63 @@ export default function LibraryScreen() {
 }
 
 function LibraryItem({ item, editing, draftTitle, setDraftTitle, onOpen, onRename, onSaveRename, onMove, onDelete, onFlashcards }: { item: Note; folders: string[]; editing: boolean; draftTitle: string; setDraftTitle: (value: string) => void; onOpen: () => void; onRename: () => void; onSaveRename: () => void; onMove: () => void; onDelete: () => void; onFlashcards: () => void }) {
+  const c = useAcademicColors();
+  const styles = useStyles();
   const isPdf = item.kind === 'pdf';
-  return <AcademicCard style={styles.materialCard}><TouchableOpacity onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${item.title}`} activeOpacity={0.76} style={styles.materialOpen}><View style={[styles.materialIcon, { backgroundColor: isPdf ? '#FDECEF' : '#E8EBFF' }]}><IconSymbol name={isPdf ? 'doc.text.fill' : 'note.text'} size={23} color={isPdf ? academicColors.danger : academicColors.indigo} /></View><View style={styles.materialCopy}><View style={styles.materialTitleRow}><Text numberOfLines={1} style={styles.materialTitle}>{item.title}</Text><AcademicPill label={isPdf ? 'PDF' : 'Nota'} tone={isPdf ? 'danger' : 'indigo'} /></View><Text style={styles.materialMeta}>{item.folder || 'Sem pasta'} · {item.updatedAt}</Text><Text numberOfLines={2} style={styles.materialPreview}>{excerptFromContent(item.content, 160) || (isPdf ? 'Material em PDF pronto para visualização.' : 'Documento vazio — toque para começar a escrever.')}</Text></View><IconSymbol name="chevron.right" size={19} color={academicColors.muted} /></TouchableOpacity>{editing ? <View style={styles.renameBox}><TextInput value={draftTitle} onChangeText={setDraftTitle} autoFocus onSubmitEditing={onSaveRename} placeholder="Título do material" placeholderTextColor={academicColors.muted} style={styles.input} /><AcademicButton label="Salvar nome" onPress={onSaveRename} compact /></View> : <View style={styles.actions}><TouchableOpacity onPress={onFlashcards} accessibilityRole="button" accessibilityLabel={`Gerar flashcards de ${item.title}`} style={styles.action}><Text style={styles.actionText}>Flashcards</Text></TouchableOpacity><TouchableOpacity onPress={onRename} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Renomear</Text></TouchableOpacity><TouchableOpacity onPress={onMove} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Mover</Text></TouchableOpacity><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${item.title}`} style={styles.deleteAction}><Text style={styles.deleteActionText}>Excluir</Text></TouchableOpacity></View>}</AcademicCard>;
+  return <AcademicCard style={styles.materialCard}><TouchableOpacity onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir ${item.title}`} activeOpacity={0.76} style={styles.materialOpen}><View style={[styles.materialIcon, { backgroundColor: isPdf ? `${c.danger}20` : c.violetSoft }]}><IconSymbol name={isPdf ? 'doc.text.fill' : 'note.text'} size={23} color={isPdf ? c.danger : c.indigo} /></View><View style={styles.materialCopy}><View style={styles.materialTitleRow}><Text numberOfLines={1} style={styles.materialTitle}>{item.title}</Text><AcademicPill label={isPdf ? 'PDF' : 'Nota'} tone={isPdf ? 'danger' : 'indigo'} /></View><Text style={styles.materialMeta}>{item.folder || 'Sem pasta'} · {item.updatedAt}</Text><Text numberOfLines={2} style={styles.materialPreview}>{excerptFromContent(item.content, 160) || (isPdf ? 'Material em PDF pronto para visualização.' : 'Documento vazio — toque para começar a escrever.')}</Text></View><IconSymbol name="chevron.right" size={19} color={c.muted} /></TouchableOpacity>{editing ? <View style={styles.renameBox}><TextInput value={draftTitle} onChangeText={setDraftTitle} autoFocus onSubmitEditing={onSaveRename} placeholder="Título do material" placeholderTextColor={c.muted} style={styles.input} /><AcademicButton label="Salvar nome" onPress={onSaveRename} compact /></View> : <View style={styles.actions}><TouchableOpacity onPress={onFlashcards} accessibilityRole="button" accessibilityLabel={`Gerar flashcards de ${item.title}`} style={styles.action}><Text style={styles.actionText}>Flashcards</Text></TouchableOpacity><TouchableOpacity onPress={onRename} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Renomear</Text></TouchableOpacity><TouchableOpacity onPress={onMove} accessibilityRole="button" style={styles.action}><Text style={styles.actionText}>Mover</Text></TouchableOpacity><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${item.title}`} style={styles.deleteAction}><Text style={styles.deleteActionText}>Excluir</Text></TouchableOpacity></View>}</AcademicCard>;
 }
 
-const styles = StyleSheet.create({
+function useStyles() {
+  const c = useAcademicColors();
+  return useMemo(() => createStyles(c), [c]);
+}
+
+function createStyles(c: ReturnType<typeof useAcademicColors>) {
+  return StyleSheet.create({
   action: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 7 },
-  actionText: { color: academicColors.indigo, fontSize: 12, fontWeight: '800' },
-  actions: { borderTopColor: academicColors.line, borderTopWidth: 1, flexDirection: 'row', marginTop: 13, paddingTop: 8 },
+  actionText: { color: c.indigo, fontSize: 12, fontWeight: '800' },
+  actions: { borderTopColor: c.line, borderTopWidth: 1, flexDirection: 'row', marginTop: 13, paddingTop: 8 },
   content: { paddingHorizontal: 18, paddingTop: 20 },
   deleteAction: { minHeight: 34, justifyContent: 'center', paddingHorizontal: 7 },
-  deleteActionText: { color: academicColors.danger, fontSize: 12, fontWeight: '800' },
+  deleteActionText: { color: c.danger, fontSize: 12, fontWeight: '800' },
   filter: { alignItems: 'center', borderRadius: 10, flex: 1, justifyContent: 'center', minHeight: 38 },
-  filterActive: { backgroundColor: academicColors.indigo },
-  filterBar: { backgroundColor: '#FFFFFF', borderColor: academicColors.line, borderRadius: 12, borderWidth: 1, flexDirection: 'row', marginBottom: 23, padding: 3 },
-  filterText: { color: academicColors.muted, fontSize: 12, fontWeight: '800' },
+  filterActive: { backgroundColor: c.indigo },
+  filterBar: { backgroundColor: c.surface, borderColor: c.line, borderRadius: 12, borderWidth: 1, flexDirection: 'row', marginBottom: 23, padding: 3 },
+  filterText: { color: c.muted, fontSize: 12, fontWeight: '800' },
   filterTextActive: { color: '#FFFFFF' },
-  folderChip: { alignItems: 'center', backgroundColor: '#F0EBFF', borderRadius: 999, flexDirection: 'row', marginRight: 8, minHeight: 35, paddingHorizontal: 11 },
+  folderChip: { alignItems: 'center', backgroundColor: c.violetSoft, borderRadius: 999, flexDirection: 'row', marginRight: 8, minHeight: 35, paddingHorizontal: 11 },
   folderForm: { marginBottom: 11, padding: 13 },
   folderHeader: { alignItems: 'flex-end', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 11 },
   folderScroller: { paddingBottom: 25, paddingRight: 18 },
-  folderText: { color: academicColors.violet, fontSize: 12, fontWeight: '800', marginLeft: 5 },
+  folderText: { color: c.violet, fontSize: 12, fontWeight: '800', marginLeft: 5 },
   folderToggle: { minHeight: 34, justifyContent: 'center', paddingLeft: 10 },
-  folderToggleText: { color: academicColors.indigo, fontSize: 12, fontWeight: '900' },
+  folderToggleText: { color: c.indigo, fontSize: 12, fontWeight: '900' },
   header: { alignItems: 'flex-start', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 18 },
   headerCopy: { flex: 1, paddingRight: 12 },
-  importArrow: { color: academicColors.indigo, fontSize: 19, fontWeight: '700', marginLeft: 8 },
-  importCard: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: academicColors.line, borderRadius: 16, borderWidth: 1, flex: 1, flexDirection: 'row', minHeight: 86, padding: 13 },
+  importArrow: { color: c.indigo, fontSize: 19, fontWeight: '700', marginLeft: 8 },
+  importCard: { alignItems: 'center', backgroundColor: c.surface, borderColor: c.line, borderRadius: 16, borderWidth: 1, flex: 1, flexDirection: 'row', minHeight: 86, padding: 13 },
   importCopy: { flex: 1, paddingLeft: 10 },
-  importDescription: { color: academicColors.muted, fontSize: 11, lineHeight: 15, marginTop: 3 },
+  importDescription: { color: c.muted, fontSize: 11, fontWeight: '600', lineHeight: 15, marginTop: 3 },
   importGrid: { flexDirection: 'row', gap: 10, marginBottom: 15 },
   importIcon: { alignItems: 'center', borderRadius: 12, height: 39, justifyContent: 'center', width: 39 },
-  importTitle: { color: academicColors.ink, fontSize: 13, fontWeight: '900', lineHeight: 17 },
-  input: { backgroundColor: '#F9FAFE', borderColor: academicColors.line, borderRadius: 11, borderWidth: 1, color: academicColors.ink, fontSize: 14, marginBottom: 9, minHeight: 43, paddingHorizontal: 11 },
+  importTitle: { color: c.ink, fontSize: 13, fontWeight: '900', lineHeight: 17 },
+  input: { backgroundColor: c.surfaceAlt, borderColor: c.line, borderRadius: 11, borderWidth: 1, color: c.ink, fontSize: 14, fontWeight: '600', marginBottom: 9, minHeight: 43, paddingHorizontal: 11 },
   listHeader: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between', marginBottom: 11 },
   materialCard: { marginBottom: 16, padding: 14 },
   materialCopy: { flex: 1, minWidth: 0, paddingHorizontal: 11 },
   materialIcon: { alignItems: 'center', borderRadius: 13, height: 46, justifyContent: 'center', width: 46 },
-  materialMeta: { color: academicColors.muted, fontSize: 11, marginTop: 3 },
+  materialMeta: { color: c.muted, fontSize: 11, fontWeight: '600', marginTop: 3 },
   materialOpen: { alignItems: 'center', flexDirection: 'row' },
-  materialPreview: { color: academicColors.muted, fontSize: 12, lineHeight: 17, marginTop: 7 },
-  materialTitle: { color: academicColors.ink, flex: 1, fontFamily: neonFonts.strong, fontSize: 15, fontWeight: 'normal', paddingRight: 7 },
+  materialPreview: { color: c.muted, fontSize: 12, fontWeight: '600', lineHeight: 17, marginTop: 7 },
+  materialTitle: { color: c.ink, flex: 1, fontFamily: neonFonts.strong, fontSize: 15, fontWeight: '800', paddingRight: 7 },
   materialTitleRow: { alignItems: 'center', flexDirection: 'row' },
-  overline: { color: academicColors.violet, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
-  renameBox: { borderTopColor: academicColors.line, borderTopWidth: 1, marginTop: 13, paddingTop: 11 },
-  searchBox: { alignItems: 'center', backgroundColor: '#FFFFFF', borderColor: academicColors.line, borderRadius: 12, borderWidth: 1, flexDirection: 'row', marginBottom: 11, minHeight: 47, paddingHorizontal: 12 },
-  searchInput: { color: academicColors.ink, flex: 1, fontSize: 14, minHeight: 46, paddingLeft: 8 },
-  sectionDescription: { color: academicColors.muted, fontSize: 12, lineHeight: 17, marginTop: 3 },
-  sectionTitle: { color: academicColors.ink, fontFamily: neonFonts.display, fontSize: 18, fontWeight: 'normal', letterSpacing: -0.3 },
-  subtitle: { color: academicColors.muted, fontSize: 14, lineHeight: 20, marginTop: 7 },
-  title: { color: academicColors.ink, fontFamily: neonFonts.display, fontSize: 31, fontWeight: 'normal', letterSpacing: -0.9, lineHeight: 38, marginTop: 4 },
-});
+  overline: { color: c.violet, fontSize: 11, fontWeight: '900', letterSpacing: 0.9 },
+  renameBox: { borderTopColor: c.line, borderTopWidth: 1, marginTop: 13, paddingTop: 11 },
+  searchBox: { alignItems: 'center', backgroundColor: c.surface, borderColor: c.line, borderRadius: 12, borderWidth: 1, flexDirection: 'row', marginBottom: 11, minHeight: 47, paddingHorizontal: 12 },
+  searchInput: { color: c.ink, flex: 1, fontSize: 14, fontWeight: '600', minHeight: 46, paddingLeft: 8 },
+  sectionDescription: { color: c.muted, fontSize: 12, fontWeight: '600', lineHeight: 17, marginTop: 3 },
+  sectionTitle: { color: c.ink, fontFamily: neonFonts.display, fontSize: 18, fontWeight: 'normal', letterSpacing: -0.3 },
+  subtitle: { color: c.muted, fontSize: 14, fontWeight: '600', lineHeight: 20, marginTop: 7 },
+  title: { color: c.ink, fontFamily: neonFonts.display, fontSize: 31, fontWeight: 'normal', letterSpacing: -0.9, lineHeight: 38, marginTop: 4 },
+  });
+}

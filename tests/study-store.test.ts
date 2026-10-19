@@ -1,6 +1,28 @@
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { goalProgress } from '../lib/study-utils';
 import type { Goal } from '../lib/study-store';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
+const STORE = readFileSync(resolve(ROOT, 'lib/study-store.tsx'), 'utf8');
+
+describe('ações de exclusão e salvamento vazio', () => {
+  it('expõe deleteTask e deleteSubjectTask com o id correto', () => {
+    expect(STORE).toContain('deleteTask: (goalId, taskId)');
+    expect(STORE).toContain('deleteSubjectTask: (subjectId, taskId)');
+    expect(STORE).toMatch(/tasks\.filter\(task => task\.id !== taskId\)/);
+  });
+
+  it('recusa títulos vazios em tarefas, metas, matérias e notas', () => {
+    for (const action of ['addSubjectTask', 'addTask', 'addGoal', 'addSubject', 'saveNote', 'renameNote']) {
+      const start = STORE.lastIndexOf(`${action}:`);
+      expect(start).toBeGreaterThan(-1);
+      expect(STORE.slice(start, start + 320)).toContain('.trim()');
+    }
+  });
+});
 
 describe('goalProgress', () => {
   it('calcula a proporção de tarefas concluídas', () => {

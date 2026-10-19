@@ -1,5 +1,5 @@
 import { useMemo, useState, type ComponentProps } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
@@ -115,6 +115,29 @@ export default function HomeScreen() {
     addEvent({ title: eventTitle.trim(), date: dateLabel, time: eventTime.trim(), type: eventType, emoji: eventEmojis[eventType], color: eventColors[eventType] });
     setEventTitle(''); setEventTime(''); setShowEventForm(false);
   };
+  /** Exclusão com confirmação nativa no aparelho e `confirm` na web (Alert não executa botões no RN Web). */
+  const confirmSubjectDelete = (subject: Subject) => {
+    const remove = () => deleteSubject(subject.id);
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.confirm(`Excluir “${subject.name}”? Os eventos já registrados continuarão na sua agenda.`)) remove();
+      return;
+    }
+    Alert.alert('Excluir matéria?', 'Os eventos já registrados continuarão na sua agenda.', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: remove },
+    ]);
+  };
+  const confirmEventDelete = (event: AcademicEvent) => {
+    const remove = () => deleteEvent(event.id);
+    if (Platform.OS === 'web' && typeof window !== 'undefined') {
+      if (window.confirm(`Excluir “${event.title}”?`)) remove();
+      return;
+    }
+    Alert.alert('Excluir compromisso?', 'Remover este item da agenda?', [
+      { text: 'Cancelar', style: 'cancel' },
+      { text: 'Excluir', style: 'destructive', onPress: remove },
+    ]);
+  };
   /**
    * Abre os detalhes do compromisso. Se ele veio de uma matéria, leva direto
    * para a tela da matéria (onde ficam tarefas, notas e demais compromissos).
@@ -182,7 +205,7 @@ export default function HomeScreen() {
 
           <AcademicSection eyebrow="MATÉRIAS" title="Sua faculdade" actionLabel={showSubjectForm ? 'Fechar' : '+ Nova matéria'} onAction={() => setShowSubjectForm(value => !value)}>
             {showSubjectForm ? <AcademicCard style={styles.composer}><Text style={styles.composerTitle}>Adicionar matéria</Text><TextInput value={subjectName} onChangeText={setSubjectName} placeholder="Nome da matéria" placeholderTextColor={c.muted} style={styles.input} /><TextInput value={professor} onChangeText={setProfessor} placeholder="Professor(a)" placeholderTextColor={c.muted} style={styles.input} /><AcademicButton label="Salvar matéria" onPress={addSubjectFromForm} compact /></AcademicCard> : null}
-            {subjects.length ? <View style={styles.subjectGrid}>{subjects.map(subject => <SubjectCard key={subject.id} subject={subject} events={events} onOpen={() => router.push({ pathname: '/subject', params: { id: subject.id } })} onSave={changes => updateSubject(subject.id, changes)} onDelete={() => Alert.alert('Excluir matéria?', 'Os eventos já registrados continuarão na sua agenda.', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: () => deleteSubject(subject.id) }])} styles={styles} />)}</View> : <AcademicEmptyState title="Ainda não há matérias" description="Crie sua primeira matéria para começar a organizar sua faculdade." actionLabel="Nova matéria" onAction={() => setShowSubjectForm(true)} />}
+            {subjects.length ? <View style={styles.subjectGrid}>{subjects.map(subject => <SubjectCard key={subject.id} subject={subject} events={events} onOpen={() => router.push({ pathname: '/subject', params: { id: subject.id } })} onSave={changes => updateSubject(subject.id, changes)} onDelete={() => confirmSubjectDelete(subject)} styles={styles} />)}</View> : <AcademicEmptyState title="Ainda não há matérias" description="Crie sua primeira matéria para começar a organizar sua faculdade." actionLabel="Nova matéria" onAction={() => setShowSubjectForm(true)} />}
           </AcademicSection>
 
           <AcademicSection eyebrow="ESCRITA" title="Continue escrevendo" actionLabel="Abrir documentos" onAction={() => router.push('/editor')}>
@@ -209,7 +232,7 @@ export default function HomeScreen() {
 
           <AcademicSection title={`Agenda · ${String(selectedPoint.day).padStart(2, '0')}`} actionLabel={showEventForm ? 'Fechar' : '+ Compromisso'} onAction={() => setShowEventForm(value => !value)}>
             {showEventForm ? <AcademicCard style={styles.composer}><Text style={styles.composerTitle}>Adicionar compromisso</Text><TextInput value={eventTitle} onChangeText={setEventTitle} placeholder="Ex.: Entregar exercício" placeholderTextColor={c.muted} style={styles.input} /><TextInput value={eventTime} onChangeText={setEventTime} placeholder="Horário (opcional)" placeholderTextColor={c.muted} style={styles.input} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.typeScroller}>{eventTypes.map(type => <TouchableOpacity key={type} onPress={() => setEventType(type)} accessibilityRole="button" accessibilityLabel={`Tipo ${type}`} style={[styles.typeChip, eventType === type && { backgroundColor: eventColors[type], borderColor: eventColors[type] }]}><Text style={[styles.typeChipText, eventType === type && { color: '#FFFFFF' }]}>{type}</Text></TouchableOpacity>)}</ScrollView><AcademicButton label="Adicionar à agenda" onPress={addEventFromForm} compact /></AcademicCard> : null}
-            {selectedEvents.length ? <View style={styles.eventStack}>{selectedEvents.map(event => <EventRow key={event.id} event={event} onToggle={() => toggleEvent(event.id)} onDelete={() => Alert.alert('Excluir compromisso?', 'Remover este item da agenda?', [{ text: 'Cancelar', style: 'cancel' }, { text: 'Excluir', style: 'destructive', onPress: () => deleteEvent(event.id) }])} styles={styles} />)}</View> : <AcademicEmptyState title="Dia livre por enquanto" description="Que tal registrar uma aula, prova, exercício ou entrega?" actionLabel="Adicionar compromisso" onAction={() => setShowEventForm(true)} />}
+            {selectedEvents.length ? <View style={styles.eventStack}>{selectedEvents.map(event => <EventRow key={event.id} event={event} onToggle={() => toggleEvent(event.id)} onDelete={() => confirmEventDelete(event)} styles={styles} />)}</View> : <AcademicEmptyState title="Dia livre por enquanto" description="Que tal registrar uma aula, prova, exercício ou entrega?" actionLabel="Adicionar compromisso" onAction={() => setShowEventForm(true)} />}
           </AcademicSection>
 
           <AcademicSection eyebrow="PRÓXIMOS" title="No seu radar">
@@ -374,7 +397,7 @@ function createStyles(c: HomePalette) {
     quickAction: { alignItems: 'center', borderBottomColor: c.line, borderBottomWidth: 1, flexDirection: 'row', gap: 10, minHeight: 44, paddingVertical: 8 },
     quickActionArrow: { color: c.primary, fontSize: 15, fontWeight: '800' },
     quickActionLast: { borderBottomWidth: 0 },
-    quickActionText: { color: c.primary, flex: 1, fontSize: 13, fontWeight: '700' },
+    quickActionText: { color: c.ink, flex: 1, fontSize: 13, fontWeight: '800' },
     radarCard: { paddingVertical: 4 },
     radarCopy: { flex: 1 },
     radarMark: { alignItems: 'center', borderRadius: 11, height: 36, justifyContent: 'center', marginRight: 10, width: 36 },

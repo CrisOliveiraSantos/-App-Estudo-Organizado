@@ -218,6 +218,22 @@ describe('limpeza dos dados do Moodle', () => {
     expect(courses[0].url).toBe('https://ava/course/view.php?id=2');
   });
 
+  it('guarda os links de conteúdo do curso como materiais (sem duplicar nem aceitar URL inválida)', () => {
+    const [course] = normalizeScrapedCourses([{
+      name: 'Banco de Dados',
+      materials: [
+        { title: 'Apostila 1.pdf', url: 'https://ava/mod/resource/view.php?id=10' },
+        { title: 'Apostila 1 repetida', url: 'https://ava/mod/resource/view.php?id=10' },
+        { title: 'Pasta da unidade', url: 'https://ava/mod/folder/view.php?id=11' },
+        { title: 'Link inválido', url: 'javascript:alert(1)' },
+      ],
+    }]);
+    expect(course.materials).toEqual([
+      { title: 'Apostila 1.pdf', url: 'https://ava/mod/resource/view.php?id=10' },
+      { title: 'Pasta da unidade', url: 'https://ava/mod/folder/view.php?id=11' },
+    ]);
+  });
+
   it('mescla matérias de capturas diferentes sem perder o professor', () => {
     const merged = mergeScrapedCourses(
       [{ name: 'Banco de Dados' }],
@@ -225,6 +241,14 @@ describe('limpeza dos dados do Moodle', () => {
     );
     expect(merged).toHaveLength(2);
     expect(merged.find(course => course.name === 'Banco de Dados')?.teacher).toBe('Ana Souza');
+  });
+
+  it('acrescenta apenas materiais novos ao mesclar capturas', () => {
+    const merged = mergeScrapedCourses(
+      [{ name: 'Banco de Dados', materials: [{ title: 'Apostila 1', url: 'https://ava/1' }] }],
+      [{ name: 'Banco de Dados', materials: [{ title: 'Apostila 1', url: 'https://ava/1' }, { title: 'Apostila 2', url: 'https://ava/2' }] }],
+    );
+    expect(merged[0].materials?.map(material => material.url)).toEqual(['https://ava/1', 'https://ava/2']);
   });
 
   it('mantém o professor nas tarefas normalizadas', () => {
@@ -258,6 +282,11 @@ describe('ponte com a WebView', () => {
     expect(script).toContain('p[áa]gina inicial');
     expect(script).toContain('activityInfo');
     expect(script).toContain('dateDescription');
+    expect(script).toContain('my/courses.php');
+    expect(script).toContain('meus cursos');
+    expect(script).toContain('materialsFromDoc');
+    expect(script).toContain('loadMyCourses');
+    expect(script).toContain('teacherInDoc');
     expect(script).toContain(IMPORT_SOURCE);
     expect(() => new Function(script)).not.toThrow();
   });

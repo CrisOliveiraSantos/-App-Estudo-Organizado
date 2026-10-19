@@ -84,12 +84,14 @@ type Store = StudyState & {
   createNote: (title?: string, folder?: string) => string;
   duplicateNote: (noteId: string) => string | null;
   toggleTask: (goalId: string, taskId: string) => void;
+  deleteTask: (goalId: string, taskId: string) => void;
   toggleEvent: (eventId: string) => void;
   addSubject: (name: string, professor: string, emoji?: string, color?: string) => string;
   updateSubject: (subjectId: string, changes: Partial<Subject>) => void;
   deleteSubject: (subjectId: string) => void;
   addSubjectTask: (subjectId: string, title: string, priority: Task['priority'], deadline?: string, category?: TaskCategory) => void;
   toggleSubjectTask: (subjectId: string, taskId: string) => void;
+  deleteSubjectTask: (subjectId: string, taskId: string) => void;
   addEvent: (event: Omit<AcademicEvent, 'id' | 'done'>) => void;
   updateEvent: (eventId: string, changes: Partial<AcademicEvent>) => void;
   deleteEvent: (eventId: string) => void;
@@ -318,24 +320,26 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
    * (leitura sempre atual). Assim `useStudyActions()` não re-renderiza nada.
    */
   const actions = useMemo<StudyActions>(() => ({
-    createNote: (title = 'Novo documento', folder = 'Sem pasta') => { const id = createId('note'); setState(s => ({ ...s, notes: [{ id, title, content: '', folder, updatedAt: 'Agora', kind: 'note', blocks: [] }, ...s.notes] })); return id; },
+    createNote: (title = 'Novo documento', folder = 'Sem pasta') => { const id = createId('note'); setState(s => ({ ...s, notes: [{ id, title: title.trim() || 'Novo documento', content: '', folder, updatedAt: 'Agora', kind: 'note', blocks: [] }, ...s.notes] })); return id; },
     duplicateNote: noteId => { const source = stateRef.current.notes.find(note => note.id === noteId); if (!source) return null; const id = createId('note'); setState(s => ({ ...s, notes: [{ ...source, id, title: `${source.title} — cópia`, updatedAt: 'Agora', blocks: source.blocks?.map(block => ({ ...block, id: createId('block') })) }, ...s.notes] })); return id; },
     toggleEvent: eventId => setState(s => ({ ...s, events: s.events.map(event => event.id === eventId ? { ...event, done: !event.done } : event) })),
-    addSubject: (name, professor, emoji = '✦', color = '#3949AB') => { const id = createId('subject'); setState(s => ({ ...s, subjects: [...s.subjects, { id, name, professor, color, emoji }] })); return id; },
+    addSubject: (name, professor, emoji = '✦', color = '#3949AB') => { const cleanName = name.trim(); const id = createId('subject'); if (!cleanName) return id; setState(s => ({ ...s, subjects: [...s.subjects, { id, name: cleanName, professor: professor.trim(), color, emoji }] })); return id; },
     updateSubject: (subjectId, changes) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, ...changes } : subject) })),
     deleteSubject: subjectId => setState(s => ({ ...s, subjects: s.subjects.filter(subject => subject.id !== subjectId), events: s.events.map(event => event.subjectId === subjectId ? { ...event, subjectId: undefined } : event) })),
-    addSubjectTask: (subjectId, title, priority, deadline, category) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: [...(subject.tasks ?? []), { id: createId('subject-task'), title, priority, deadline, category, done: false }] } : subject) })),
+    addSubjectTask: (subjectId, title, priority, deadline, category) => { const cleanTitle = title.trim(); if (!cleanTitle) return; setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: [...(subject.tasks ?? []), { id: createId('subject-task'), title: cleanTitle, priority, deadline, category, done: false }] } : subject) })); },
     toggleSubjectTask: (subjectId, taskId) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: (subject.tasks ?? []).map(task => task.id === taskId ? { ...task, done: !task.done } : task) } : subject) })),
-    addEvent: event => setState(s => ({ ...s, events: [{ ...event, id: createId('event'), done: false }, ...s.events] })),
+    deleteSubjectTask: (subjectId, taskId) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: (subject.tasks ?? []).filter(task => task.id !== taskId) } : subject) })),
+    addEvent: event => { if (!event.title.trim()) return; setState(s => ({ ...s, events: [{ ...event, title: event.title.trim(), id: createId('event'), done: false }, ...s.events] })); },
     updateEvent: (eventId, changes) => setState(s => ({ ...s, events: s.events.map(event => event.id === eventId ? { ...event, ...changes } : event) })),
     deleteEvent: eventId => setState(s => ({ ...s, events: s.events.filter(event => event.id !== eventId) })),
     addChatMessage: (text, room) => setState(s => ({ ...s, chatMessages: [...s.chatMessages, { id: createId('chat'), author: 'Cris', text, room, createdAt: 'Agora' }] })),
     toggleTask: (goalId, taskId) => setState(s => ({ ...s, goals: s.goals.map(goal => goal.id === goalId ? { ...goal, tasks: goal.tasks.map(task => task.id === taskId ? { ...task, done: !task.done } : task) } : goal) })),
-    addGoal: (title, description, deadline) => setState(s => ({ ...s, goals: [{ id: createId('goal'), title, description, deadline, tasks: [] }, ...s.goals] })),
-    addTask: (goalId, title, priority, deadline, category) => setState(s => ({ ...s, goals: s.goals.map(goal => goal.id === goalId ? { ...goal, tasks: [...goal.tasks, { id: createId('task'), title, priority, deadline, category, done: false }] } : goal) })),
-    saveNote: note => setState(s => ({ ...s, notes: [{ ...note, updatedAt: 'Agora' }, ...s.notes.filter(entry => entry.id !== note.id)] })),
+    deleteTask: (goalId, taskId) => setState(s => ({ ...s, goals: s.goals.map(goal => goal.id === goalId ? { ...goal, tasks: goal.tasks.filter(task => task.id !== taskId) } : goal) })),
+    addGoal: (title, description, deadline) => { const cleanTitle = title.trim(); if (!cleanTitle) return; setState(s => ({ ...s, goals: [{ id: createId('goal'), title: cleanTitle, description: description.trim(), deadline: deadline.trim(), tasks: [] }, ...s.goals] })); },
+    addTask: (goalId, title, priority, deadline, category) => { const cleanTitle = title.trim(); if (!cleanTitle) return; setState(s => ({ ...s, goals: s.goals.map(goal => goal.id === goalId ? { ...goal, tasks: [...goal.tasks, { id: createId('task'), title: cleanTitle, priority, deadline, category, done: false }] } : goal) })); },
+    saveNote: note => { const cleanTitle = note.title.trim(); if (!cleanTitle) return; setState(s => ({ ...s, notes: [{ ...note, title: cleanTitle, updatedAt: 'Agora' }, ...s.notes.filter(entry => entry.id !== note.id)] })); },
     deleteNote: noteId => setState(s => ({ ...s, notes: s.notes.filter(note => note.id !== noteId) })),
-    renameNote: (noteId, title) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, title, updatedAt: 'Agora' } : note) })),
+    renameNote: (noteId, title) => { const cleanTitle = title.trim(); if (!cleanTitle) return; setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, title: cleanTitle, updatedAt: 'Agora' } : note) })); },
     moveNote: (noteId, folder) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, folder, updatedAt: 'Agora' } : note) })),
     toggleNoteFavorite: noteId => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, favorite: !note.favorite, updatedAt: 'Agora' } : note) })),
     addFolder: name => setState(s => ({ ...s, folders: [...s.folders, { id: createId('folder'), name }] })),

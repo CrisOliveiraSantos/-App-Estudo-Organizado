@@ -78,7 +78,7 @@ export function NeonTopbar({ compact = false, style }: { compact?: boolean; styl
   const { colors } = useAcademicPalette();
   const { colorScheme, setThemePreference, themePreference } = useThemeContext();
   const pathname = usePathname();
-  const [hover, setHover] = useState<'logout' | 'theme' | null>(null);
+  const [hover, setHover] = useState<'home' | 'logout' | 'theme' | null>(null);
   const [today] = useState(() => new Date());
   const { eyebrow, title } = neonItemForPath(pathname);
   /**
@@ -125,6 +125,14 @@ export function NeonTopbar({ compact = false, style }: { compact?: boolean; styl
         </View>
         <View style={styles.actions}>
           <Text style={[styles.date, { color: colors.muted }]} numberOfLines={1}>{formatToday(today)}</Text>
+          <TopbarAction
+            accessibilityLabel="Ir para o início"
+            glyph="🏠"
+            hovered={hover === 'home'}
+            onHoverIn={() => setHover('home')}
+            onHoverOut={() => setHover(null)}
+            onPress={() => router.navigate('/')}
+          />
           <TopbarAction
             accessibilityLabel={`Alternar tema — agora em modo ${THEME_NAME[mode]}`}
             glyph={THEME_GLYPH[mode]}

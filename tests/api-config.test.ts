@@ -50,6 +50,7 @@ function callbackBody(source: string, name: string): string {
 const API_SETTINGS = readSource('app/api-settings.tsx');
 const CRIS_POPUP = readSource('components/cris-popup.tsx');
 const API_CONFIG = readSource('lib/api-config.ts');
+const CRIS_CLIENT = readSource('lib/cris-client.ts');
 
 describe('Ajustes → IA: "Testar" persiste a configuração (bugs 3, 4, 5 e 7)', () => {
   it('runLocalTest salva o endereço testado quando o teste dá certo', () => {
@@ -116,6 +117,20 @@ describe('Popup da Cris: status de IA não congela e fica ao vivo (bugs 2 e 5)',
     expect(CRIS_POPUP).toContain('apiConfig.reloadAiConfig()');
     expect(API_CONFIG).toContain('export async function reloadAiConfig');
     expect(API_CONFIG).toMatch(/current = null;\s*loadPromise = null;/);
+  });
+
+  it('o chat também relê a chave a cada mensagem, sem exigir "Testar modelo"', () => {
+    expect(CRIS_CLIENT).toContain('module.reloadAiConfig()');
+    expect(CRIS_CLIENT).toContain('module.getAiConfig()');
+    expect(CRIS_CLIENT).toContain('typeof module.reloadAiConfig');
+  });
+
+  it('saveAiConfig grava antes de publicar a configuração', () => {
+    const body = API_CONFIG.slice(API_CONFIG.indexOf('export async function saveAiConfig'));
+    const write = body.indexOf('await writeRaw');
+    const emit = body.indexOf('emit(normalized)');
+    expect(write).toBeGreaterThan(-1);
+    expect(emit).toBeGreaterThan(write);
   });
 
   it('esconde o aviso assim que existe credencial salva (sem exigir teste bem-sucedido)', () => {

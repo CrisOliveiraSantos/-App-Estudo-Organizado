@@ -337,8 +337,14 @@ async function ensureLoaded(): Promise<AiConfig> {
 
 export async function saveAiConfig(next: AiConfig): Promise<AiConfig> {
   const normalized = normalizeConfig({ ...next, updatedAt: new Date().toISOString() });
-  emit(normalized);
+  /**
+   * Grava primeiro e só depois publica. Assim o popup/chat nunca observam uma
+   * configuração que ainda não está no SecureStore — e a próxima leitura fresca
+   * (`reloadAiConfig`) devolve exatamente o que a tela de Ajustes salvou.
+   */
   await writeRaw(JSON.stringify(normalized));
+  loadPromise = Promise.resolve(normalized);
+  emit(normalized);
   return normalized;
 }
 
@@ -450,6 +456,7 @@ export function useApiConfig() {
   const reset = useCallback(async () => {
     await clearRaw();
     const next = normalizeConfig(DEFAULT_AI_CONFIG);
+    loadPromise = null;
     emit(next);
     return next;
   }, []);

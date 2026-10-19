@@ -23,7 +23,7 @@ import {
   type ScrapedCourse,
   type ScrapedTask,
 } from '@/lib/academic-import';
-import { type AcademicEventType, useStudyActions, useStudyEvents, useStudySubjects } from '@/lib/study-store';
+import { type AcademicEventType, useStudyActions, useStudyEvents, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 
 const STORAGE_KEY = '@estudo-organizado/import-connection';
 
@@ -33,7 +33,8 @@ export default function AcademicImportScreen() {
   const colors = useColors();
   const events = useStudyEvents();
   const subjects = useStudySubjects();
-  const { addEvent, addSubject, addSubjectTask, updateSubject } = useStudyActions();
+  const notes = useStudyNotes();
+  const { addEvent, addSubject, addSubjectTask, createNote, saveNote, updateSubject } = useStudyActions();
   const [provider, setProvider] = useState<ImportProviderId>('sigaa');
   const [url, setUrl] = useState<string>(IMPORT_PROVIDERS[0].url);
   const [draft, setDraft] = useState<string>(IMPORT_PROVIDERS[0].url);
@@ -168,6 +169,7 @@ export default function AcademicImportScreen() {
     let createdTasks = 0;
     let createdEvents = 0;
     let createdSubjects = 0;
+    let createdMaterials = 0;
     const palette = ['#3949AB', '#7C3AED', '#18865B', '#C13B4A', '#B67500', '#0E7490'];
     const subjectIds = new Map<string, string>();
     /**
@@ -189,15 +191,44 @@ export default function AcademicImportScreen() {
       if (existing) {
         subjectIds.set(key, existing.id);
         /** Completa o professor de uma matéria importada antes sem esse dado. */
-        if (teacher?.trim() && /^(SIGAA \/ Moodle|Moodle \/ AVA|Professor(\(a\))? não informado)$/i.test(existing.professor)) {
+        if (teacher?.trim() && (!existing.professor.trim() || /^(SIGAA \/ Moodle|Moodle \/ AVA|Professor(\(a\))? não informado)$/i.test(existing.professor))) {
           updateSubject(existing.id, { professor: teacher.trim() });
         }
         return { id: existing.id, created: false };
       }
-      const id = addSubject(name, teacher?.trim() || 'Professor(a) não informado', '📚', palette[subjectIds.size % palette.length]);
+      const id = addSubject(name, teacher?.trim() || '', '📚', palette[subjectIds.size % palette.length]);
       subjectIds.set(key, id);
       createdSubjects += 1;
       return { id, created: true };
+    };
+
+    /**
+     * Materiais do curso (PDFs, arquivos, pastas e páginas) viram uma nota
+     * dentro da matéria. Na próxima importação, só os links novos entram —
+     * nada é duplicado nem apagado.
+     */
+    const saveMaterials = (course: ScrapedCourse, subjectId: string) => {
+      const materials = course.materials ?? [];
+      if (!materials.length) return 0;
+      const title = `Materiais — ${course.name}`;
+      const existing = notes.find(note => note.folder === course.name && note.title.trim().toLowerCase() === title.toLowerCase());
+      const existingContent = existing?.content ?? '';
+      const additions = materials.filter(material => !existingContent.includes(material.url));
+      if (!additions.length) return 0;
+      const additionText = additions.map(material => `• ${material.title}\n${material.url}`).join('\n\n');
+      const content = existingContent ? `${existingContent}\n\n${additionText}` : `Links de conteúdo encontrados no Moodle:\n\n${additionText}`;
+      const blocks = additions.map((material, index) => ({
+        id: `moodle-material-${Date.now()}-${subjectId}-${index}`,
+        type: 'paragraph' as const,
+        text: `${material.title}\n${material.url}`,
+      }));
+      if (existing) {
+        saveNote({ ...existing, content, folder: course.name, blocks: [...(existing.blocks ?? []), ...blocks] });
+      } else {
+        const noteId = createNote(title, course.name);
+        saveNote({ id: noteId, title, content, folder: course.name, updatedAt: 'Agora', kind: 'note', blocks });
+      }
+      return additions.length;
     };
 
     for (const group of groups) {
@@ -264,10 +295,13 @@ export default function AcademicImportScreen() {
       }
     }
 
-    // Matérias encontradas na página inicial entram em "Sua faculdade" mesmo sem atividades.
-    for (const course of courses) ensureSubject(course.name, course.teacher);
+    // Matérias encontradas em "Meus cursos" entram em "Sua faculdade" mesmo sem atividades.
+    for (const course of courses) {
+      const { id } = ensureSubject(course.name, course.teacher);
+      createdMaterials += saveMaterials(course, id);
+    }
 
-    setSaved(`${createdSubjects} matéria(s), ${createdTasks} tarefa(s) e ${createdEvents} prazo(s) salvos em Matérias e Planejamento.`);
+    setSaved(`${createdSubjects} matéria(s), ${createdTasks} tarefa(s), ${createdEvents} prazo(s) e ${createdMaterials} material(is) salvos em Matérias, Planejamento e Biblioteca.`);
     setStatus('Importação concluída. Abra Planejamento para ver as tarefas por matéria.');
     setPending([]);
     setCourses([]);

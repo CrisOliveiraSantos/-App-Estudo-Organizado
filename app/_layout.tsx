@@ -20,6 +20,7 @@ import type { EdgeInsets, Metrics, Rect } from "react-native-safe-area-context";
 import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import CrisPopup from "@/components/cris-popup";
+import { HomeShortcut } from "@/components/neon/home-shortcut";
 import {
   Inter_400Regular,
   Inter_600SemiBold,
@@ -119,6 +120,7 @@ export default function RootLayout() {
             <Stack.Screen name="flashcards" />
           </Stack>
           <CrisPopup />
+          <HomeShortcut />
           <StatusBar style="auto" />
         </QueryClientProvider>
       </trpc.Provider>

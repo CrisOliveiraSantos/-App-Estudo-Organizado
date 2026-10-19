@@ -200,8 +200,8 @@ export default function ChatScreen() {
       <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
         <KeyboardAvoidingView
           className="flex-1"
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-          keyboardVerticalOffset={0}
+          behavior="padding"
+          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
         >
           <AuthPanel
             navClearance={navClearance}
@@ -231,8 +231,8 @@ export default function ChatScreen() {
     <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
       <KeyboardAvoidingView
         className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={0}
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
       >
         <View className="px-5 pt-5">
           <View className="flex-row items-start justify-between">

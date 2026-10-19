@@ -313,12 +313,13 @@ export default function CrisPopup() {
 
   const openAboutMe = useCallback(() => {
     setOpen(false);
-    router.push('/cris-profile');
+    router.navigate('/cris-profile');
   }, []);
 
   const openAiSettings = useCallback(() => {
     setOpen(false);
-    router.push('/api-settings');
+    // `navigate` reutiliza a tela já aberta; `push` empilhava uma cópia a cada toque.
+    router.navigate('/api-settings');
   }, []);
 
   const cancel = useCallback(() => {
@@ -406,7 +407,7 @@ export default function CrisPopup() {
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={closePopup}>
         <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          behavior="padding"
           keyboardVerticalOffset={0}
           style={styles.keyboard}
         >

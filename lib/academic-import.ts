@@ -29,12 +29,20 @@ export type ScrapedTask = {
   url?: string;
 };
 
-/** Matéria encontrada na página inicial do Moodle (mesmo sem tarefas). */
+/** Link de conteúdo (PDF, arquivo, pasta, página) encontrado dentro do curso. */
+export type ScrapedMaterial = {
+  title: string;
+  url: string;
+};
+
+/** Matéria encontrada em “Meus cursos” (mesmo sem tarefas). */
 export type ScrapedCourse = {
   id?: string;
   name: string;
   teacher?: string;
   url?: string;
+  /** PDFs, arquivos e páginas do curso para virarem anotações/materiais. */
+  materials?: ScrapedMaterial[];
 };
 
 export type ScrapePayload = {
@@ -155,9 +163,15 @@ export function buildScrapeScript(): string {
   }
   function teacherFrom(root) {
     if (!root) return '';
-    var selectors = ['[class*="course-teacher"]', '[class*="teachers"]', '[class*="professor"]', '.course-teacher', '.teachers', '.course-summary', '.summary'];
+    var selectors = ['[data-region="course-teacher"]', '.course-teacher', '.course-teacher-name', '.teachers .name', '.teachers', '[class*="course-teacher"]', '[class*="teachers"]', '[class*="professor"]', '#page-course-view .teacher', '.teacher', '.course-summary', '.summary'];
     for (var i = 0; i < selectors.length; i++) {
-      var name = teacherName(textOf(root.querySelector(selectors[i])));
+      var box = root.querySelector(selectors[i]);
+      if (!box) continue;
+      var raw = textOf(box);
+      var name = teacherName(raw);
+      if (!name && raw && raw.length <= 90 && !/\\b(participantes|participants|f[oó]rum|forum|mensagens|messages|sum[aá]rio|summary)\\b/i.test(raw)) {
+        name = cleanTitle(raw.replace(/^(professor(?:a|es|as)?|docente(?:s)?|teacher(?:s)?)\\s*[:\\-–]?\\s*/i, ''));
+      }
       if (name) return name;
     }
     return '';
@@ -215,7 +229,8 @@ export function buildScrapeScript(): string {
     }
     return items;
   }
-  function collectCourses() {
+  function collectCourses(root) {
+    root = root || document;
     var found = {};
     var list = [];
     function add(id, name, url, teacher) {
@@ -223,11 +238,11 @@ export function buildScrapeScript(): string {
       var key = String(id || safeName).toLowerCase();
       if (!safeName && !id) return;
       if (found[key]) { if (!found[key].teacher && teacher) found[key].teacher = teacher; return; }
-      found[key] = { id: String(id || ''), name: safeName || '', url: url || '', teacher: teacher || '' };
+      found[key] = { id: String(id || ''), name: safeName || '', url: url || '', teacher: teacher || '', materials: [] };
       list.push(found[key]);
     }
     function cardOf(node) { return node.closest ? node.closest('[data-courseid], [data-course-id], .card, .coursebox, .course-info-container') : null; }
-    var anchors = document.querySelectorAll('a[href*="/course/view.php?id="]');
+    var anchors = root.querySelectorAll('a[href*="/course/view.php?id="]');
     for (var i = 0; i < anchors.length; i++) {
       var href = abs(anchors[i].getAttribute('href'));
       var idMatch = /[?&]id=(\\d+)/.exec(href);
@@ -236,7 +251,7 @@ export function buildScrapeScript(): string {
       if (genericName(name) || /^(\\d+|ir para|acessar|ver curso|abrir)/i.test(name)) name = card ? textOf(card.querySelector('.coursename, .course-name, [class*="coursename"], h3, h4, .card-title')) : '';
       add(idMatch ? idMatch[1] : '', name, href, card ? teacherFrom(card) : '');
     }
-    var cards = document.querySelectorAll('[data-courseid], [data-course-id]');
+    var cards = root.querySelectorAll('[data-courseid], [data-course-id]');
     for (var c = 0; c < cards.length; c++) {
       var id = cards[c].getAttribute('data-courseid') || cards[c].getAttribute('data-course-id');
       var link = cards[c].querySelector('a[href*="/course/view.php"]');
@@ -247,6 +262,81 @@ export function buildScrapeScript(): string {
     for (var k = 0; k < list.length; k++) if (list[k].name && list[k].url) result.push(list[k]);
     return result.slice(0, MAX_COURSES);
   }
+  /** Links de conteúdo do curso (PDF, arquivo, pasta, página, livro, URL). */
+  function materialsFromDoc(doc) {
+    var found = {};
+    var list = [];
+    var anchors = doc.querySelectorAll('a[href]');
+    for (var i = 0; i < anchors.length; i++) {
+      var href = abs(anchors[i].getAttribute('href'));
+      if (!href || found[href]) continue;
+      if (!/(\\/mod\\/(?:resource|folder|url|page|book|file|imscp|lesson)\\/|\\/pluginfile\\.php\\/|\\.(?:pdf|docx?|pptx?|xlsx?|zip|epub|odt|ods|odp)(?:[?#]|$))/i.test(href)) continue;
+      var title = clean(anchors[i].getAttribute('title') || textOf(anchors[i]) || anchors[i].getAttribute('aria-label') || '');
+      if (!title || title.length < 3) {
+        var activity = anchors[i].closest ? anchors[i].closest('li.activity, [data-region="activity-card"], .activity') : null;
+        title = activity ? activityTitle(activity) : '';
+      }
+      if (!title || title.length < 3) title = 'Material do curso';
+      found[href] = 1;
+      list.push({ title: cleanTitle(title).slice(0, 180), url: href });
+      if (list.length >= 60) break;
+    }
+    return list;
+  }
+  /** Página "Meus cursos" da sessão: nunca a dashboard global. */
+  function myCoursesCandidates() {
+    var urls = [];
+    var anchors = document.querySelectorAll('a[href]');
+    for (var i = 0; i < anchors.length; i++) {
+      var label = clean(textOf(anchors[i]) + ' ' + (anchors[i].getAttribute('title') || '') + ' ' + (anchors[i].getAttribute('aria-label') || ''));
+      if (!/(meus cursos|my courses|minhas disciplinas|meus m[oó]dulos)/i.test(label)) continue;
+      var href = abs(anchors[i].getAttribute('href'));
+      if (href && /(\\/my\\/|\\/course\\/)/i.test(href)) urls.push(href);
+    }
+    var base = location.pathname.replace(/\\/(?:course|mod|login|my)\\/.*$/, '').replace(/\\/$/, '');
+    urls.push(abs(base + '/my/courses.php'));
+    urls.push(abs('/my/courses.php'));
+    urls.push(abs(base + '/course/index.php?mycourses=1'));
+    var unique = [];
+    for (var u = 0; u < urls.length; u++) if (urls[u] && unique.indexOf(urls[u]) === -1) unique.push(urls[u]);
+    return unique;
+  }
+  function loadMyCourses(done) {
+    var urls = myCoursesCandidates();
+    var index = 0;
+    var settled = false;
+    var guard = setTimeout(function () { if (settled) return; settled = true; done(document, []); }, 9000);
+    function finishWith(root, list) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(guard);
+      done(root, list);
+    }
+    function tryNext() {
+      if (settled) return;
+      if (index >= urls.length) { finishWith(document, []); return; }
+      var url = urls[index];
+      index += 1;
+      if (url === location.href) {
+        var local = collectCourses(document);
+        if (local.length) { finishWith(document, local); return; }
+        tryNext();
+        return;
+      }
+      fetchText(url).then(function (html) {
+        if (settled) return;
+        if (html) {
+          try {
+            var doc = new DOMParser().parseFromString(html, 'text/html');
+            var found = collectCourses(doc);
+            if (found.length) { finishWith(doc, found); return; }
+          } catch (e) {}
+        }
+        tryNext();
+      });
+    }
+    tryNext();
+  }
   function activitiesFromDoc(doc, course) {
     var items = [];
     var nodes = doc.querySelectorAll('li.activity, [data-region="activity-card"], .activity, #tarefas tr, .tarefa');
@@ -254,9 +344,15 @@ export function buildScrapeScript(): string {
     return items;
   }
   function teacherInDoc(doc) {
-    var selectors = ['.course-teacher', '.teachers', '[class*="course-teacher"]', '[class*="professor"]', '.course-summary', '.summary'];
+    var selectors = ['[data-region="course-teacher"]', '.course-teacher', '.course-teacher-name', '.teachers .name', '.teachers', '[class*="course-teacher"]', '[class*="teachers"]', '[class*="professor"]', '#page-course-view .teacher', '.teacher', '.course-summary', '.summary'];
     for (var i = 0; i < selectors.length; i++) {
-      var name = teacherName(textOf(doc.querySelector(selectors[i])));
+      var box = doc.querySelector(selectors[i]);
+      if (!box) continue;
+      var raw = textOf(box);
+      var name = teacherName(raw);
+      if (!name && raw && raw.length <= 90 && !/\\b(participantes|participants|f[oó]rum|forum|mensagens|messages|sum[aá]rio|summary)\\b/i.test(raw)) {
+        name = cleanTitle(raw.replace(/^(professor(?:a|es|as)?|docente(?:s)?|teacher(?:s)?)\\s*[:\\-–]?\\s*/i, ''));
+      }
       if (name) return name;
     }
     return '';
@@ -281,6 +377,9 @@ export function buildScrapeScript(): string {
             var heading = doc.querySelector('#page-header h1, .page-header-headings h1, .course-title');
             var courseName = genericName(heading ? textOf(heading) : '') || course.name;
             var teacher = course.teacher || teacherInDoc(doc);
+            var materials = materialsFromDoc(doc);
+            if (materials.length) course.materials = materials;
+            if (teacher) course.teacher = teacher;
             scanned = scanned.concat(activitiesFromDoc(doc, { name: courseName, teacher: teacher }));
           } catch (e) {}
         }
@@ -293,10 +392,10 @@ export function buildScrapeScript(): string {
   var current = null;
   var items = [];
   var courses = [];
-  function bootstrap() {
+  function bootstrap(root, list) {
     current = pageCourse();
     items = localActivities(current || { name: '', teacher: '' });
-    courses = collectCourses();
+    courses = list || collectCourses(root || document);
     if (current) {
       var matched = false;
       for (var m = 0; m < courses.length; m++) {
@@ -305,7 +404,7 @@ export function buildScrapeScript(): string {
           courses[m].teacher = courses[m].teacher || current.teacher;
         }
       }
-      if (!matched) courses.unshift({ id: '', name: current.name, url: '', teacher: current.teacher || '' });
+      if (!matched) courses.unshift({ id: '', name: current.name, url: '', teacher: current.teacher || '', materials: [] });
     }
     return courses.length > 0;
   }
@@ -313,7 +412,7 @@ export function buildScrapeScript(): string {
   var finished = false;
   function send(list, partial) {
     if (window.__estudoImportRun !== runId) return;
-    if (!list.length && !courses.length) return;
+    if (!list.length && !courses.length && partial) return;
     var payload = { source: SOURCE, type: 'scrape', url: location.href, pageTitle: clean(document.title), items: list.slice(0, MAX), courses: courses.slice(0, MAX_COURSES) };
     if (partial) payload.partial = true;
     try { window.ReactNativeWebView.postMessage(JSON.stringify(payload)); } catch (e) {}
@@ -322,7 +421,7 @@ export function buildScrapeScript(): string {
     if (finished) return;
     finished = true;
     var merged = items.concat(deepItems);
-    if (!merged.length && !courses.length) return;
+    // Mesmo vazio, o payload final encerra o spinner e explica o resultado na tela.
     send(merged, false);
   }
   function scan() {
@@ -336,14 +435,24 @@ export function buildScrapeScript(): string {
       finish();
     });
   }
-  if (bootstrap()) { scan(); return; }
-  // SIGAA (fora do Moodle) já trouxe o que existia na página.
-  if (items.length && !isMoodle()) { finish(); return; }
-  // O painel do Moodle carrega os cartões de curso por AJAX: tenta mais uma vez.
-  setTimeout(function () {
-    if (bootstrap()) { scan(); return; }
-    finish();
-  }, 1500);
+  function start() {
+    /**
+     * Moodle: a fonte das matérias é SEMPRE "Meus cursos" (somente as
+     * disciplinas em que a aluna está matriculada). Só depois de montar essa
+     * lista o script abre cada curso para ler atividades, professor e materiais.
+     */
+    if (!isMoodle()) {
+      if (bootstrap()) { scan(); return; }
+      if (items.length) { finish(); return; }
+      finish();
+      return;
+    }
+    loadMyCourses(function (root, found) {
+      if (bootstrap(root, found && found.length ? found : null)) { scan(); return; }
+      finish();
+    });
+  }
+  start();
 })();`;
 }
 
@@ -638,18 +747,31 @@ export function normalizeScrapedCourses(input: unknown, limit = 40): ScrapedCour
     const name = cleanCourseName(pick(record, ['name', 'nome', 'course', 'curso', 'title', 'titulo', 'título', 'fullname']));
     if (!name || seen.has(name.toLowerCase())) continue;
     seen.add(name.toLowerCase());
+    const materials: ScrapedMaterial[] = [];
+    const materialSeen = new Set<string>();
+    for (const item of Array.isArray(record.materials) ? record.materials : []) {
+      if (!item || typeof item !== 'object') continue;
+      const material = item as Record<string, unknown>;
+      const url = safeUrl(pick(material, ['url', 'link', 'href']));
+      if (!url || materialSeen.has(url)) continue;
+      const title = tidy(pick(material, ['title', 'titulo', 'título', 'name', 'nome'])) || 'Material do curso';
+      materialSeen.add(url);
+      materials.push({ title: title.slice(0, 180), url });
+      if (materials.length >= 60) break;
+    }
     courses.push({
       name,
       id: tidy(pick(record, ['id', 'courseId', 'courseid'])) || undefined,
       teacher: tidy(pick(record, ['teacher', 'professor', 'docente', 'teachers'])) || undefined,
       url: safeUrl(pick(record, ['url', 'link'])),
+      materials: materials.length ? materials : undefined,
     });
     if (courses.length >= limit) break;
   }
   return courses;
 }
 
-/** Junta as matérias de várias capturas mantendo o professor encontrado. */
+/** Junta as matérias de várias capturas mantendo professor e materiais encontrados. */
 export function mergeScrapedCourses(current: ScrapedCourse[], incoming: ScrapedCourse[]): ScrapedCourse[] {
   const byName = new Map(current.map(course => [course.name.toLowerCase(), { ...course }]));
   for (const course of incoming) {
@@ -658,8 +780,17 @@ export function mergeScrapedCourses(current: ScrapedCourse[], incoming: ScrapedC
     if (existing) {
       if (!existing.teacher && course.teacher) existing.teacher = course.teacher;
       if (!existing.url && course.url) existing.url = course.url;
+      if (course.materials?.length) {
+        const seen = new Set((existing.materials ?? []).map(material => material.url));
+        existing.materials = [...(existing.materials ?? [])];
+        for (const material of course.materials) {
+          if (seen.has(material.url)) continue;
+          seen.add(material.url);
+          existing.materials.push(material);
+        }
+      }
     } else {
-      byName.set(key, { ...course });
+      byName.set(key, { ...course, materials: course.materials ? [...course.materials] : undefined });
     }
   }
   return Array.from(byName.values());

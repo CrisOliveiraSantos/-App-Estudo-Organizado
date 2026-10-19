@@ -246,7 +246,19 @@ function loadApiConfigModule(): Promise<ApiConfigModule | null> {
 async function resolveRuntime(options: CrisAskOptions): Promise<RuntimeConfig> {
   const module = options.config && options.presets ? null : await loadApiConfigModule();
   let config = options.config ?? null;
-  if (!config && module) config = await module.getAiConfig().catch(() => null);
+  /**
+   * Leitura FRESCA a cada mensagem: o SecureStore/localStorage é a fonte de
+   * verdade. O cache em memória (`getAiConfig`) só entra como reserva, para que
+   * uma chave salva em Ajustes → APIs de IA funcione imediatamente — mesmo sem
+   * "Testar modelo" e mesmo que outra tela tenha trocado a configuração.
+   */
+  if (!config && module) {
+    config = await (
+      typeof module.reloadAiConfig === 'function'
+        ? module.reloadAiConfig()
+        : module.getAiConfig()
+    ).catch(() => null);
+  }
   const presets = options.presets ?? module?.API_PROVIDERS ?? null;
   const liveModel = options.liveModel ?? module?.PROVIDER_LIVE_MODEL ?? null;
   return { config, presets, liveModel };
