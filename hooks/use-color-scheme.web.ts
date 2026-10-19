@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { useThemeContext } from "@/lib/theme-provider";
+import { useThemeScheme } from "@/lib/theme-provider";
 
 /**
  * Para suportar a renderização estática, o valor precisa ser recalculado no cliente (web).
@@ -10,7 +10,7 @@ import { useThemeContext } from "@/lib/theme-provider";
  */
 export function useColorScheme() {
   const [hasHydrated, setHasHydrated] = useState(false);
-  const { colorScheme } = useThemeContext();
+  const colorScheme = useThemeScheme();
 
   useEffect(() => {
     setHasHydrated(true);

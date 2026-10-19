@@ -1,6 +1,6 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from "react";
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Appearance, View } from "react-native";
-import { colorScheme as nativewindColorScheme, vars } from "nativewind";
+import { vars } from "nativewind";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SystemUI from "expo-system-ui";
 
@@ -24,7 +24,21 @@ type ThemeContextValue = {
   setThemePreference: (preference: ThemePreference) => void;
 };
 
+type ThemeActionsValue = Pick<ThemeContextValue, "setColorScheme" | "setThemePreference">;
+
+/**
+ * Contextos separados de propósito:
+ * - `ThemeScheme` só muda quando a paleta RESOLVIDA muda. É o único que
+ *   `useColors()`/`useColorScheme()` assinam, então uma alteração de preferência
+ *   que resolve para o mesmo tema não redesenha a árvore inteira.
+ * - `ThemePreference` guarda a escolha salva (inclusive “auto”/“sistema”).
+ * - `ThemeActions` é estável e nunca provoca render.
+ * `useThemeContext()` continua devolvendo tudo junto para compatibilidade.
+ */
 const ThemeContext = createContext<ThemeContextValue | null>(null);
+const ThemeSchemeContext = createContext<ColorScheme | null>(null);
+const ThemePreferenceContext = createContext<ThemePreference | null>(null);
+const ThemeActionsContext = createContext<ThemeActionsValue | null>(null);
 /**
  * v2 (Etapa 3): a chave foi versionada de propósito. A preferência antiga
  * ("light", salva antes do shell Neon) deixa de valer, então o primeiro acesso
@@ -39,11 +53,18 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // (o `AsyncStorage` sobrescreve este padrão no primeiro efeito abaixo).
   const [colorScheme, setColorSchemeState] = useState<ColorScheme>("neon");
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>("neon");
+  /**
+   * `applyScheme` não chama `Appearance.setColorScheme` nem o setter global do
+   * NativeWind: neste app todas as superfícies usam a paleta via `useColors`/
+   * `vars`, e mexer na aparência nativa pode reconfigurar a Activity no Android
+   * (a origem do engasgo). A barra de status é controlada por `ThemedStatusBar`.
+   */
+  const appliedSchemeRef = useRef<ColorScheme | null>(null);
 
   const applyScheme = useCallback((scheme: ColorScheme) => {
+    if (appliedSchemeRef.current === scheme) return;
+    appliedSchemeRef.current = scheme;
     const nativeBaseScheme = isDarkScheme(scheme) ? 'dark' : 'light';
-    nativewindColorScheme.set(nativeBaseScheme);
-    Appearance.setColorScheme?.(nativeBaseScheme);
     /**
      * Fundo da JANELA/raiz segue o tema ativo. Sem isto vale a cor padrão do root
      * view (branca no Android), que aparece em qualquer sliver que as telas não
@@ -67,9 +88,8 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const setColorScheme = useCallback((scheme: ColorScheme) => {
     setThemePreferenceState(scheme);
     setColorSchemeState(scheme);
-    applyScheme(scheme);
     void AsyncStorage.setItem(THEME_STORAGE_KEY, scheme);
-  }, [applyScheme]);
+  }, []);
 
   const resolvePreference = useCallback((preference: ThemePreference): ColorScheme => {
     if (preference === "system") return Appearance.getColorScheme() ?? "light";
@@ -78,12 +98,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const setThemePreference = useCallback((preference: ThemePreference) => {
-    const resolved = resolvePreference(preference);
     setThemePreferenceState(preference);
-    setColorSchemeState(resolved);
-    applyScheme(resolved);
+    setColorSchemeState(resolvePreference(preference));
     void AsyncStorage.setItem(THEME_STORAGE_KEY, preference);
-  }, [applyScheme, resolvePreference]);
+  }, [resolvePreference]);
 
   useEffect(() => {
     applyScheme(colorScheme);
@@ -95,34 +113,29 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       const validThemes: ThemePreference[] = ['light', 'dark', 'violet', 'ocean', 'contrast', 'sunrise', 'sunset', 'neon', 'system', 'auto'];
       if (!active || !validThemes.includes(saved as ThemePreference)) return;
       const preference = saved as ThemePreference;
-      const resolved = resolvePreference(preference);
       setThemePreferenceState(preference);
-      setColorSchemeState(resolved);
-      applyScheme(resolved);
+      setColorSchemeState(resolvePreference(preference));
     });
     return () => { active = false; };
-  }, [applyScheme, resolvePreference]);
+  }, [resolvePreference]);
 
   useEffect(() => {
     if (themePreference !== "auto") return;
     const apply = (next: ColorScheme) => {
       setColorSchemeState(prev => (prev === next ? prev : next));
-      applyScheme(next);
     };
     apply(schemeForHour(new Date().getHours()));
     const id = setInterval(() => apply(schemeForHour(new Date().getHours())), 60_000);
     return () => clearInterval(id);
-  }, [applyScheme, themePreference]);
+  }, [themePreference]);
 
   useEffect(() => {
     if (themePreference !== "system") return;
     const subscription = Appearance.addChangeListener(({ colorScheme: next }) => {
-      const resolved = next ?? "light";
-      setColorSchemeState(resolved);
-      applyScheme(resolved);
+      setColorSchemeState(next ?? "light");
     });
     return () => subscription.remove();
-  }, [applyScheme, themePreference]);
+  }, [themePreference]);
 
   const themeVariables = useMemo(
     () =>
@@ -140,6 +153,10 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [colorScheme],
   );
 
+  const actions = useMemo(
+    () => ({ setColorScheme, setThemePreference }),
+    [setColorScheme, setThemePreference],
+  );
   const value = useMemo(
     () => ({
       colorScheme,
@@ -150,10 +167,41 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [colorScheme, themePreference, setColorScheme, setThemePreference],
   );
   return (
-    <ThemeContext.Provider value={value}>
-      <View style={[{ flex: 1 }, themeVariables]}>{children}</View>
-    </ThemeContext.Provider>
+    <ThemeActionsContext.Provider value={actions}>
+      <ThemePreferenceContext.Provider value={themePreference}>
+        <ThemeSchemeContext.Provider value={colorScheme}>
+          <ThemeContext.Provider value={value}>
+            <View style={[{ flex: 1 }, themeVariables]}>{children}</View>
+          </ThemeContext.Provider>
+        </ThemeSchemeContext.Provider>
+      </ThemePreferenceContext.Provider>
+    </ThemeActionsContext.Provider>
   );
+}
+
+/** Só a paleta resolvida. É o contexto consumido por `useColors()`. */
+export function useThemeScheme(): ColorScheme {
+  const ctx = useContext(ThemeSchemeContext);
+  if (!ctx) {
+    throw new Error("useThemeScheme must be used within ThemeProvider");
+  }
+  return ctx;
+}
+
+export function useThemePreference(): ThemePreference {
+  const ctx = useContext(ThemePreferenceContext);
+  if (!ctx) {
+    throw new Error("useThemePreference must be used within ThemeProvider");
+  }
+  return ctx;
+}
+
+export function useThemeActions(): ThemeActionsValue {
+  const ctx = useContext(ThemeActionsContext);
+  if (!ctx) {
+    throw new Error("useThemeActions must be used within ThemeProvider");
+  }
+  return ctx;
 }
 
 export function useThemeContext(): ThemeContextValue {

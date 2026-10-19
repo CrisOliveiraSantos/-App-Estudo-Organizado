@@ -308,6 +308,17 @@ export default function ApiSettingsScreen() {
           </View>
         </View>
 
+        <View style={[styles.notice, styles.scopeNotice]}>
+          <Text style={styles.noticeIcon}>📄</Text>
+          <View style={styles.noticeCopy}>
+            <Text style={styles.noticeTitle}>A IA lê o contexto, não os arquivos brutos</Text>
+            <Text style={styles.noticeText}>
+              A Cris usa o perfil da memória, matérias, tarefas, metas, eventos e os títulos das notas/PDFs. Ela não abre
+              automaticamente PDF, Word, DOCX ou imagens: copie o trecho no chat ou use o leitor interno → Flashcards.
+            </Text>
+          </View>
+        </View>
+
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Modo ativo</Text>
           <Text style={styles.sectionHint}>Escolha a fonte que a Cris deve priorizar.</Text>
@@ -662,6 +673,7 @@ const styles = StyleSheet.create({
   back: { backgroundColor: '#FFFFFF', borderColor: academicColors.line, borderRadius: 10, borderWidth: 1, paddingHorizontal: 13, paddingVertical: 9 },
   backText: { color: academicColors.indigo, fontWeight: '800' },
   notice: { backgroundColor: '#FFFFFF', borderColor: '#DCE8E2', borderRadius: 14, borderWidth: 1, flexDirection: 'row', gap: 12, padding: 15 },
+  scopeNotice: { backgroundColor: '#F7F8FF', borderColor: '#DDE1F4' },
   noticeIcon: { fontSize: 22 },
   noticeCopy: { flex: 1 },
   noticeTitle: { color: academicColors.ink, fontWeight: '900' },

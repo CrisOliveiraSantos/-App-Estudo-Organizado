@@ -5,7 +5,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { useColors } from '@/hooks/use-colors';
-import { useThemeContext, type ThemePreference } from '@/lib/theme-provider';
+import { useThemeActions, useThemePreference, useThemeScheme, type ThemePreference } from '@/lib/theme-provider';
 import { useStudyActions, useStudyEvents, useStudyGoals, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 import { AcademicButton, AcademicPill, academicColors } from '@/components/academic/design-system';
 import { scheduleTestNotification } from '@/lib/notifications';
@@ -39,7 +39,9 @@ const settingsItems: SettingsItem[] = [
 export default function SettingsScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
-  const { themePreference, setThemePreference, colorScheme } = useThemeContext();
+  const colorScheme = useThemeScheme();
+  const themePreference = useThemePreference();
+  const { setThemePreference } = useThemeActions();
   const notes = useStudyNotes();
   const goals = useStudyGoals();
   const subjects = useStudySubjects();
@@ -107,7 +109,28 @@ function ProfileContent({ colors, onOpen }: { colors: ReturnType<typeof useColor
 }
 
 function AiContent({ colors, onOpen }: { colors: ReturnType<typeof useColors>; onOpen: () => void }) {
-  return <View style={styles.contentStack}><Text style={[styles.body, { color: colors.muted }]}>A Cris responde pela IA local do seu computador (Ollama, LM Studio e outras) ou por uma API de terceiros (Groq, Gemini, OpenAI, OpenRouter ou um endereço personalizado). A chave fica somente neste dispositivo e nunca é enviada aos servidores do aplicativo.</Text><AcademicButton label="Abrir configurações de IA" onPress={onOpen} compact /></View>;
+  return (
+    <View style={styles.contentStack}>
+      <Text style={[styles.body, { color: colors.muted }]}>
+        A Cris responde pela IA local do seu computador (Ollama, LM Studio e outras) ou por uma API de terceiros (Groq,
+        Gemini, OpenAI, OpenRouter ou um endereço personalizado). A chave fica somente neste dispositivo e nunca é enviada
+        aos servidores do aplicativo.
+      </Text>
+      <View style={[styles.aiLimitNote, { backgroundColor: colors.lavender, borderColor: colors.border }]}>
+        <Text style={[styles.aiLimitTitle, { color: colors.foreground }]}>O que a IA lê — e o que ela não abre</Text>
+        <Text style={[styles.aiLimitText, { color: colors.muted }]}>
+          A Cris recebe o contexto do app: perfil da memória, matérias, tarefas, metas, eventos e os títulos das notas e
+          PDFs. Ela não lê automaticamente o conteúdo bruto de arquivos PDF, Word, DOCX ou imagens — isso é uma limitação
+          das APIs de IA e uma proteção para não enviar documentos inteiros sem você pedir.
+        </Text>
+        <Text style={[styles.aiLimitText, { color: colors.muted }]}>
+          Para estudar um material: abra o PDF no leitor interno e toque em Flashcards, ou copie o trecho desejado e cole
+          diretamente na conversa com a Cris.
+        </Text>
+      </View>
+      <AcademicButton label="Abrir configurações de IA" onPress={onOpen} compact />
+    </View>
+  );
 }
 
 function AccountContent({ colors }: { colors: ReturnType<typeof useColors> }) {
@@ -328,6 +351,9 @@ const styles = StyleSheet.create({
   avatar: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 14, height: 42, justifyContent: 'center', width: 42 },
   avatarText: { color: academicColors.violet, fontSize: 18, fontWeight: '900' },
   body: { fontSize: 14, lineHeight: 21, maxWidth: 600 },
+  aiLimitNote: { borderRadius: 14, borderWidth: 1, gap: 7, padding: 14 },
+  aiLimitText: { fontSize: 12, lineHeight: 18 },
+  aiLimitTitle: { fontSize: 14, fontWeight: '800' },
   content: { paddingHorizontal: 18, paddingTop: 22 },
   contentStack: { gap: 18, paddingTop: 22 },
   connectionInput: { borderRadius: 10, borderWidth: 1, fontSize: 14, minHeight: 44, paddingHorizontal: 12, paddingVertical: 10 },

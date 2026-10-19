@@ -107,7 +107,7 @@ type Store = StudyState & {
   moveNote: (noteId: string, folder: string) => void;
   toggleNoteFavorite: (noteId: string) => void;
   addFolder: (name: string) => void;
-  addPdf: (name: string, uri: string) => void;
+  addPdf: (name: string, uri: string) => string;
   appendPdfPage: (noteId: string, page: PdfPage) => void;
   /** Texto extraído do PDF inteiro (leitor com PDF.js) para busca e flashcards. */
   setPdfText: (noteId: string, text: string) => void;
@@ -347,7 +347,7 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     moveNote: (noteId, folder) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, folder, updatedAt: 'Agora' } : note) })),
     toggleNoteFavorite: noteId => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, favorite: !note.favorite, updatedAt: 'Agora' } : note) })),
     addFolder: name => setState(s => ({ ...s, folders: [...s.folders, { id: createId('folder'), name }] })),
-    addPdf: (name, uri) => setState(s => ({ ...s, notes: [{ id: createId('note'), title: name, content: `Material importado localmente.\nArquivo: ${uri}`, folder: 'Sem pasta', updatedAt: 'Agora', kind: 'pdf', uri, pdfPages: [{ id: createId('page'), pageNumber: 1, imageUri: undefined }] }, ...s.notes] })),
+    addPdf: (name, uri) => { const id = createId('note'); setState(s => ({ ...s, notes: [{ id, title: name, content: `Material importado localmente.\nArquivo: ${uri}`, folder: 'Sem pasta', updatedAt: 'Agora', kind: 'pdf', uri, pdfPages: [{ id: createId('page'), pageNumber: 1, imageUri: undefined }] }, ...s.notes] })); return id; },
     appendPdfPage: (noteId, page) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, updatedAt: 'Agora', content: `${note.content}\n\nPágina ${page.pageNumber}\n${page.extractedText ?? ''}`, pdfPages: [...(note.pdfPages ?? []), page] } : note) })),
     setPdfText: (noteId, text) => setState(s => ({ ...s, notes: s.notes.map(note => note.id === noteId ? { ...note, pdfText: text.slice(0, 120_000) } : note) })),
   }), []);

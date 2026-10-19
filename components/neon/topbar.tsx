@@ -15,7 +15,7 @@ import { Alert, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyl
 import { NeonGradient, useAcademicPalette } from '@/components/academic/design-system';
 import { neonItemForPath } from '@/components/neon/nav-items';
 import { isDarkScheme } from '@/constants/theme';
-import { useThemeContext } from '@/lib/theme-provider';
+import { useThemeActions, useThemePreference, useThemeScheme } from '@/lib/theme-provider';
 import { readableSupabaseError, signOutFromSupabase } from '@/lib/supabase-chat';
 import { cardShadow, glowShadow, neonRadius, neonType } from '@/lib/theme-runtime';
 
@@ -76,7 +76,9 @@ function TopbarAction({
 
 export function NeonTopbar({ compact = false, style }: { compact?: boolean; style?: StyleProp<ViewStyle> }) {
   const { colors } = useAcademicPalette();
-  const { colorScheme, setThemePreference, themePreference } = useThemeContext();
+  const colorScheme = useThemeScheme();
+  const themePreference = useThemePreference();
+  const { setThemePreference } = useThemeActions();
   const pathname = usePathname();
   const [hover, setHover] = useState<'home' | 'logout' | 'theme' | null>(null);
   const [today] = useState(() => new Date());

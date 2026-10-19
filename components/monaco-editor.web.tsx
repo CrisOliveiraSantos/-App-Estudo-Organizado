@@ -1,6 +1,6 @@
-import Editor from "@monaco-editor/react";
+import { Editor } from "@monaco-editor/react";
 import { View, type DimensionValue } from "react-native";
-import { useThemeContext } from "@/lib/theme-provider";
+import { useThemeScheme } from "@/lib/theme-provider";
 
 export type MonacoEditorProps = {
   value: string;
@@ -19,7 +19,7 @@ export function MonacoEditor({
   readOnly = false,
   height = 420,
 }: MonacoEditorProps) {
-  const { colorScheme } = useThemeContext();
+  const colorScheme = useThemeScheme();
   const resolvedTheme = theme ?? (colorScheme === "dark" ? "dark" : "light");
 
   return (

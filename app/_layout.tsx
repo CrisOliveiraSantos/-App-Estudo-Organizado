@@ -7,7 +7,8 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
-import { ThemeProvider } from "@/lib/theme-provider";
+import { ThemeProvider, useThemeScheme } from "@/lib/theme-provider";
+import { isDarkScheme } from "@/constants/theme";
 import { StudyProvider } from "@/lib/study-store";
 import {
   SafeAreaFrameContext,
@@ -35,6 +36,15 @@ const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
 export const unstable_settings = {
   anchor: "(tabs)",
 };
+
+/**
+ * A barra de status acompanha a paleta do app sem `Appearance.setColorScheme`,
+ * que pode reconfigurar a Activity no Android durante a troca de tema.
+ */
+function ThemedStatusBar() {
+  const scheme = useThemeScheme();
+  return <StatusBar style={isDarkScheme(scheme) ? "light" : "dark"} />;
+}
 
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
@@ -122,7 +132,7 @@ export default function RootLayout() {
           </Stack>
           <CrisPopup />
           <HomeShortcut />
-          <StatusBar style="auto" />
+          <ThemedStatusBar />
         </QueryClientProvider>
       </trpc.Provider>
     </GestureHandlerRootView>
