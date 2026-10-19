@@ -198,7 +198,11 @@ export default function ChatScreen() {
   if (!cloudUser && !localAccount) {
     return (
       <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
-        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+        >
           <AuthPanel
             navClearance={navClearance}
             mode={authMode}
@@ -225,7 +229,11 @@ export default function ChatScreen() {
   const privateRecipientReady = room === 'Sala pública' || Boolean(recipient.trim());
   return (
     <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={0}
+      >
         <View className="px-5 pt-5">
           <View className="flex-row items-start justify-between">
             <View className="flex-1 pr-3">

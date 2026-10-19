@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { router } from 'expo-router';
 
@@ -46,6 +46,45 @@ export default function AcademicImportScreen() {
   const [pageTitle, setPageTitle] = useState('');
   const [showList, setShowList] = useState(false);
   const [saved, setSaved] = useState('');
+  /** Feedback imediato do botão "Capturar": spinner + texto enquanto o Moodle responde. */
+  const [capturing, setCapturing] = useState(false);
+  const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const clearCaptureTimer = () => {
+    if (captureTimerRef.current) {
+      clearTimeout(captureTimerRef.current);
+      captureTimerRef.current = null;
+    }
+  };
+
+  const stopCapture = () => {
+    clearCaptureTimer();
+    setCapturing(false);
+  };
+
+  const startCapture = () => {
+    if (capturing) return;
+    clearCaptureTimer();
+    if (Platform.OS === 'web') {
+      setStatus('No navegador, cole a lista de atividades no campo acima e toque em "Revisar atividades coladas".');
+      return;
+    }
+    setSaved('');
+    setCapturing(true);
+    setStatus('Lendo seu Moodle... Aguarde');
+    setCaptureSignal(value => value + 1);
+    /**
+     * Rede de segurança: se a página não devolver nada (login expirado, WebView
+     * parada), o spinner não fica preso para sempre.
+     */
+    captureTimerRef.current = setTimeout(() => {
+      setCapturing(false);
+      captureTimerRef.current = null;
+      setStatus('A leitura demorou mais que o esperado. Abra a lista de tarefas e toque em Capturar de novo.');
+    }, 30000);
+  };
+
+  useEffect(() => () => clearCaptureTimer(), []);
 
   useEffect(() => {
     AsyncStorage.getItem(STORAGE_KEY)
@@ -97,6 +136,8 @@ export default function AcademicImportScreen() {
   const handleMessage = (raw: string) => {
     const payload = parseImportMessage(raw);
     if (!payload) return;
+    // A resposta final (não parcial) encerra o spinner; a parcial mantém "Lendo…".
+    if (!payload.partial) stopCapture();
     const found = normalizeScrapedTasks(payload.items);
     const foundCourses = normalizeScrapedCourses(payload.courses);
     if (foundCourses.length) setCourses(current => mergeScrapedCourses(current, foundCourses));
@@ -123,11 +164,21 @@ export default function AcademicImportScreen() {
 
   const save = () => {
     if (!pending.length && !courses.length) return;
+    stopCapture();
     let createdTasks = 0;
     let createdEvents = 0;
     let createdSubjects = 0;
     const palette = ['#3949AB', '#7C3AED', '#18865B', '#C13B4A', '#B67500', '#0E7490'];
     const subjectIds = new Map<string, string>();
+    /**
+     * Otimização: URLs já importadas em capturas anteriores. Evita recriar a
+     * mesma tarefa quando o Moodle devolve o item em duas páginas diferentes.
+     */
+    const importedUrls = new Set<string>();
+    for (const event of events) {
+      const match = event.notes?.match(/Importado de (https?:\/\/\S+)/);
+      if (match) importedUrls.add(match[1]);
+    }
 
     /** Uma matéria por curso — nunca mais uma disciplina "Página inicial". */
     const ensureSubject = (name: string, teacher?: string) => {
@@ -162,7 +213,14 @@ export default function AcademicImportScreen() {
           .map(event => `${event.title.toLowerCase()}|${event.date}`),
       );
       for (const task of group.tasks) {
-        if (!knownTasks.has(task.title.toLowerCase())) {
+        const titleKey = task.title.toLowerCase();
+        const alreadyImported = Boolean(task.url) && importedUrls.has(task.url as string);
+        /**
+         * Fóruns/avisos/apresentações NÃO viram tarefa: eles vivem em
+         * "Avisos e comunicados" e não poluem a lista do que precisa de ação.
+         */
+        const isNotice = task.type === 'Aviso';
+        if (!isNotice && !knownTasks.has(titleKey) && !alreadyImported) {
           addSubjectTask(
             subjectId,
             task.title,
@@ -170,29 +228,36 @@ export default function AcademicImportScreen() {
             formatImportedDate(task.dueDate) || undefined,
             categoryForDueDate(task.dueDate),
           );
-          knownTasks.add(task.title.toLowerCase());
+          knownTasks.add(titleKey);
           createdTasks += 1;
         }
-        if (task.dueDate) {
-          const date = formatImportedDate(task.dueDate);
-          const key = `${task.title.toLowerCase()}|${date}`;
+        /**
+         * Avisos sem data continuam sendo guardados (com "Sem prazo") para
+         * nenhuma informação do Moodle se perder.
+         */
+        if (task.dueDate || isNotice) {
+          const date = formatImportedDate(task.dueDate) || 'Sem prazo';
+          const key = `${titleKey}|${date}`;
           if (!knownEvents.has(key)) {
             const eventType: AcademicEventType =
               task.type === 'Prova'
                 ? 'Prova'
-                : task.type === 'Aviso' || task.type === 'Material'
-                  ? 'Outro'
-                  : 'Exercício';
+                : task.type === 'Aviso'
+                  ? 'Aviso'
+                  : task.type === 'Material'
+                    ? 'Outro'
+                    : 'Exercício';
             addEvent({
               title: task.title,
               type: eventType,
               subjectId,
               date,
               notes: [task.dateDescription, task.url ? `Importado de ${task.url}` : 'Importado do ambiente acadêmico.'].filter(Boolean).join('\n'),
-              color: '#3949AB',
-              emoji: '⌁',
+              color: isNotice ? '#B67500' : '#3949AB',
+              emoji: isNotice ? '📢' : '⌁',
             });
             knownEvents.add(key);
+            if (task.url) importedUrls.add(task.url);
             createdEvents += 1;
           }
         }
@@ -269,11 +334,20 @@ export default function AcademicImportScreen() {
         <View style={styles.actionsRow}>
           <Pressable
             accessibilityRole="button"
-            onPress={() => setCaptureSignal(value => value + 1)}
-            style={[styles.captureButton, { borderColor: colors.border }]}
+            accessibilityLabel={capturing ? 'Lendo as atividades do Moodle' : 'Capturar atividades'}
+            accessibilityState={{ busy: capturing, disabled: capturing }}
+            disabled={capturing}
+            onPress={startCapture}
+            style={[styles.captureButton, { borderColor: colors.border }, capturing && styles.captureDisabled]}
           >
-            <IconSymbol name="doc.text.fill" size={17} color={colors.primary} />
-            <Text style={[styles.captureLabel, { color: colors.foreground }]}>Capturar atividades</Text>
+            {capturing ? (
+              <ActivityIndicator size="small" color={colors.primary} />
+            ) : (
+              <IconSymbol name="doc.text.fill" size={17} color={colors.primary} />
+            )}
+            <Text style={[styles.captureLabel, { color: colors.foreground }]}>
+              {capturing ? 'Lendo...' : 'Capturar atividades'}
+            </Text>
           </Pressable>
           {pending.length || courses.length ? (
             <Pressable
@@ -303,6 +377,13 @@ export default function AcademicImportScreen() {
           />
         ) : null}
       </View>
+
+      {capturing ? (
+        <View style={styles.loading}>
+          <ActivityIndicator size="large" color={colors.primary} />
+          <Text style={[styles.loadingText, { color: colors.foreground }]}>Lendo seu Moodle... Aguarde</Text>
+        </View>
+      ) : null}
 
       <ScrollView contentContainerStyle={styles.footer}>
         <Text style={[styles.status, { color: colors.muted }]}>{status}</Text>
@@ -402,6 +483,7 @@ const styles = StyleSheet.create({
   backLabel: { fontSize: 13, fontWeight: '700' },
   browser: { borderRadius: 14, borderWidth: 1, flex: 1, marginHorizontal: 14, marginTop: 10, minHeight: 220, overflow: 'hidden' },
   captureButton: { alignItems: 'center', borderRadius: 11, borderWidth: 1, flexDirection: 'row', gap: 7, paddingHorizontal: 12, paddingVertical: 9 },
+  captureDisabled: { opacity: 0.66 },
   captureLabel: { fontSize: 12, fontWeight: '700' },
   chip: { borderRadius: 999, borderWidth: 1, paddingHorizontal: 14, paddingVertical: 7 },
   chipLabel: { fontSize: 12, fontWeight: '800' },
@@ -423,6 +505,8 @@ const styles = StyleSheet.create({
   itemTitle: { fontSize: 13, fontWeight: '700', lineHeight: 18 },
   listCard: { padding: 12 },
   listScroll: { maxHeight: 150 },
+  loading: { alignItems: 'center', flexDirection: 'row', gap: 10, paddingHorizontal: 16, paddingTop: 12 },
+  loadingText: { fontSize: 13, fontWeight: '800' },
   openButton: { alignItems: 'center', borderRadius: 11, justifyContent: 'center', paddingHorizontal: 16 },
   openLabel: { color: '#FFFFFF', fontSize: 13, fontWeight: '800' },
   pageTitle: { fontSize: 11 },

@@ -54,6 +54,10 @@ describe('classificação das atividades', () => {
     expect(classifyScrapedTask('Leitura do capítulo 3 em PDF')).toBe('Material');
     expect(classifyScrapedTask('Aviso: aula cancelada')).toBe('Aviso');
     expect(classifyScrapedTask('Avisos Fórum')).toBe('Aviso');
+    expect(classifyScrapedTask('Fórum de dúvidas')).toBe('Aviso');
+    expect(classifyScrapedTask('Fórum de apresentação da turma')).toBe('Aviso');
+    expect(classifyScrapedTask('Apresentação do trabalho final')).toBe('Aviso');
+    expect(classifyScrapedTask('Dúvidas sobre a lista 2')).toBe('Aviso');
     expect(classifyScrapedTask('Lista de exercícios 2')).toBe('Exercício');
     expect(classifyScrapedTask('Questionário 1')).toBe('Exercício');
     expect(classifyScrapedTask('Trabalho em grupo')).toBe('Tarefa');
@@ -226,6 +230,12 @@ describe('limpeza dos dados do Moodle', () => {
   it('mantém o professor nas tarefas normalizadas', () => {
     const [task] = normalizeScrapedTasks([{ title: 'Lista 1', course: 'Banco de Dados', professor: 'Ana Souza' }]);
     expect(task.teacher).toBe('Ana Souza');
+  });
+
+  it('marca fóruns e tópicos de dúvidas como Aviso depois de limpar o título', () => {
+    const [task] = normalizeScrapedTasks([{ title: 'Fórum de dúvidas (segunda-feira)', course: 'Banco de Dados' }]);
+    expect(task.title).toBe('Fórum de dúvidas');
+    expect(task.type).toBe('Aviso');
   });
 });
 

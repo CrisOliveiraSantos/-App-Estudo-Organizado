@@ -114,6 +114,12 @@ export type CrisContext = {
   selection?: string | null;
   detail?: string | null;
   topics?: string[];
+  /**
+   * Dados reais do app (matérias, tarefas pendentes, progresso e notas),
+   * montados por `lib/cris-study-context.ts`. Vai no system prompt para a
+   * Cris montar planos com o que a pessoa realmente tem para estudar.
+   */
+  appContext?: string | null;
 };
 
 export type CrisAskOptions = {
@@ -386,7 +392,9 @@ export function describeScreen(ctx: CrisContext): string {
  * Cris saber onde está sem precisar adivinhar nem falar do dispositivo.
  */
 export function buildSystemPrompt(ctx: CrisContext, memory?: Partial<CrisUserMemory> | null): string {
-  return `${CRIS_SYSTEM_PROMPT}\n\n${describeUserMemory(memory)}\n\n[Contexto da tela do app]\n${describeScreen(ctx)}`;
+  const appContext = (ctx.appContext ?? '').trim();
+  const studyBlock = appContext ? `\n\n[Contexto do usuário]\n${clip(appContext, 1800)}` : '';
+  return `${CRIS_SYSTEM_PROMPT}\n\n${describeUserMemory(memory)}\n\n[Contexto da tela do app]\n${describeScreen(ctx)}${studyBlock}`;
 }
 
 /**
@@ -396,10 +404,14 @@ export function buildSystemPrompt(ctx: CrisContext, memory?: Partial<CrisUserMem
  */
 export function buildUserPrompt(message: string, ctx: CrisContext): string {
   const question = (message ?? '').trim() || 'Apresente-se em uma frase e diga como você pode ajudar nesta tela.';
+  const hasStudyContext = Boolean((ctx.appContext ?? '').trim());
   return [
     '[Lembrete do contexto da tela do app]',
     describeScreen(ctx),
     '',
+    ...(hasStudyContext
+      ? ['[Lembrete do contexto do usuário]', 'Use as matérias, tarefas e o progresso do bloco "[Contexto do usuário]" do sistema para personalizar a resposta.', '']
+      : []),
     '[Pergunta do aluno]',
     question,
     '',

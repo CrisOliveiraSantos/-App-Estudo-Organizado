@@ -140,7 +140,11 @@ export default function EditorScreen() {
   };
 
   return <ScreenContainer edges={['top', 'bottom', 'left', 'right']} style={styles.screen}>
-    <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.fill}>
+    <KeyboardAvoidingView
+      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      keyboardVerticalOffset={0}
+      style={styles.fill}
+    >
       <View style={styles.commandHeader}>
         <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Voltar para Meus documentos" style={styles.backButton}><Text style={styles.backArrow}>←</Text><Text style={styles.backLabel}>Documentos</Text></TouchableOpacity>
         <View style={styles.commandTitleWrap}><Text numberOfLines={1} style={styles.commandTitle}>{title.trim() || 'Sem título'}</Text><View style={styles.savedRow}><View style={styles.savedDot} /><Text style={styles.savedText}>{savedAt === 'Rascunho' ? 'Rascunho em edição' : `Salvo automaticamente · ${savedAt.replace('Salvo ', '')}`}</Text></View></View>

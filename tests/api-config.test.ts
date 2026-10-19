@@ -5,7 +5,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
   API_PROVIDERS,
+  DEFAULT_AI_CONFIG,
   PROVIDER_LIVE_MODEL,
+  hasAiCredentials,
   isModelInList,
   normalizeModelId,
   suggestLiveModel,
@@ -110,9 +112,34 @@ describe('Popup da Cris: status de IA não congela e fica ao vivo (bugs 2 e 5)',
     expect(API_CONFIG).toContain('export function subscribeAiConfig');
   });
 
-  it('usa o mesmo conceito de "ativo" da tela de Ajustes (ready, não só configurado)', () => {
-    expect(CRIS_POPUP).toContain('apiConfig.isLocalAiReady(config.local) || apiConfig.isProviderAiReady(config.provider)');
+  it('relê o armazenamento seguro a cada abertura (ignora o cache em memória)', () => {
+    expect(CRIS_POPUP).toContain('apiConfig.reloadAiConfig()');
+    expect(API_CONFIG).toContain('export async function reloadAiConfig');
+    expect(API_CONFIG).toMatch(/current = null;\s*loadPromise = null;/);
+  });
+
+  it('esconde o aviso assim que existe credencial salva (sem exigir teste bem-sucedido)', () => {
+    expect(CRIS_POPUP).toContain('apiConfig.hasAiCredentials(config)');
     expect(CRIS_POPUP).not.toContain('isProviderConfigured(config.provider)');
+    expect(API_CONFIG).toContain('export function hasAiCredentials');
+  });
+});
+
+describe('hasAiCredentials: chave colada já é uma IA configurada', () => {
+  it('aceita chave de provedor e endereço local, mesmo sem último teste', () => {
+    expect(hasAiCredentials(DEFAULT_AI_CONFIG)).toBe(false);
+    expect(
+      hasAiCredentials({
+        ...DEFAULT_AI_CONFIG,
+        provider: { ...DEFAULT_AI_CONFIG.provider, apiKey: 'sk-test', lastTestStatus: null },
+      }),
+    ).toBe(true);
+    expect(
+      hasAiCredentials({
+        ...DEFAULT_AI_CONFIG,
+        local: { ...DEFAULT_AI_CONFIG.local, url: 'http://192.168.0.10:11434', lastTestStatus: null },
+      }),
+    ).toBe(true);
   });
 });
 

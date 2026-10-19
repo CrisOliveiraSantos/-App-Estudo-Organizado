@@ -468,7 +468,11 @@ export function parseDueDate(value: unknown, today: Date = new Date()): string |
 export function classifyScrapedTask(title: string): ScrapedTaskType {
   const text = title.toLowerCase();
   if (/\b(prova|exame|avalia[cç][aã]o|teste|recupera[cç][aã]o)\b/.test(text)) return 'Prova';
-  if (/\b(aviso|comunicado|mensagem|nota\s+informativa|f[oó]rum)\b/.test(text)) return 'Aviso';
+  /**
+   * Fóruns, avisos e tópicos de apresentação/dúvidas são comunicação do curso,
+   * não tarefas: entram como `Aviso` e ficam fora da lista principal.
+   */
+  if (/\b(aviso|comunicado|mensagem|nota\s+informativa|f[oó]rum|apresenta[cç][aã]o|d[uú]vidas?)\b/.test(text)) return 'Aviso';
   if (/\b(pdf|material|leitura|texto|cap[ií]tulo|slide|apostila|v[ií]deo)\b/.test(text)) return 'Material';
   if (/\b(exerc[ií]cio|lista|question[áa]rio|atividade|tarefa)\b/.test(text)) return 'Exercício';
   return 'Tarefa';

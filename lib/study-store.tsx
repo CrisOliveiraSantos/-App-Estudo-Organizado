@@ -13,7 +13,11 @@ export type PdfPage = { id: string; pageNumber: number; imageUri?: string; extra
 export type Note = { id: string; title: string; content: string; folder: string; updatedAt: string; kind: 'note' | 'pdf'; uri?: string; blocks?: RichBlock[]; images?: string[]; pdfPages?: PdfPage[]; selectedText?: string; favorite?: boolean; pdfText?: string };
 export type Folder = { id: string; name: string };
 export type Subject = { id: string; name: string; professor: string; color: string; emoji: string; description?: string; tasks?: Task[] };
-export type AcademicEventType = 'Aula' | 'Exercício' | 'Prova' | 'Teste' | 'Visita' | 'Outro';
+/**
+ * `Aviso` separa comunicados/fóruns importados do Moodle dos compromissos de
+ * estudo: eles aparecem em "Avisos e comunicados", não na lista principal.
+ */
+export type AcademicEventType = 'Aula' | 'Exercício' | 'Prova' | 'Teste' | 'Visita' | 'Aviso' | 'Outro';
 export type AcademicEvent = { id: string; title: string; type: AcademicEventType; subjectId?: string; date: string; time?: string; done: boolean; notes?: string; color?: string; emoji?: string };
 export type ChatMessage = { id: string; author: string; text: string; room: 'Sala pública' | 'Conversa privada'; createdAt: string };
 export type StudyState = { goals: Goal[]; notes: Note[]; folders: Folder[]; subjects: Subject[]; events: AcademicEvent[]; chatMessages: ChatMessage[] };

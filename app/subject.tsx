@@ -7,8 +7,8 @@ import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, Academi
 import { type AcademicEventType, type Task, type TaskCategory, useStudyActions, useStudyEvents, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 
 const categories: TaskCategory[] = ['Hoje', 'Amanhã', 'Próximas', 'Atrasadas'];
-const eventTypes: AcademicEventType[] = ['Aula', 'Exercício', 'Prova', 'Teste', 'Visita', 'Outro'];
-const eventColors: Record<AcademicEventType, string> = { Aula: '#3346A8', Exercício: '#18865B', Prova: '#C13B4A', Teste: '#B67500', Visita: '#7C3AED', Outro: '#687088' };
+const eventTypes: AcademicEventType[] = ['Aula', 'Exercício', 'Prova', 'Teste', 'Visita', 'Aviso', 'Outro'];
+const eventColors: Record<AcademicEventType, string> = { Aula: '#3346A8', Exercício: '#18865B', Prova: '#C13B4A', Teste: '#B67500', Visita: '#7C3AED', Aviso: '#B67500', Outro: '#687088' };
 
 export default function SubjectScreen() {
   const params = useLocalSearchParams<{ id?: string }>();

@@ -50,7 +50,8 @@ import type { AiConfig } from '@/lib/api-config';
 import { shouldSendChatOnEnter } from '@/lib/chat-utils';
 import { describeScreen, streamCris, type CrisContext, type CrisFailure, type CrisReply } from '@/lib/cris-client';
 import { EMPTY_CRIS_MEMORY, getCrisMemory, isCrisMemoryEmpty, type CrisUserMemory } from '@/lib/cris-memory';
-import { useStudyEvents } from '@/lib/study-store';
+import { buildStudyContext } from '@/lib/cris-study-context';
+import { useStudyEvents, useStudyGoals, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 
 /* ------------------------------------------------------------------ *
  * Constantes
@@ -186,6 +187,9 @@ export default function CrisPopup() {
   const pathname = usePathname();
   const { width } = useWindowDimensions();
   const events = useStudyEvents();
+  const subjects = useStudySubjects();
+  const goals = useStudyGoals();
+  const notes = useStudyNotes();
 
   const [open, setOpen] = useState(false);
   const [draft, setDraft] = useState('');
@@ -235,7 +239,20 @@ export default function CrisPopup() {
     return upcomingTopics(events);
   }, [events, route]);
 
-  const context = useMemo(() => buildPopupContext(route, topics), [route, topics]);
+  /**
+   * Contexto real do app: matérias, tarefas pendentes, progresso e materiais.
+   * Recalculado só quando essas fatias mudam; vai no system prompt da Cris para
+   * que "monte um plano" considere o que a pessoa realmente tem para estudar.
+   */
+  const studyContext = useMemo(
+    () => buildStudyContext({ subjects, goals, notes, events }),
+    [subjects, goals, notes, events],
+  );
+
+  const context = useMemo<CrisContext>(
+    () => ({ ...buildPopupContext(route, topics), appContext: studyContext }),
+    [route, topics, studyContext],
+  );
   const contextLabel = useMemo(() => shortContextLabel(context), [context]);
   const hint = useMemo(
     () => (prefs.suggestionsEnabled ? nextAssessment(events) : null),
@@ -260,15 +277,23 @@ export default function CrisPopup() {
     if (!open) return;
     let alive = true;
     let unsubscribe: (() => void) | undefined;
+    // Enquanto a leitura acontece não afirmamos nada (evita piscar o aviso).
+    setAiReady(null);
     void (async () => {
       try {
         const apiConfig = await import('@/lib/api-config');
-        // Relê a cada abertura e assina mudanças (ex.: ligar a IA em Ajustes -> IA).
+        /**
+         * O aviso só aparece quando NÃO existe credencial salva. Antes ele
+         * dependia de um teste bem-sucedido (`is*AiReady`), então uma chave
+         * recém-colada continuava com "Nenhuma IA conectada" na tela.
+         */
         const apply = (config: AiConfig) => {
           if (!alive) return;
-          setAiReady(apiConfig.isLocalAiReady(config.local) || apiConfig.isProviderAiReady(config.provider));
+          setAiReady(apiConfig.hasAiCredentials(config));
         };
-        apply(await apiConfig.getAiConfig());
+        // `reloadAiConfig` ignora o cache: lê o SecureStore/localStorage de novo
+        // a cada abertura do popup, mesmo que a chave tenha sido salva antes.
+        apply(await apiConfig.reloadAiConfig());
         unsubscribe = apiConfig.subscribeAiConfig(apply);
       } catch {
         if (alive) setAiReady(true);
@@ -380,7 +405,11 @@ export default function CrisPopup() {
       <NeonFab bottom={fabBottom} onPress={openPopup} />
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={closePopup}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.keyboard}>
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+          keyboardVerticalOffset={0}
+          style={styles.keyboard}
+        >
           <View style={[styles.overlay, wide ? styles.overlayWide : styles.overlaySheet]}>
             <Pressable accessibilityRole="button" accessibilityLabel="Fechar a Cris" onPress={closePopup} style={styles.backdrop} />
             <View

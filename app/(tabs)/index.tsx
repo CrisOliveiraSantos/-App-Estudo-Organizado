@@ -10,10 +10,17 @@ import { cardShadow, hexToRgba, neonRadius, neonType } from '@/lib/theme-runtime
 import { heroTheme } from '@/lib/hero-theme';
 import { type AcademicEvent, type AcademicEventType, type Subject, useStudyActions, useStudyEvents, useStudyGoals, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 
-const eventTypes: AcademicEventType[] = ['Aula', 'Exercício', 'Prova', 'Teste', 'Visita', 'Outro'];
-const eventColors: Record<AcademicEventType, string> = { Aula: '#3346A8', Exercício: '#18865B', Prova: '#C13B4A', Teste: '#B67500', Visita: '#7C3AED', Outro: '#687088' };
-const eventEmojis: Record<AcademicEventType, string> = { Aula: '📚', Exercício: '✎', Prova: '★', Teste: '✓', Visita: '⌘', Outro: '✦' };
+const eventTypes: AcademicEventType[] = ['Aula', 'Exercício', 'Prova', 'Teste', 'Visita', 'Aviso', 'Outro'];
+const eventColors: Record<AcademicEventType, string> = { Aula: '#3346A8', Exercício: '#18865B', Prova: '#C13B4A', Teste: '#B67500', Visita: '#7C3AED', Aviso: '#B67500', Outro: '#687088' };
+const eventEmojis: Record<AcademicEventType, string> = { Aula: '📚', Exercício: '✎', Prova: '★', Teste: '✓', Visita: '⌘', Aviso: '📢', Outro: '✦' };
 const weekdays = ['D', 'S', 'T', 'Q', 'Q', 'S', 'S'];
+/**
+ * Avisos importados antes de existir o tipo `Aviso` ficaram como `Outro`.
+ * Reconhecer pelo título evita que fóruns antigos continuem no radar principal.
+ */
+const NOTICE_TITLE_HINT = /\b(f[oó]rum|aviso|comunicado|apresenta[cç][aã]o|d[uú]vidas?)\b/i;
+const isNoticeEvent = (event: AcademicEvent) =>
+  event.type === 'Aviso' || (event.type === 'Outro' && NOTICE_TITLE_HINT.test(event.title));
 
 type CalendarPoint = { day: number; month: number; year: number };
 
@@ -70,7 +77,15 @@ export default function HomeScreen() {
   const completedTasks = allTasks.length - openTasks.length;
   const progress = allTasks.length ? Math.round((completedTasks / allTasks.length) * 100) : 0;
   const selectedEvents = useMemo(() => events.filter(event => eventMatchesPoint(event, selectedPoint, today)), [events, selectedPoint, today]);
-  const upcomingEvents = useMemo(() => events.filter(event => !event.done).slice(0, 3), [events]);
+  /**
+   * A lista principal ("No seu radar") mostra só compromissos de estudo.
+   * Fóruns/avisos importados ficam na seção "Avisos e comunicados" abaixo.
+   */
+  const upcomingEvents = useMemo(
+    () => events.filter(event => !event.done && !isNoticeEvent(event)).slice(0, 3),
+    [events],
+  );
+  const notices = useMemo(() => events.filter(event => !event.done && isNoticeEvent(event)), [events]);
   const weekEvents = useMemo(() => {
     const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - today.getDay());
     const week = Array.from({ length: 7 }, (_, index) => new Date(start.getFullYear(), start.getMonth(), start.getDate() + index));
@@ -99,6 +114,22 @@ export default function HomeScreen() {
     const dateLabel = `${String(selectedPoint.day).padStart(2, '0')} ${new Date(selectedPoint.year, selectedPoint.month).toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '')}`;
     addEvent({ title: eventTitle.trim(), date: dateLabel, time: eventTime.trim(), type: eventType, emoji: eventEmojis[eventType], color: eventColors[eventType] });
     setEventTitle(''); setEventTime(''); setShowEventForm(false);
+  };
+  /**
+   * Abre os detalhes do compromisso. Se ele veio de uma matéria, leva direto
+   * para a tela da matéria (onde ficam tarefas, notas e demais compromissos).
+   */
+  const openEvent = (event: AcademicEvent) => {
+    if (event.subjectId) {
+      router.push({ pathname: '/subject', params: { id: event.subjectId } });
+      return;
+    }
+    const details = [
+      `Tipo: ${event.type}`,
+      `Data: ${event.date}${event.time ? ` · ${event.time}` : ''}`,
+      event.notes?.trim() ?? '',
+    ].filter(Boolean).join('\n');
+    Alert.alert(event.title, details);
   };
 
   return <ScreenContainer className="bg-transparent" containerClassName="bg-transparent" style={styles.screen}>
@@ -182,8 +213,36 @@ export default function HomeScreen() {
           </AcademicSection>
 
           <AcademicSection eyebrow="PRÓXIMOS" title="No seu radar">
-            {upcomingEvents.length ? <AcademicCard style={styles.radarCard}>{upcomingEvents.map((event, index) => <View key={event.id} style={[styles.radarRow, index < upcomingEvents.length - 1 && styles.radarRowDivider]}><View style={[styles.radarMark, { backgroundColor: `${event.color ?? eventColors[event.type]}18` }]}><Text>{event.emoji ?? eventEmojis[event.type]}</Text></View><View style={styles.radarCopy}><Text style={styles.radarTitle}>{event.title}</Text><Text style={styles.radarMeta}>{event.type} · {event.date}{event.time ? ` · ${event.time}` : ''}</Text></View></View>)}</AcademicCard> : <AcademicEmptyState title="Agenda sem pendências" description="Quando houver novos compromissos, eles aparecerão aqui." />}
+            {upcomingEvents.length ? <AcademicCard style={styles.radarCard}>{upcomingEvents.map((event, index) => <TouchableOpacity key={event.id} accessibilityRole="button" accessibilityLabel={`Abrir ${event.title}`} activeOpacity={0.76} onPress={() => openEvent(event)} style={[styles.radarRow, index < upcomingEvents.length - 1 && styles.radarRowDivider]}><View style={[styles.radarMark, { backgroundColor: `${event.color ?? eventColors[event.type]}18` }]}><Text>{event.emoji ?? eventEmojis[event.type]}</Text></View><View style={styles.radarCopy}><Text style={styles.radarTitle}>{event.title}</Text><Text style={styles.radarMeta}>{event.type} · {event.date}{event.time ? ` · ${event.time}` : ''}</Text></View><IconSymbol name="chevron.right" size={16} color={c.muted} /></TouchableOpacity>)}</AcademicCard> : <AcademicEmptyState title="Agenda sem pendências" description="Quando houver novos compromissos, eles aparecerão aqui." />}
           </AcademicSection>
+
+          {notices.length ? (
+            <AcademicSection eyebrow="COMUNICADOS" title="Avisos e comunicados">
+              <AcademicCard style={styles.radarCard}>
+                {notices.map((event, index) => (
+                  <TouchableOpacity
+                    key={event.id}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Abrir aviso ${event.title}`}
+                    activeOpacity={0.76}
+                    onPress={() => openEvent(event)}
+                    style={[styles.radarRow, index < notices.length - 1 && styles.radarRowDivider]}
+                  >
+                    <View style={[styles.radarMark, { backgroundColor: `${event.color ?? eventColors.Aviso}18` }]}>
+                      <Text>{event.emoji ?? eventEmojis.Aviso}</Text>
+                    </View>
+                    <View style={styles.radarCopy}>
+                      <Text style={styles.radarTitle}>{event.title}</Text>
+                      <Text style={styles.radarMeta}>
+                        {event.date || 'Sem prazo'}{event.notes ? ` · ${event.notes.split('\n')[0]}` : ''}
+                      </Text>
+                    </View>
+                    <IconSymbol name="chevron.right" size={16} color={c.muted} />
+                  </TouchableOpacity>
+                ))}
+              </AcademicCard>
+            </AcademicSection>
+          ) : null}
         </View>
       </View>
     </ScrollView>
@@ -216,7 +275,7 @@ function SubjectCard({ subject, events, onOpen, onSave, onDelete, styles }: { su
 
 function EventRow({ event, onToggle, onDelete, styles }: { event: AcademicEvent; onToggle: () => void; onDelete: () => void; styles: HomeStyles }) {
   const color = event.color ?? eventColors[event.type];
-  return <AcademicCard style={styles.eventRow}><TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: event.done }} accessibilityLabel={`Concluir ${event.title}`} onPress={onToggle} style={[styles.check, event.done && { backgroundColor: color, borderColor: color }]}><Text style={styles.checkText}>{event.done ? '✓' : ''}</Text></TouchableOpacity><View style={[styles.eventAccent, { backgroundColor: color }]} /><View style={styles.eventCopy}><View style={styles.eventLabelRow}><AcademicPill label={event.type} tone={event.type === 'Prova' ? 'danger' : event.type === 'Exercício' ? 'success' : event.type === 'Teste' ? 'warning' : 'indigo'} /><Text style={styles.eventTime}>{event.time || 'Sem horário'}</Text></View><Text style={[styles.eventTitle, event.done && styles.doneText]}>{event.emoji ?? eventEmojis[event.type]}  {event.title}</Text></View><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${event.title}`} style={styles.removeButton}><Text style={styles.removeText}>×</Text></TouchableOpacity></AcademicCard>;
+  return <AcademicCard style={styles.eventRow}><TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: event.done }} accessibilityLabel={`Concluir ${event.title}`} onPress={onToggle} style={[styles.check, event.done && { backgroundColor: color, borderColor: color }]}><Text style={styles.checkText}>{event.done ? '✓' : ''}</Text></TouchableOpacity><View style={[styles.eventAccent, { backgroundColor: color }]} /><View style={styles.eventCopy}><View style={styles.eventLabelRow}><AcademicPill label={event.type} tone={event.type === 'Prova' ? 'danger' : event.type === 'Exercício' ? 'success' : event.type === 'Teste' || event.type === 'Aviso' ? 'warning' : 'indigo'} /><Text style={styles.eventTime}>{event.time || 'Sem horário'}</Text></View><Text style={[styles.eventTitle, event.done && styles.doneText]}>{event.emoji ?? eventEmojis[event.type]}  {event.title}</Text></View><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${event.title}`} style={styles.removeButton}><Text style={styles.removeText}>×</Text></TouchableOpacity></AcademicCard>;
 }
 
 function Legend({ color, label, styles }: { color: string; label: string; styles: HomeStyles }) {

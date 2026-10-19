@@ -355,6 +355,32 @@ export async function getAiConfig(): Promise<AiConfig> {
 }
 
 /**
+ * Relê a configuração direto do armazenamento seguro, ignorando o cache em
+ * memória. O popup da Cris usa isto a cada abertura: se a chave foi gravada
+ * (ou apagada) em outra sessão/tela, o aviso "Nenhuma IA conectada" não fica
+ * preso a um estado antigo.
+ */
+export async function reloadAiConfig(): Promise<AiConfig> {
+  current = null;
+  loadPromise = null;
+  const next = await ensureLoaded();
+  emit(next);
+  return next;
+}
+
+/**
+ * Existe credencial de IA salva (chave do provedor ou endereço local)?
+ *
+ * Diferente de `isLocalAiReady`/`isProviderAiReady` — que exigem um teste
+ * bem-sucedido da MESMA configuração —, esta função responde à pergunta que
+ * o aluno faz: "já configurei uma IA?". O aviso de "Nenhuma IA conectada"
+ * deve desaparecer assim que a chave existir.
+ */
+export function hasAiCredentials(config: AiConfig): boolean {
+  return isLocalConfigured(config.local) || isProviderConfigured(config.provider);
+}
+
+/**
  * Observa mudanças na configuração sem depender de React (ex.: o popup da Cris,
  * que fica montado a vida toda e precisa saber na hora quando a IA é ligada ou
  * desligada em Ajustes → IA). Devolve a função para cancelar a inscrição.
