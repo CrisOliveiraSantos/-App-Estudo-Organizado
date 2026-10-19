@@ -207,11 +207,11 @@ export default function AcademicImportScreen() {
      * dentro da matéria. Na próxima importação, só os links novos entram —
      * nada é duplicado nem apagado.
      */
-    const saveMaterials = (course: ScrapedCourse, subjectId: string) => {
+    const saveMaterials = (course: ScrapedCourse, subjectId: string, folder: string) => {
       const materials = course.materials ?? [];
       if (!materials.length) return 0;
       const title = `Materiais — ${course.name}`;
-      const existing = notes.find(note => note.folder === course.name && note.title.trim().toLowerCase() === title.toLowerCase());
+      const existing = notes.find(note => note.folder === folder && note.title.trim().toLowerCase() === title.toLowerCase());
       const existingContent = existing?.content ?? '';
       const additions = materials.filter(material => !existingContent.includes(material.url));
       if (!additions.length) return 0;
@@ -223,10 +223,10 @@ export default function AcademicImportScreen() {
         text: `${material.title}\n${material.url}`,
       }));
       if (existing) {
-        saveNote({ ...existing, content, folder: course.name, blocks: [...(existing.blocks ?? []), ...blocks] });
+        saveNote({ ...existing, content, folder, blocks: [...(existing.blocks ?? []), ...blocks] });
       } else {
-        const noteId = createNote(title, course.name);
-        saveNote({ id: noteId, title, content, folder: course.name, updatedAt: 'Agora', kind: 'note', blocks });
+        const noteId = createNote(title, folder);
+        saveNote({ id: noteId, title, content, folder, updatedAt: 'Agora', kind: 'note', blocks });
       }
       return additions.length;
     };
@@ -298,7 +298,8 @@ export default function AcademicImportScreen() {
     // Matérias encontradas em "Meus cursos" entram em "Sua faculdade" mesmo sem atividades.
     for (const course of courses) {
       const { id } = ensureSubject(course.name, course.teacher);
-      createdMaterials += saveMaterials(course, id);
+      const folder = subjects.find(subject => subject.id === id)?.name ?? course.name;
+      createdMaterials += saveMaterials(course, id, folder);
     }
 
     setSaved(`${createdSubjects} matéria(s), ${createdTasks} tarefa(s), ${createdEvents} prazo(s) e ${createdMaterials} material(is) salvos em Matérias, Planejamento e Biblioteca.`);
