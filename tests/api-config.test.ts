@@ -4,8 +4,10 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import {
+  AI_API_CONFIG_KEY,
   API_PROVIDERS,
   DEFAULT_AI_CONFIG,
+  LEGACY_AI_API_CONFIG_KEY,
   PROVIDER_LIVE_MODEL,
   hasAiCredentials,
   isModelInList,
@@ -113,13 +115,21 @@ describe('Popup da Cris: status de IA não congela e fica ao vivo (bugs 2 e 5)',
     expect(API_CONFIG).toContain('export function subscribeAiConfig');
   });
 
-  it('relê o armazenamento seguro a cada abertura (ignora o cache em memória)', () => {
-    expect(CRIS_POPUP).toContain('apiConfig.reloadAiConfig()');
+  it('relê o armazenamento só quando o cache não tem credenciais', () => {
+    expect(CRIS_POPUP).toContain('const cached = await apiConfig.getAiConfig()');
+    expect(CRIS_POPUP).toContain('if (!apiConfig.hasAiCredentials(cached)) apply(await apiConfig.reloadAiConfig())');
     expect(API_CONFIG).toContain('export async function reloadAiConfig');
     expect(API_CONFIG).toMatch(/current = null;\s*loadPromise = null;/);
   });
 
-  it('o chat também relê a chave a cada mensagem, sem exigir "Testar modelo"', () => {
+  it('não perde uma chave válida se a leitura do armazenamento vier vazia', () => {
+    expect(API_CONFIG).toContain('hasAiCredentials(previous) && !hasAiCredentials(next)');
+    expect(API_CONFIG).toContain('let loadRevision = 0');
+  });
+
+  it('o chat usa o cache salvo antes de reler a chave, sem exigir "Testar modelo"', () => {
+    expect(CRIS_CLIENT).toContain('const cached = await module.getAiConfig()');
+    expect(CRIS_CLIENT).toContain('const cachedReady');
     expect(CRIS_CLIENT).toContain('module.reloadAiConfig()');
     expect(CRIS_CLIENT).toContain('module.getAiConfig()');
     expect(CRIS_CLIENT).toContain('typeof module.reloadAiConfig');
@@ -131,6 +141,15 @@ describe('Popup da Cris: status de IA não congela e fica ao vivo (bugs 2 e 5)',
     const emit = body.indexOf('emit(normalized)');
     expect(write).toBeGreaterThan(-1);
     expect(emit).toBeGreaterThan(write);
+  });
+
+  it('usa uma chave válida no SecureStore e migra a chave antiga', () => {
+    expect(AI_API_CONFIG_KEY).toMatch(/^[\w.-]+$/);
+    expect(AI_API_CONFIG_KEY).not.toContain('@');
+    expect(AI_API_CONFIG_KEY).not.toContain('/');
+    expect(LEGACY_AI_API_CONFIG_KEY).toContain('@estudo-organizado/');
+    expect(API_CONFIG).toContain('LEGACY_AI_API_CONFIG_KEY');
+    expect(API_CONFIG).toContain('SecureStore.setItemAsync(AI_API_CONFIG_KEY, legacy, SECURE_STORE_OPTIONS)');
   });
 
   it('esconde o aviso assim que existe credencial salva (sem exigir teste bem-sucedido)', () => {

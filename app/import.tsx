@@ -23,7 +23,7 @@ import {
   type ScrapedCourse,
   type ScrapedTask,
 } from '@/lib/academic-import';
-import { type AcademicEventType, useStudyActions, useStudyEvents, useStudyNotes, useStudySubjects } from '@/lib/study-store';
+import { type AcademicEventType, type Task, useStudyActions, useStudyEvents, useStudyNotes, useStudySubjects } from '@/lib/study-store';
 
 const STORAGE_KEY = '@estudo-organizado/import-connection';
 
@@ -34,7 +34,7 @@ export default function AcademicImportScreen() {
   const events = useStudyEvents();
   const subjects = useStudySubjects();
   const notes = useStudyNotes();
-  const { addEvent, addSubject, addSubjectTask, createNote, saveNote, updateSubject } = useStudyActions();
+  const { addEvent, addSubject, addSubjectTask, createNote, saveNote, updateSubject, updateSubjectTask } = useStudyActions();
   const [provider, setProvider] = useState<ImportProviderId>('sigaa');
   const [url, setUrl] = useState<string>(IMPORT_PROVIDERS[0].url);
   const [draft, setDraft] = useState<string>(IMPORT_PROVIDERS[0].url);
@@ -47,6 +47,8 @@ export default function AcademicImportScreen() {
   const [pageTitle, setPageTitle] = useState('');
   const [showList, setShowList] = useState(false);
   const [saved, setSaved] = useState('');
+  /** Evita toque duplo e dá feedback durante a gravação em lotes. */
+  const [saving, setSaving] = useState(false);
   /** Feedback imediato do botão "Capturar": spinner + texto enquanto o Moodle responde. */
   const [capturing, setCapturing] = useState(false);
   const captureTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -163,13 +165,23 @@ export default function AcademicImportScreen() {
     setShowList(true);
   };
 
-  const save = () => {
-    if (!pending.length && !courses.length) return;
+  const save = async () => {
+    if (saving || (!pending.length && !courses.length)) return;
+    setSaving(true);
     stopCapture();
+    setStatus('Salvando as atividades em lotes…');
+    /**
+     * Devolve a thread para a interface antes do processamento pesado. O Moodle
+     * pode trazer 200 atividades + materiais; fazer tudo num único toque era o
+     * que travava a tela no aparelho.
+     */
+    await new Promise<void>(resolve => setTimeout(resolve, 0));
+    try {
     let createdTasks = 0;
     let createdEvents = 0;
     let createdSubjects = 0;
     let createdMaterials = 0;
+    let processedTasks = 0;
     const palette = ['#3949AB', '#7C3AED', '#18865B', '#C13B4A', '#B67500', '#0E7490'];
     const subjectIds = new Map<string, string>();
     /**
@@ -244,6 +256,11 @@ export default function AcademicImportScreen() {
           .map(event => `${event.title.toLowerCase()}|${event.date}`),
       );
       for (const task of group.tasks) {
+        processedTasks += 1;
+        if (processedTasks % 25 === 0) {
+          /** Cede a thread a cada 25 atividades (listas grandes do Moodle). */
+          await new Promise<void>(resolve => setTimeout(resolve, 0));
+        }
         const titleKey = task.title.toLowerCase();
         const alreadyImported = Boolean(task.url) && importedUrls.has(task.url as string);
         /**
@@ -258,9 +275,32 @@ export default function AcademicImportScreen() {
             task.type === 'Prova' ? 'Alta' : 'Média',
             formatImportedDate(task.dueDate) || undefined,
             categoryForDueDate(task.dueDate),
+            {
+              url: task.url,
+              status: task.status,
+              done: task.status === 'Concluído',
+            },
           );
           knownTasks.add(titleKey);
           createdTasks += 1;
+        }
+        /**
+         * Reimportar depois de uma correção (link/status/professor) atualiza a
+         * tarefa que já existe, em vez de ignorá-la pelo título.
+         */
+        const existingTask = !isNotice
+          ? (existingSubject?.tasks ?? []).find(entry => entry.title.toLowerCase() === titleKey)
+          : undefined;
+        if (existingTask) {
+          const changes: Partial<Pick<Task, 'url' | 'status' | 'done' | 'deadline'>> = {};
+          if (task.url && existingTask.url !== task.url) changes.url = task.url;
+          if (task.status && existingTask.status !== task.status) {
+            changes.status = task.status;
+            changes.done = task.status === 'Concluído';
+          }
+          const deadline = formatImportedDate(task.dueDate) || undefined;
+          if (deadline && !existingTask.deadline) changes.deadline = deadline;
+          if (Object.keys(changes).length) updateSubjectTask(subjectId, existingTask.id, changes);
         }
         /**
          * Avisos sem data continuam sendo guardados (com "Sem prazo") para
@@ -307,6 +347,9 @@ export default function AcademicImportScreen() {
     setPending([]);
     setCourses([]);
     setShowList(false);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const toggleList = () => {
@@ -492,11 +535,14 @@ export default function AcademicImportScreen() {
             ) : null}
             <AcademicButton
               label={
-                pending.length
-                  ? `Salvar ${pending.length} atividade(s) em ${groups.length} matéria(s)`
-                  : `Criar ${courses.length} matéria(s) em Sua faculdade`
+                saving
+                  ? 'Salvando em lotes…'
+                  : pending.length
+                    ? `Salvar ${pending.length} atividade(s) em ${groups.length} matéria(s)`
+                    : `Criar ${courses.length} matéria(s) em Sua faculdade`
               }
-              onPress={save}
+              onPress={() => void save()}
+              disabled={saving}
               compact
             />
           </>
@@ -524,7 +570,7 @@ const styles = StyleSheet.create({
   chipLabel: { fontSize: 12, fontWeight: '800' },
   chips: { flexDirection: 'row', gap: 8 },
   controls: { gap: 9, paddingHorizontal: 14, paddingTop: 12 },
-  footer: { gap: 10, padding: 14, paddingBottom: 26 },
+  footer: { gap: 10, padding: 14, paddingBottom: 112 },
   group: { marginBottom: 4 },
   groupCount: { fontSize: 11, fontWeight: '800' },
   groupHeader: { alignItems: 'center', flexDirection: 'row', gap: 6, paddingBottom: 4, paddingTop: 8 },

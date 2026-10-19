@@ -291,9 +291,15 @@ export default function CrisPopup() {
           if (!alive) return;
           setAiReady(apiConfig.hasAiCredentials(config));
         };
-        // `reloadAiConfig` ignora o cache: lê o SecureStore/localStorage de novo
-        // a cada abertura do popup, mesmo que a chave tenha sido salva antes.
-        apply(await apiConfig.reloadAiConfig());
+        /**
+         * Cache primeiro (a tela de Ajustes acabou de salvar nele). O
+         * `reloadAiConfig` só é necessário quando o cache não tem credenciais;
+         * ele relê o SecureStore/localStorage sem descartar uma chave válida da
+         * sessão atual se a leitura vier vazia.
+         */
+        const cached = await apiConfig.getAiConfig();
+        apply(cached);
+        if (!apiConfig.hasAiCredentials(cached)) apply(await apiConfig.reloadAiConfig());
         unsubscribe = apiConfig.subscribeAiConfig(apply);
       } catch {
         if (alive) setAiReady(true);

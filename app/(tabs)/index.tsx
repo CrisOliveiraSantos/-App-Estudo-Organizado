@@ -115,18 +115,7 @@ export default function HomeScreen() {
     addEvent({ title: eventTitle.trim(), date: dateLabel, time: eventTime.trim(), type: eventType, emoji: eventEmojis[eventType], color: eventColors[eventType] });
     setEventTitle(''); setEventTime(''); setShowEventForm(false);
   };
-  /** Exclusão com confirmação nativa no aparelho e `confirm` na web (Alert não executa botões no RN Web). */
-  const confirmSubjectDelete = (subject: Subject) => {
-    const remove = () => deleteSubject(subject.id);
-    if (Platform.OS === 'web' && typeof window !== 'undefined') {
-      if (window.confirm(`Excluir “${subject.name}”? Os eventos já registrados continuarão na sua agenda.`)) remove();
-      return;
-    }
-    Alert.alert('Excluir matéria?', 'Os eventos já registrados continuarão na sua agenda.', [
-      { text: 'Cancelar', style: 'cancel' },
-      { text: 'Excluir', style: 'destructive', onPress: remove },
-    ]);
-  };
+  /** Exclusão de compromisso com confirmação nativa e `confirm` na web. */
   const confirmEventDelete = (event: AcademicEvent) => {
     const remove = () => deleteEvent(event.id);
     if (Platform.OS === 'web' && typeof window !== 'undefined') {
@@ -205,7 +194,7 @@ export default function HomeScreen() {
 
           <AcademicSection eyebrow="MATÉRIAS" title="Sua faculdade" actionLabel={showSubjectForm ? 'Fechar' : '+ Nova matéria'} onAction={() => setShowSubjectForm(value => !value)}>
             {showSubjectForm ? <AcademicCard style={styles.composer}><Text style={styles.composerTitle}>Adicionar matéria</Text><TextInput value={subjectName} onChangeText={setSubjectName} placeholder="Nome da matéria" placeholderTextColor={c.muted} style={styles.input} /><TextInput value={professor} onChangeText={setProfessor} placeholder="Professor(a)" placeholderTextColor={c.muted} style={styles.input} /><AcademicButton label="Salvar matéria" onPress={addSubjectFromForm} compact /></AcademicCard> : null}
-            {subjects.length ? <View style={styles.subjectGrid}>{subjects.map(subject => <SubjectCard key={subject.id} subject={subject} events={events} onOpen={() => router.push({ pathname: '/subject', params: { id: subject.id } })} onSave={changes => updateSubject(subject.id, changes)} onDelete={() => confirmSubjectDelete(subject)} styles={styles} />)}</View> : <AcademicEmptyState title="Ainda não há matérias" description="Crie sua primeira matéria para começar a organizar sua faculdade." actionLabel="Nova matéria" onAction={() => setShowSubjectForm(true)} />}
+            {subjects.length ? <View style={styles.subjectGrid}>{subjects.map(subject => <SubjectCard key={subject.id} subject={subject} events={events} onOpen={() => router.push({ pathname: '/subject', params: { id: subject.id } })} onSave={changes => updateSubject(subject.id, changes)} onDelete={() => deleteSubject(subject.id)} styles={styles} />)}</View> : <AcademicEmptyState title="Ainda não há matérias" description="Crie sua primeira matéria para começar a organizar sua faculdade." actionLabel="Nova matéria" onAction={() => setShowSubjectForm(true)} />}
           </AcademicSection>
 
           <AcademicSection eyebrow="ESCRITA" title="Continue escrevendo" actionLabel="Abrir documentos" onAction={() => router.push('/editor')}>
@@ -289,11 +278,63 @@ function TaskRow({ title, subtitle, priority, done, onToggle, styles }: { title:
 
 function SubjectCard({ subject, events, onOpen, onSave, onDelete, styles }: { subject: Subject; events: AcademicEvent[]; onOpen: () => void; onSave: (changes: Partial<Subject>) => void; onDelete: () => void; styles: HomeStyles }) {
   const [editing, setEditing] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [name, setName] = useState(subject.name);
   const [professor, setProfessor] = useState(subject.professor);
   const c = useAcademicColors();
   const nextEvent = events.find(event => event.subjectId === subject.id && !event.done);
-  return <AcademicCard style={styles.subjectCard} emphasis><View style={styles.subjectTop}><View style={[styles.subjectMark, { backgroundColor: `${subject.color}18` }]}><Text style={styles.subjectEmoji}>{subject.emoji}</Text></View><TouchableOpacity onPress={() => setEditing(value => !value)} accessibilityRole="button" accessibilityLabel={`Editar ${subject.name}`} style={styles.iconAction}><Text style={styles.iconActionText}>{editing ? 'Fechar' : 'Editar'}</Text></TouchableOpacity></View>{editing ? <View><TextInput value={name} onChangeText={setName} style={styles.inlineInput} placeholder="Matéria" placeholderTextColor={c.muted} /><TextInput value={professor} onChangeText={setProfessor} style={styles.inlineInput} placeholder="Professor(a)" placeholderTextColor={c.muted} /><View style={styles.subjectActions}><AcademicButton label="Salvar" compact onPress={() => { if (name.trim()) onSave({ name: name.trim(), professor: professor.trim() || 'Professor não informado' }); setEditing(false); }} /><TouchableOpacity onPress={onDelete} accessibilityRole="button" accessibilityLabel={`Excluir ${subject.name}`} style={styles.deleteAction}><Text style={styles.deleteActionText}>Excluir</Text></TouchableOpacity></View></View> : <TouchableOpacity onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir matéria ${subject.name}`} activeOpacity={0.76}><Text numberOfLines={2} style={styles.subjectName}>{subject.name}</Text><Text numberOfLines={1} style={styles.subjectProfessor}>{subject.professor}</Text><View style={styles.subjectFooter}>{nextEvent ? <View style={styles.nextActivity}><Text style={styles.nextLabel}>PRÓXIMA ATIVIDADE</Text><Text numberOfLines={1} style={styles.nextValue}>{nextEvent.title}</Text></View> : <Text style={styles.noActivity}>Sem compromisso vinculado</Text>}<IconSymbol name="chevron.right" size={18} color={subject.color} /></View></TouchableOpacity>}</AcademicCard>;
+  return (
+    <AcademicCard style={styles.subjectCard} emphasis>
+      <View style={styles.subjectTop}>
+        <View style={[styles.subjectMark, { backgroundColor: `${subject.color}18` }]}>
+          <Text style={styles.subjectEmoji}>{subject.emoji}</Text>
+        </View>
+        <View style={styles.subjectTopActions}>
+          <TouchableOpacity onPress={() => setEditing(value => !value)} accessibilityRole="button" accessibilityLabel={`Editar ${subject.name}`} style={styles.iconAction}>
+            <Text style={styles.iconActionText}>{editing ? 'Fechar' : 'Editar'}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity onPress={() => { setConfirmingDelete(true); setEditing(false); }} accessibilityRole="button" accessibilityLabel={`Excluir ${subject.name}`} style={styles.deleteAction}>
+            <Text style={styles.deleteActionText}>Excluir</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+      {confirmingDelete ? (
+        <View style={styles.deleteConfirm}>
+          <Text style={styles.deleteConfirmText}>Excluir “{subject.name}”? Os eventos continuam na agenda.</Text>
+          <View style={styles.deleteConfirmActions}>
+            <AcademicButton label="Sim, excluir" tone="danger" compact onPress={onDelete} />
+            <TouchableOpacity onPress={() => setConfirmingDelete(false)} accessibilityRole="button" accessibilityLabel="Cancelar exclusão" style={styles.deleteCancel}>
+              <Text style={styles.deleteCancelText}>Cancelar</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      ) : editing ? (
+        <View>
+          <TextInput value={name} onChangeText={setName} style={styles.inlineInput} placeholder="Matéria" placeholderTextColor={c.muted} />
+          <TextInput value={professor} onChangeText={setProfessor} style={styles.inlineInput} placeholder="Professor(a)" placeholderTextColor={c.muted} />
+          <View style={styles.subjectActions}>
+            <AcademicButton label="Salvar" compact onPress={() => { if (name.trim()) onSave({ name: name.trim(), professor: professor.trim() || 'Professor não informado' }); setEditing(false); }} />
+          </View>
+        </View>
+      ) : (
+        <TouchableOpacity onPress={onOpen} accessibilityRole="button" accessibilityLabel={`Abrir matéria ${subject.name}`} activeOpacity={0.76}>
+          <Text numberOfLines={2} style={styles.subjectName}>{subject.name}</Text>
+          <Text numberOfLines={1} style={styles.subjectProfessor}>{subject.professor}</Text>
+          <View style={styles.subjectFooter}>
+            {nextEvent ? (
+              <View style={styles.nextActivity}>
+                <Text style={styles.nextLabel}>PRÓXIMA ATIVIDADE</Text>
+                <Text numberOfLines={1} style={styles.nextValue}>{nextEvent.title}</Text>
+              </View>
+            ) : (
+              <Text style={styles.noActivity}>Sem compromisso vinculado</Text>
+            )}
+            <IconSymbol name="chevron.right" size={18} color={subject.color} />
+          </View>
+        </TouchableOpacity>
+      )}
+    </AcademicCard>
+  );
 }
 
 function EventRow({ event, onToggle, onDelete, styles }: { event: AcademicEvent; onToggle: () => void; onDelete: () => void; styles: HomeStyles }) {
@@ -341,6 +382,11 @@ function createStyles(c: HomePalette) {
     dayTextSelected: { color: c.onPrimary },
     dayToday: { backgroundColor: hexToRgba(c.violet, 0.16) },
     deleteAction: { justifyContent: 'center', minHeight: 38, paddingHorizontal: 10 },
+    deleteCancel: { justifyContent: 'center', minHeight: 38, paddingHorizontal: 12 },
+    deleteCancelText: { color: c.muted, fontSize: 13, fontWeight: '800' },
+    deleteConfirm: { backgroundColor: hexToRgba(c.danger, 0.08), borderColor: hexToRgba(c.danger, 0.28), borderRadius: 12, borderWidth: 1, gap: 9, marginTop: 10, padding: 10 },
+    deleteConfirmActions: { alignItems: 'center', flexDirection: 'row', gap: 6 },
+    deleteConfirmText: { color: c.ink, fontSize: 12, fontWeight: '700', lineHeight: 17 },
     deleteActionText: { color: c.danger, fontSize: 13, fontWeight: '800' },
     doneText: { color: c.muted, textDecorationLine: 'line-through' },
     dotRow: { flexDirection: 'row', height: 7, justifyContent: 'center', marginTop: 2 },
@@ -426,6 +472,7 @@ function createStyles(c: HomePalette) {
     subjectName: { color: c.ink, fontSize: 15, fontWeight: '900', lineHeight: 21, marginTop: 14, minHeight: 42 },
     subjectProfessor: { color: c.muted, fontSize: 12, marginTop: 4 },
     subjectTop: { alignItems: 'center', flexDirection: 'row', justifyContent: 'space-between' },
+    subjectTopActions: { alignItems: 'center', flexDirection: 'row', gap: 2 },
     taskCopy: { flex: 1, paddingRight: 8 },
     taskMeta: { color: c.muted, fontSize: 12, marginTop: 3 },
     taskRow: { alignItems: 'center', flexDirection: 'row', minHeight: 72, padding: 14 },

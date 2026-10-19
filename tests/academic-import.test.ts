@@ -12,6 +12,7 @@ import {
   mergeScrapedCourses,
   mergeScrapedTasks,
   normalizeScrapedCourses,
+  normalizeScrapedStatus,
   normalizeScrapedTasks,
   parseDueDate,
   parseImportMessage,
@@ -256,6 +257,27 @@ describe('limpeza dos dados do Moodle', () => {
     expect(task.teacher).toBe('Ana Souza');
   });
 
+  it('normaliza o status do Moodle (Concluído/Atrasado)', () => {
+    expect(normalizeScrapedStatus('completion-complete')).toBe('Concluído');
+    expect(normalizeScrapedStatus('Concluída')).toBe('Concluído');
+    expect(normalizeScrapedStatus('Atrasada')).toBe('Atrasado');
+    expect(normalizeScrapedStatus('overdue')).toBe('Atrasado');
+    expect(normalizeScrapedStatus('Em andamento')).toBeUndefined();
+  });
+
+  it('preserva status e link da atividade para abrir depois', () => {
+    const [task] = normalizeScrapedTasks([
+      {
+        title: 'Lista 2',
+        course: 'Banco de Dados',
+        status: 'Atrasado',
+        url: 'https://ava/mod/assign/view.php?id=42',
+      },
+    ]);
+    expect(task.status).toBe('Atrasado');
+    expect(task.url).toBe('https://ava/mod/assign/view.php?id=42');
+  });
+
   it('marca fóruns e tópicos de dúvidas como Aviso depois de limpar o título', () => {
     const [task] = normalizeScrapedTasks([{ title: 'Fórum de dúvidas (segunda-feira)', course: 'Banco de Dados' }]);
     expect(task.title).toBe('Fórum de dúvidas');
@@ -287,6 +309,11 @@ describe('ponte com a WebView', () => {
     expect(script).toContain('materialsFromDoc');
     expect(script).toContain('loadMyCourses');
     expect(script).toContain('teacherInDoc');
+    expect(script).toContain('participantsUrl');
+    expect(script).toContain('teacherFromParticipantsDoc');
+    expect(script).toContain('user/view.php');
+    expect(script).toContain('activityStatus');
+    expect(script).toContain('completion-complete');
     expect(script).toContain(IMPORT_SOURCE);
     expect(() => new Function(script)).not.toThrow();
   });

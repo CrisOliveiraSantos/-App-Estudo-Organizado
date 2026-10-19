@@ -5,7 +5,9 @@ import { enqueueStudySyncOperations, readStudySyncQueue, removeStudySyncOperatio
 import { getSupabaseSessionUserId, pullStudyItems, pushStudyItems, subscribeToStudyChanges, type SyncItem, type SyncKind, type SyncWrite } from './supabase-sync';
 
 export type TaskCategory = 'Hoje' | 'Amanhã' | 'Próximas' | 'Atrasadas';
-export type Task = { id: string; title: string; done: boolean; priority: 'Alta' | 'Média' | 'Baixa'; deadline?: string; category?: TaskCategory };
+/** Situação acadêmica vinda do Moodle (não substitui `done`, complementa). */
+export type TaskStatus = 'Concluído' | 'Atrasado';
+export type Task = { id: string; title: string; done: boolean; priority: 'Alta' | 'Média' | 'Baixa'; deadline?: string; category?: TaskCategory; url?: string; status?: TaskStatus };
 export type Goal = { id: string; title: string; description: string; deadline?: string; tasks: Task[] };
 export type RichBlockType = 'paragraph' | 'heading' | 'quote' | 'code' | 'bullet' | 'table' | 'image' | 'chart';
 export type RichBlock = { id: string; type: RichBlockType; text?: string; data?: string };
@@ -89,9 +91,10 @@ type Store = StudyState & {
   addSubject: (name: string, professor: string, emoji?: string, color?: string) => string;
   updateSubject: (subjectId: string, changes: Partial<Subject>) => void;
   deleteSubject: (subjectId: string) => void;
-  addSubjectTask: (subjectId: string, title: string, priority: Task['priority'], deadline?: string, category?: TaskCategory) => void;
+  addSubjectTask: (subjectId: string, title: string, priority: Task['priority'], deadline?: string, category?: TaskCategory, details?: { url?: string; status?: TaskStatus; done?: boolean }) => void;
   toggleSubjectTask: (subjectId: string, taskId: string) => void;
   deleteSubjectTask: (subjectId: string, taskId: string) => void;
+  updateSubjectTask: (subjectId: string, taskId: string, changes: Partial<Pick<Task, 'url' | 'status' | 'done' | 'deadline' | 'category'>>) => void;
   addEvent: (event: Omit<AcademicEvent, 'id' | 'done'>) => void;
   updateEvent: (eventId: string, changes: Partial<AcademicEvent>) => void;
   deleteEvent: (eventId: string) => void;
@@ -326,9 +329,10 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
     addSubject: (name, professor, emoji = '✦', color = '#3949AB') => { const cleanName = name.trim(); const id = createId('subject'); if (!cleanName) return id; setState(s => ({ ...s, subjects: [...s.subjects, { id, name: cleanName, professor: professor.trim(), color, emoji }] })); return id; },
     updateSubject: (subjectId, changes) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, ...changes } : subject) })),
     deleteSubject: subjectId => setState(s => ({ ...s, subjects: s.subjects.filter(subject => subject.id !== subjectId), events: s.events.map(event => event.subjectId === subjectId ? { ...event, subjectId: undefined } : event) })),
-    addSubjectTask: (subjectId, title, priority, deadline, category) => { const cleanTitle = title.trim(); if (!cleanTitle) return; setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: [...(subject.tasks ?? []), { id: createId('subject-task'), title: cleanTitle, priority, deadline, category, done: false }] } : subject) })); },
+    addSubjectTask: (subjectId, title, priority, deadline, category, details) => { const cleanTitle = title.trim(); if (!cleanTitle) return; setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: [...(subject.tasks ?? []), { id: createId('subject-task'), title: cleanTitle, priority, deadline, category, done: details?.done ?? false, url: details?.url?.trim() || undefined, status: details?.status }] } : subject) })); },
     toggleSubjectTask: (subjectId, taskId) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: (subject.tasks ?? []).map(task => task.id === taskId ? { ...task, done: !task.done } : task) } : subject) })),
     deleteSubjectTask: (subjectId, taskId) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: (subject.tasks ?? []).filter(task => task.id !== taskId) } : subject) })),
+    updateSubjectTask: (subjectId, taskId, changes) => setState(s => ({ ...s, subjects: s.subjects.map(subject => subject.id === subjectId ? { ...subject, tasks: (subject.tasks ?? []).map(task => task.id === taskId ? { ...task, ...changes } : task) } : subject) })),
     addEvent: event => { if (!event.title.trim()) return; setState(s => ({ ...s, events: [{ ...event, title: event.title.trim(), id: createId('event'), done: false }, ...s.events] })); },
     updateEvent: (eventId, changes) => setState(s => ({ ...s, events: s.events.map(event => event.id === eventId ? { ...event, ...changes } : event) })),
     deleteEvent: eventId => setState(s => ({ ...s, events: s.events.filter(event => event.id !== eventId) })),

@@ -253,11 +253,21 @@ async function resolveRuntime(options: CrisAskOptions): Promise<RuntimeConfig> {
    * "Testar modelo" e mesmo que outra tela tenha trocado a configuração.
    */
   if (!config && module) {
-    config = await (
-      typeof module.reloadAiConfig === 'function'
-        ? module.reloadAiConfig()
-        : module.getAiConfig()
-    ).catch(() => null);
+    /**
+     * Primeiro o cache em memória: ele é atualizado de forma síncrona por
+     * `saveAiConfig`. Só relê o SecureStore quando o cache não tem nenhuma
+     * credencial — assim a chave recém-salva funciona na mensagem seguinte,
+     * mesmo que a leitura do armazenamento atrase ou falhe no aparelho.
+     */
+    const cached = await module.getAiConfig().catch(() => null);
+    const cachedReady = Boolean(cached && (typeof module.hasAiCredentials !== 'function' || module.hasAiCredentials(cached)));
+    config = cachedReady && cached
+      ? cached
+      : await (
+          typeof module.reloadAiConfig === 'function'
+            ? module.reloadAiConfig()
+            : module.getAiConfig()
+        ).catch(() => null);
   }
   const presets = options.presets ?? module?.API_PROVIDERS ?? null;
   const liveModel = options.liveModel ?? module?.PROVIDER_LIVE_MODEL ?? null;

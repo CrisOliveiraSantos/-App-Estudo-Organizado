@@ -22,7 +22,7 @@ export function HomeShortcut() {
   const insets = useSafeAreaInsets();
   const { colors } = useAcademicPalette();
   if (TAB_ROUTES.includes(pathname)) return null;
-  if (pathname.startsWith('/auth') || pathname.startsWith('/oauth') || pathname.startsWith('/dev')) return null;
+  if (pathname.startsWith('/auth') || pathname.startsWith('/oauth') || pathname.startsWith('/dev') || pathname.startsWith('/browser')) return null;
 
   const goHome = () => {
     try {

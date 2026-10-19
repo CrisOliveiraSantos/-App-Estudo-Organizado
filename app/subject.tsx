@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, type Href, useLocalSearchParams } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { AcademicButton, AcademicCard, AcademicEmptyState, AcademicPill, AcademicProgress, AcademicSection, useAcademicColors } from '@/components/academic/design-system';
@@ -38,6 +38,11 @@ export default function SubjectScreen() {
   const completed = tasks.filter(task => task.done).length;
   const progress = tasks.length ? Math.round((completed / tasks.length) * 100) : 0;
   const addTask = () => { if (!taskTitle.trim()) return; addSubjectTask(subject.id, taskTitle.trim(), taskPriority, undefined, taskCategory); setTaskTitle(''); setTaskPriority('Média'); setTaskCategory('Próximas'); setShowTaskForm(false); };
+  /** Abre o link original da atividade na WebView que compartilha os cookies do Moodle. */
+  const openTaskLink = (task: Task) => {
+    if (!task.url) return;
+    router.push({ pathname: '/browser', params: { url: task.url, title: task.title } } as unknown as Href);
+  };
   const confirmDeleteTask = (task: Task) => {
     if (!task.title.trim()) return;
     const remove = () => deleteSubjectTask(subject.id, task.id);
@@ -68,7 +73,29 @@ export default function SubjectScreen() {
 
     <AcademicSection eyebrow="TAREFAS" title="O que estudar agora" actionLabel={showTaskForm ? 'Fechar' : '+ Adicionar'} onAction={() => setShowTaskForm(value => !value)}>
       {showTaskForm ? <AcademicCard style={styles.form}><Text style={styles.formTitle}>Nova tarefa para {subject.name}</Text><TextInput value={taskTitle} onChangeText={setTaskTitle} placeholder="Ex.: Revisar capítulo 2" placeholderTextColor={c.muted} style={styles.input} /><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.choiceScroller}>{(['Baixa', 'Média', 'Alta'] as Task['priority'][]).map(priority => <Choice key={priority} label={priority} active={taskPriority === priority} onPress={() => setTaskPriority(priority)} />)}</ScrollView><ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.choiceScroller}>{categories.map(category => <Choice key={category} label={category} active={taskCategory === category} onPress={() => setTaskCategory(category)} />)}</ScrollView><AcademicButton label="Adicionar tarefa" onPress={addTask} compact /></AcademicCard> : null}
-      {tasks.length ? <View style={styles.stack}>{tasks.map((task, index) => <AcademicCard key={`${subject.id}-${task.id}-${index}`} style={styles.taskRow}><TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: task.done }} accessibilityLabel={`Concluir ${task.title}`} onPress={() => toggleSubjectTask(subject.id, task.id)} style={[styles.check, task.done && { backgroundColor: subject.color, borderColor: subject.color }]}><Text style={styles.checkText}>{task.done ? '✓' : ''}</Text></TouchableOpacity><View style={styles.taskCopy}><Text style={[styles.taskTitle, task.done && styles.done]}>{task.title}</Text><Text style={styles.taskMeta}>{task.category ?? 'Próximas'}{task.deadline ? ` · ${task.deadline}` : ''}</Text></View><AcademicPill label={task.priority} tone={task.priority === 'Alta' ? 'danger' : task.priority === 'Média' ? 'warning' : 'neutral'} /><TouchableOpacity accessibilityRole="button" accessibilityLabel={`Excluir ${task.title}`} onPress={() => confirmDeleteTask(task)} style={styles.deleteTask}><Text style={styles.deleteTaskText}>×</Text></TouchableOpacity></AcademicCard>)}</View> : <AcademicEmptyState title="Comece pelo primeiro passo" description="Divida esta matéria em pequenas tarefas para acompanhar seu progresso." actionLabel="Adicionar tarefa" onAction={() => setShowTaskForm(true)} />}
+      {tasks.length ? (
+        <View style={styles.stack}>
+          {tasks.map((task, index) => (
+            <AcademicCard key={`${subject.id}-${task.id}-${index}`} style={styles.taskRow}>
+              <TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: task.done }} accessibilityLabel={`Concluir ${task.title}`} onPress={() => toggleSubjectTask(subject.id, task.id)} style={[styles.check, task.done && { backgroundColor: subject.color, borderColor: subject.color }]}>
+                <Text style={styles.checkText}>{task.done ? '✓' : ''}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity accessibilityRole={task.url ? 'link' : undefined} accessibilityLabel={task.url ? `Abrir ${task.title} no Moodle` : task.title} disabled={!task.url} onPress={() => openTaskLink(task)} style={styles.taskCopy}>
+                <Text style={[styles.taskTitle, task.done && styles.done]}>{task.title}</Text>
+                <Text style={styles.taskMeta}>{task.category ?? 'Próximas'}{task.deadline ? ` · ${task.deadline}` : ''}</Text>
+                {task.status ? (
+                  <Text style={[styles.taskStatus, task.status === 'Atrasado' ? styles.taskStatusLate : styles.taskStatusDone]}>{task.status}</Text>
+                ) : null}
+                {task.url ? <Text style={styles.taskOpen}>Abrir no Moodle →</Text> : null}
+              </TouchableOpacity>
+              <AcademicPill label={task.priority} tone={task.priority === 'Alta' ? 'danger' : task.priority === 'Média' ? 'warning' : 'neutral'} />
+              <TouchableOpacity accessibilityRole="button" accessibilityLabel={`Excluir ${task.title}`} onPress={() => confirmDeleteTask(task)} style={styles.deleteTask}>
+                <Text style={styles.deleteTaskText}>×</Text>
+              </TouchableOpacity>
+            </AcademicCard>
+          ))}
+        </View>
+      ) : <AcademicEmptyState title="Comece pelo primeiro passo" description="Divida esta matéria em pequenas tarefas para acompanhar seu progresso." actionLabel="Adicionar tarefa" onAction={() => setShowTaskForm(true)} />}
     </AcademicSection>
 
     <AcademicSection eyebrow="AGENDA" title="Aulas, provas e entregas" actionLabel={showEventForm ? 'Fechar' : '+ Compromisso'} onAction={() => setShowEventForm(value => !value)}>
@@ -139,7 +166,11 @@ function createStyles(c: ReturnType<typeof useAcademicColors>) {
   subjectIcon: { alignItems: 'center', borderRadius: 16, height: 54, justifyContent: 'center', marginRight: 13, width: 54 },
   taskCopy: { flex: 1, paddingRight: 8 },
   taskMeta: { color: c.muted, fontSize: 12, fontWeight: '600', marginTop: 3 },
+  taskOpen: { color: c.indigo, fontSize: 11, fontWeight: '800', marginTop: 5 },
   taskRow: { alignItems: 'center', flexDirection: 'row', padding: 13 },
+  taskStatus: { alignSelf: 'flex-start', borderRadius: 999, fontSize: 10, fontWeight: '900', marginTop: 5, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 3 },
+  taskStatusDone: { backgroundColor: `${c.success}18`, color: c.success },
+  taskStatusLate: { backgroundColor: `${c.danger}18`, color: c.danger },
   taskTitle: { color: c.ink, fontSize: 14, fontWeight: '800', lineHeight: 20 },
   title: { color: c.ink, fontSize: 24, fontWeight: '900', letterSpacing: -0.5, lineHeight: 30, marginTop: 2 },
   });

@@ -22,6 +22,16 @@ describe('ações de exclusão e salvamento vazio', () => {
       expect(STORE.slice(start, start + 320)).toContain('.trim()');
     }
   });
+
+  it('persiste link e status do Moodle na tarefa da matéria', () => {
+    expect(STORE).toContain('status?: TaskStatus');
+    expect(STORE).toContain('url?: string');
+    expect(STORE).toContain('updateSubjectTask: (subjectId, taskId, changes)');
+    const start = STORE.lastIndexOf('addSubjectTask:');
+    const body = STORE.slice(start, start + 700);
+    expect(body).toContain('details?.url');
+    expect(body).toContain('details?.status');
+  });
 });
 
 describe('goalProgress', () => {

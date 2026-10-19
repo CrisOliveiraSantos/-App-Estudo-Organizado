@@ -176,7 +176,14 @@ export type AiConfig = {
   updatedAt: string | null;
 };
 
-export const AI_API_CONFIG_KEY = '@estudo-organizado/ai-api-config-v1';
+/**
+ * O Expo SecureStore (Android/iOS) aceita apenas letras, números, ".", "-" e
+ * "_" no nome da chave. A chave antiga tinha "@" e "/", então a gravação era
+ * rejeitada no aparelho e a API parecia "invisível" para o chat.
+ */
+export const AI_API_CONFIG_KEY = 'estudo_organizado_ai_api_config_v1';
+/** Chave usada até 19/10/2026; lida apenas para migrar o valor existente. */
+export const LEGACY_AI_API_CONFIG_KEY = '@estudo-organizado/ai-api-config-v1';
 
 export const DEFAULT_AI_CONFIG: AiConfig = {
   mode: 'local',
@@ -265,12 +272,34 @@ function normalizeConfig(raw: unknown): AiConfig {
  * Armazenamento seguro (SecureStore no nativo / localStorage na web)
  * ------------------------------------------------------------------ */
 
+const SECURE_STORE_OPTIONS = {
+  keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
+} as const;
+
 async function readRaw(): Promise<string | null> {
   try {
     if (Platform.OS === 'web') {
-      return typeof localStorage === 'undefined' ? null : localStorage.getItem(AI_API_CONFIG_KEY);
+      if (typeof localStorage === 'undefined') return null;
+      const stored = localStorage.getItem(AI_API_CONFIG_KEY);
+      if (stored) return stored;
+      /** Migração única da chave antiga (web). */
+      const legacy = localStorage.getItem(LEGACY_AI_API_CONFIG_KEY);
+      if (!legacy) return null;
+      localStorage.setItem(AI_API_CONFIG_KEY, legacy);
+      localStorage.removeItem(LEGACY_AI_API_CONFIG_KEY);
+      return legacy;
     }
-    return await SecureStore.getItemAsync(AI_API_CONFIG_KEY);
+    const stored = await SecureStore.getItemAsync(AI_API_CONFIG_KEY);
+    if (stored) return stored;
+    /**
+     * A chave antiga era inválida no SecureStore. Se algum aparelho/iOS chegou
+     * a gravá-la, copia o valor para a chave nova antes de apagá-la.
+     */
+    const legacy = await SecureStore.getItemAsync(LEGACY_AI_API_CONFIG_KEY).catch(() => null);
+    if (!legacy) return null;
+    await SecureStore.setItemAsync(AI_API_CONFIG_KEY, legacy, SECURE_STORE_OPTIONS);
+    await SecureStore.deleteItemAsync(LEGACY_AI_API_CONFIG_KEY).catch(() => undefined);
+    return legacy;
   } catch {
     return null;
   }
@@ -282,9 +311,7 @@ async function writeRaw(value: string): Promise<void> {
       if (typeof localStorage !== 'undefined') localStorage.setItem(AI_API_CONFIG_KEY, value);
       return;
     }
-    await SecureStore.setItemAsync(AI_API_CONFIG_KEY, value, {
-      keychainAccessible: SecureStore.WHEN_UNLOCKED_THIS_DEVICE_ONLY,
-    });
+    await SecureStore.setItemAsync(AI_API_CONFIG_KEY, value, SECURE_STORE_OPTIONS);
   } catch {
     // Uma falha ao gravar não deve travar a configuração em memória.
   }
@@ -293,10 +320,14 @@ async function writeRaw(value: string): Promise<void> {
 async function clearRaw(): Promise<void> {
   try {
     if (Platform.OS === 'web') {
-      if (typeof localStorage !== 'undefined') localStorage.removeItem(AI_API_CONFIG_KEY);
+      if (typeof localStorage !== 'undefined') {
+        localStorage.removeItem(AI_API_CONFIG_KEY);
+        localStorage.removeItem(LEGACY_AI_API_CONFIG_KEY);
+      }
       return;
     }
     await SecureStore.deleteItemAsync(AI_API_CONFIG_KEY);
+    await SecureStore.deleteItemAsync(LEGACY_AI_API_CONFIG_KEY).catch(() => undefined);
   } catch {
     // Melhor esforço.
   }
@@ -308,6 +339,13 @@ async function clearRaw(): Promise<void> {
 
 let current: AiConfig | null = null;
 let loadPromise: Promise<AiConfig> | null = null;
+/**
+ * Cada gravação/relitura invalida leituras que já estavam em voo. Sem isto,
+ * uma leitura iniciada antes de "Salvar" podia terminar depois e sobrescrever
+ * a chave recém-gravada com o valor antigo (a Cris ficava "cega" até reabrir
+ * o app).
+ */
+let loadRevision = 0;
 const listeners = new Set<(config: AiConfig) => void>();
 
 function emit(next: AiConfig) {
@@ -318,6 +356,7 @@ function emit(next: AiConfig) {
 async function ensureLoaded(): Promise<AiConfig> {
   if (current) return current;
   if (!loadPromise) {
+    const revision = loadRevision;
     loadPromise = (async () => {
       const raw = await readRaw();
       let parsed: unknown = null;
@@ -328,8 +367,14 @@ async function ensureLoaded(): Promise<AiConfig> {
           parsed = null;
         }
       }
-      current = normalizeConfig(parsed);
-      return current;
+      const loaded = normalizeConfig(parsed);
+      /**
+       * Uma gravação pode ter acontecido enquanto o SecureStore era lido. Nesse
+       * caso o estado em memória já é mais novo e tem prioridade.
+       */
+      if (current) return current;
+      if (revision === loadRevision) current = loaded;
+      return current ?? loaded;
     })();
   }
   return loadPromise;
@@ -337,12 +382,17 @@ async function ensureLoaded(): Promise<AiConfig> {
 
 export async function saveAiConfig(next: AiConfig): Promise<AiConfig> {
   const normalized = normalizeConfig({ ...next, updatedAt: new Date().toISOString() });
+  const revision = ++loadRevision;
   /**
-   * Grava primeiro e só depois publica. Assim o popup/chat nunca observam uma
-   * configuração que ainda não está no SecureStore — e a próxima leitura fresca
-   * (`reloadAiConfig`) devolve exatamente o que a tela de Ajustes salvou.
+   * O cache em memória recebe a chave imediatamente; a interface só é
+   * notificada (`emit`) depois que o SecureStore confirmar a gravação. Assim
+   * uma mensagem enviada logo após "Salvar" já enxerga a credencial, sem abrir
+   * espaço para uma leitura antiga sobrescrevê-la.
    */
+  current = normalized;
   await writeRaw(JSON.stringify(normalized));
+  /** Uma gravação mais nova começou enquanto esta escrevia: ela vence. */
+  if (revision !== loadRevision) return current ?? normalized;
   loadPromise = Promise.resolve(normalized);
   emit(normalized);
   return normalized;
@@ -367,9 +417,23 @@ export async function getAiConfig(): Promise<AiConfig> {
  * preso a um estado antigo.
  */
 export async function reloadAiConfig(): Promise<AiConfig> {
+  const previous = current;
   current = null;
   loadPromise = null;
+  loadRevision += 1;
   const next = await ensureLoaded();
+  /**
+   * Se o armazenamento devolveu uma configuração sem credenciais, mas a sessão
+   * atual tinha uma chave válida (ex.: SecureStore momentaneamente ilegível no
+   * Android), preserva o cache em memória. Sem isso a Cris caía em "sem IA
+   * conectada" logo depois de a usuária salvar/testar a chave.
+   */
+  if (previous && hasAiCredentials(previous) && !hasAiCredentials(next)) {
+    current = previous;
+    loadPromise = Promise.resolve(previous);
+    emit(previous);
+    return previous;
+  }
   emit(next);
   return next;
 }
@@ -456,6 +520,7 @@ export function useApiConfig() {
   const reset = useCallback(async () => {
     await clearRaw();
     const next = normalizeConfig(DEFAULT_AI_CONFIG);
+    loadRevision += 1;
     loadPromise = null;
     emit(next);
     return next;

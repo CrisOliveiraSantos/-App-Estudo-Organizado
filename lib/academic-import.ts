@@ -12,6 +12,8 @@
  */
 
 export type ScrapedTaskType = 'Tarefa' | 'Prova' | 'Material' | 'Aviso' | 'Exercício';
+/** Situação indicada pelo Moodle na própria atividade. */
+export type ScrapedTaskStatus = 'Concluído' | 'Atrasado';
 
 export type ScrapedTask = {
   course: string;
@@ -24,6 +26,8 @@ export type ScrapedTask = {
   dateDescription?: string;
   /** Nome do(a) professor(a) quando a página do curso informa. */
   teacher?: string;
+  /** "Concluído" ou "Atrasado" quando a página traz essa informação. */
+  status?: ScrapedTaskStatus;
   title: string;
   type: ScrapedTaskType;
   url?: string;
@@ -163,6 +167,15 @@ export function buildScrapeScript(): string {
   }
   function teacherFrom(root) {
     if (!root) return '';
+    /**
+     * Moodle nem sempre usa um bloco .teacher: em muitos temas o nome é
+     * apenas um link para /user/view.php dentro do resumo/participantes.
+     */
+    var userLinks = root.querySelectorAll('[data-region="course-teacher"] a[href*="user/view.php"], .course-teacher a[href*="user/view.php"], .teachers a[href*="user/view.php"], [class*="teacher"] a[href*="user/view.php"], [class*="professor"] a[href*="user/view.php"]');
+    for (var u = 0; u < userLinks.length; u++) {
+      var linkedName = genericName(textOf(userLinks[u]));
+      if (linkedName && linkedName.length <= 90) return linkedName;
+    }
     var selectors = ['[data-region="course-teacher"]', '.course-teacher', '.course-teacher-name', '.teachers .name', '.teachers', '[class*="course-teacher"]', '[class*="teachers"]', '[class*="professor"]', '#page-course-view .teacher', '.teacher', '.course-summary', '.summary'];
     for (var i = 0; i < selectors.length; i++) {
       var box = root.querySelector(selectors[i]);
@@ -175,6 +188,52 @@ export function buildScrapeScript(): string {
       if (name) return name;
     }
     return '';
+  }
+  /** Página de participantes do próprio curso (alguns temas só mostram o professor lá). */
+  function participantsUrl(root) {
+    var anchors = root.querySelectorAll('a[href*="user/index.php"]');
+    for (var i = 0; i < anchors.length; i++) {
+      var label = clean(textOf(anchors[i]) + ' ' + (anchors[i].getAttribute('title') || '') + ' ' + (anchors[i].getAttribute('aria-label') || ''));
+      if (!/(participantes|participants)/i.test(label)) continue;
+      var href = abs(anchors[i].getAttribute('href'));
+      if (href) return href;
+    }
+    return '';
+  }
+  /** Procura uma linha de participante cujo papel seja professor/docente/tutor. */
+  function teacherFromParticipantsDoc(doc) {
+    var rows = doc.querySelectorAll('tr, [data-userid], .userrow, .participant');
+    for (var i = 0; i < rows.length; i++) {
+      var raw = textOf(rows[i]);
+      if (!/(professor|docente|teacher|tutor)/i.test(raw)) continue;
+      var link = rows[i].querySelector('a[href*="/user/view.php"]');
+      var name = link ? genericName(textOf(link)) : '';
+      if (!name) name = teacherName(raw);
+      if (name && name.length <= 90) return name;
+    }
+    return '';
+  }
+  function loadParticipantsTeacher(doc, done) {
+    var url = participantsUrl(doc);
+    if (!url) { done(''); return; }
+    var settled = false;
+    var timer = setTimeout(function () {
+      if (settled) return;
+      settled = true;
+      done('');
+    }, 5000);
+    fetchText(url).then(function (html) {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      var name = '';
+      if (html) {
+        try {
+          name = teacherFromParticipantsDoc(new DOMParser().parseFromString(html, 'text/html'));
+        } catch (e) {}
+      }
+      done(name);
+    });
   }
   function pageCourse() {
     var crumb = document.querySelector('.breadcrumb a[href*="/course/view.php"]');
@@ -199,6 +258,15 @@ export function buildScrapeScript(): string {
     var heading = box.querySelector('h1, h2, h3, .tituloDisciplina, .course-title');
     return genericName(textOf(heading));
   }
+  function activityStatus(node) {
+    var className = typeof node.className === 'string' ? node.className : '';
+    var marker = typeof node.getAttribute === 'function' ? (node.getAttribute('data-completion') || node.getAttribute('data-status') || '') : '';
+    var completeBox = typeof node.querySelector === 'function' ? node.querySelector('.completion-complete, [class*="completion-complete"], [data-completion="complete"], .badge-success') : null;
+    var text = clean(className + ' ' + marker + ' ' + textOf(node) + ' ' + (completeBox ? textOf(completeBox) : ''));
+    if (completeBox || (/completion-complete|completion_complete|status-complete|badge-success|\\bconclu[ií]d[oa]\\b/i.test(text) && !/incomplete|n[aã]o conclu/i.test(text))) return 'Concluído';
+    if (/atrasad|vencid|overdue|status-danger|badge-danger/i.test(text)) return 'Atrasado';
+    return '';
+  }
   function collect(list, node, course) {
     if (!node || list.length >= MAX) return;
     var title = activityTitle(node);
@@ -210,6 +278,7 @@ export function buildScrapeScript(): string {
       teacher: (course && course.teacher) || '',
       dueDate: activityDate(node),
       dateDescription: activityInfo(node),
+      status: activityStatus(node),
       url: link ? abs(link.getAttribute('href')) : '',
       type: ''
     });
@@ -371,20 +440,30 @@ export function buildScrapeScript(): string {
       index += 1;
       if (!course.url) { step(); return; }
       fetchText(course.url).then(function (html) {
-        if (html) {
+        if (!html) { onProgress(scanned); step(); return; }
+        var doc;
+        try {
+          doc = new DOMParser().parseFromString(html, 'text/html');
+        } catch (e) {
+          onProgress(scanned);
+          step();
+          return;
+        }
+        var heading = doc.querySelector('#page-header h1, .page-header-headings h1, .course-title');
+        var courseName = genericName(heading ? textOf(heading) : '') || course.name;
+        var materials = materialsFromDoc(doc);
+        if (materials.length) course.materials = materials;
+        function complete(teacher) {
+          if (teacher) course.teacher = teacher;
           try {
-            var doc = new DOMParser().parseFromString(html, 'text/html');
-            var heading = doc.querySelector('#page-header h1, .page-header-headings h1, .course-title');
-            var courseName = genericName(heading ? textOf(heading) : '') || course.name;
-            var teacher = course.teacher || teacherInDoc(doc);
-            var materials = materialsFromDoc(doc);
-            if (materials.length) course.materials = materials;
-            if (teacher) course.teacher = teacher;
             scanned = scanned.concat(activitiesFromDoc(doc, { name: courseName, teacher: teacher }));
           } catch (e) {}
+          onProgress(scanned);
+          step();
         }
-        onProgress(scanned);
-        step();
+        var known = course.teacher || teacherInDoc(doc);
+        if (known) { complete(known); return; }
+        loadParticipantsTeacher(doc, complete);
       });
     }
     step();
@@ -489,6 +568,18 @@ const NAVIGATION_LABEL =
 
 function tidy(value: unknown): string {
   return typeof value === 'string' ? value.replace(/\s+/g, ' ').trim() : '';
+}
+
+/** Converte a marcação/texto do Moodle em um status canônico. */
+export function normalizeScrapedStatus(value: unknown): ScrapedTaskStatus | undefined {
+  const text = tidy(value)
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase();
+  if (!text) return undefined;
+  if (/\b(concluid[oa]?|complete|completed|finished)\b/.test(text)) return 'Concluído';
+  if (/\b(atrasad[oa]?|vencid[oa]?|overdue|late)\b/.test(text)) return 'Atrasado';
+  return undefined;
 }
 
 function pick(record: Record<string, unknown>, keys: string[]): unknown {
@@ -827,6 +918,7 @@ export function normalizeScrapedTasks(input: unknown, limit = IMPORT_MAX_ITEMS, 
       dueDate: structured.dueDate,
       dateDescription: structured.dateDescription,
       url: safeUrl(pick(record, ['url', 'link', 'href'])),
+      status: normalizeScrapedStatus(pick(record, ['status', 'situacao', 'situação', 'completion', 'conclusao', 'conclusão'])),
       type: classifyScrapedTask(title),
     };
     const key = scrapedTaskKey(task);

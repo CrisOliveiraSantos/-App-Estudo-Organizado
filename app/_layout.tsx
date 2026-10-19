@@ -116,6 +116,7 @@ export default function RootLayout() {
             <Stack.Screen name="api-settings" />
             <Stack.Screen name="cris-profile" />
             <Stack.Screen name="pdf" />
+            <Stack.Screen name="browser" />
             <Stack.Screen name="import" />
             <Stack.Screen name="flashcards" />
           </Stack>
