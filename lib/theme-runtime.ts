@@ -290,11 +290,16 @@ export function cardShadow(level: keyof typeof neonElevation = 'card') {
  * `useAcademicPalette()` no mesmo tema. Sem o cache, cada consumidor recriava
  * as 14 entradas de tons a cada troca de tema.
  */
-const neonTonesCache = new WeakMap<AcademicPalette, TonePaletteTable>();
+const neonTonesCache = new WeakMap<AcademicPalette, Map<boolean, TonePaletteTable>>();
 
 /** Tons derivados do tema: fundo translúcido + texto no acento + borda suave. */
 export function buildNeonTones(palette: AcademicPalette, isDark: boolean): TonePaletteTable {
-  const cached = neonTonesCache.get(palette);
+  let byMode = neonTonesCache.get(palette);
+  if (!byMode) {
+    byMode = new Map();
+    neonTonesCache.set(palette, byMode);
+  }
+  const cached = byMode.get(isDark);
   if (cached) return cached;
 
   const fillAlpha = isDark ? 0.16 : 0.12;
@@ -325,6 +330,6 @@ export function buildNeonTones(palette: AcademicPalette, isDark: boolean): ToneP
     warning: tone(palette.accentGold),
   };
 
-  neonTonesCache.set(palette, tones);
+  byMode.set(isDark, tones);
   return tones;
 }
