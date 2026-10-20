@@ -138,15 +138,35 @@ npx eas-cli@latest submit --platform android --profile production
 | APK instala mas não atualiza | `versionCode` igual e instalador exigente | Aumente `android.versionCode` |
 | Build antigo com código desatualizado | Arquivos não commitados | Faça commit/push antes do build |
 
-## 11. Build local (opcional)
+## 11. Build local (sem cota do EAS)
 
-Se precisar gerar o APK sem a nuvem, é necessário ter Android SDK, Java 17 e as variáveis `ANDROID_HOME`/`JAVA_HOME` configuradas:
+Use esta rota quando a cota do EAS acabou ou quando quiser testar o APK sem esperar a fila. É necessário ter **JDK 17+**, **Android SDK** e as variáveis `ANDROID_HOME`/`JAVA_HOME` configuradas.
+
+```bash
+npx expo prebuild --platform android --clean --no-install
+cd android
+# Windows (PowerShell):
+$env:NODE_ENV='production'; .\gradlew.bat :app:assembleRelease
+```
+
+O APK sai em:
+
+```text
+android/app/build/outputs/apk/release/app-release.apk
+```
+
+Observações:
+
+- `android/` é gerado e ignorado pelo Git; não commite essa pasta.
+- O template do Expo assina o `release` com a **keystore de debug** enquanto não houver uma keystore de release configurada. Serve para teste interno, **não** para publicar na Play Store.
+- O primeiro build local é demorado (compila C++/CMake, Hermes e as arquiteturas `arm64-v8a` + `armeabi-v7a`); os seguintes reaproveitam o cache do Gradle.
+- Se preferir a nuvem sem EAS Build, o GitHub Actions também consegue rodar esses mesmos comandos e publicar o APK como artifact.
+
+Alternativa oficial do EAS (quando o ambiente local é compatível):
 
 ```bash
 npx eas-cli@latest build --platform android --profile preview --local
 ```
-
-O caminho da nuvem é o recomendado para este projeto, porque não depende da máquina de desenvolvimento.
 
 ## 12. Referências
 
