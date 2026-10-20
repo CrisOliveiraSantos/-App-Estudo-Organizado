@@ -28,6 +28,39 @@ const schemeFromBundleId = `manus${timestamp}`;
 const githubPagesBuild = process.env.EXPO_PUBLIC_GITHUB_PAGES === "true";
 const githubPagesBasePath = "/-App-Estudo-Organizado";
 
+/**
+ * Regras extras de R8 aplicadas a `android/app/proguard-rules.pro` pelo
+ * `expo-build-properties`. Precisam morar aqui porque `android/` é gerado pelo
+ * prebuild e não é versionado: um `expo prebuild --clean` recriaria o arquivo
+ * a partir do template e apagaria as regras escritas à mão.
+ *
+ * Referência: https://reactnative.dev/docs/signed-apk-android
+ */
+const androidExtraProguardRules = [
+  "# React Native: anotações lidas por reflexão",
+  "-keep,allowobfuscation @interface com.facebook.proguard.annotations.DoNotStrip",
+  "-keep @com.facebook.proguard.annotations.DoNotStrip class *",
+  "-keepclassmembers class * { @com.facebook.proguard.annotations.DoNotStrip *; }",
+  "-keepclassmembers class * { @com.facebook.react.uimanager.annotations.ReactProp <methods>; }",
+  "-keepclassmembers class * { @com.facebook.react.uimanager.annotations.ReactPropGroup <methods>; }",
+  "-keep class * extends com.facebook.react.bridge.JavaScriptModule { *; }",
+  "-keep class * extends com.facebook.react.bridge.NativeModule { *; }",
+  "-keepclassmembers,includedescriptorclasses class * { native <methods>; }",
+  "# Hermes / JNI / TurboModules",
+  "-keep class com.facebook.hermes.** { *; }",
+  "-keep class com.facebook.jni.** { *; }",
+  "-keep class com.facebook.react.turbomodule.** { *; }",
+  "# Bibliotecas nativas resolvidas por nome de classe",
+  "-keep class com.swmansion.reanimated.** { *; }",
+  "-keep class com.swmansion.worklets.** { *; }",
+  "-keep class com.swmansion.gesturehandler.** { *; }",
+  "-keep class com.swmansion.rnscreens.** { *; }",
+  "-keep class com.horcrux.svg.** { *; }",
+  "# Módulos Expo são registrados por nome (ExpoModulesPackageList)",
+  "-keep class expo.modules.** { *; }",
+].join("\n");
+
+
 const env = {
   // App branding - update these values directly (do not use env vars)
   appName: "Estudo Organizado",
@@ -80,6 +113,14 @@ const config: ExpoConfig = {
     },
     edgeToEdgeEnabled: true,
     predictiveBackGestureEnabled: false,
+    /**
+     * Hermes explícito: é o motor que gera o bytecode otimizado embutido no
+     * APK. Com Hermes ligado o Metro **não** minifica o JS (`--minify false`)
+     * de propósito — o `hermesc` já compacta e otimiza o bytecode, e minificar
+     * antes disto só engorda o `.hbc`. Fonte: `TaskConfiguration.kt`
+     * (`it.minifyEnabled.set(!isHermesEnabledInThisVariant)`).
+     */
+    jsEngine: "hermes",
     package: env.androidPackage,
     permissions: ["POST_NOTIFICATIONS"],
     intentFilters: [
@@ -135,6 +176,18 @@ const config: ExpoConfig = {
         android: {
           buildArchs: ["armeabi-v7a", "arm64-v8a"],
           minSdkVersion: 24,
+          /**
+           * R8 + encolhimento de recursos no release.
+           *
+           * O template do `expo prebuild` **não** liga `minifyEnabled` /
+           * `shrinkResources`; sem estas flags o build local gerava um dex de
+           * ~30 MB, multi-dex, e o app abria travado. Aqui elas valem para
+           * qualquer build (local ou EAS) porque o plugin reescreve o
+           * `android/app/build.gradle` a cada prebuild.
+           */
+          enableMinifyInReleaseBuilds: true,
+          enableShrinkResourcesInReleaseBuilds: true,
+          extraProguardRules: androidExtraProguardRules,
         },
       },
     ],

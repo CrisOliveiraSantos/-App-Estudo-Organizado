@@ -137,6 +137,8 @@ npx eas-cli@latest submit --platform android --profile production
 | Build falha em `expo doctor` | Dependência incompatível | `npx expo install --check` e refaça o commit |
 | APK instala mas não atualiza | `versionCode` igual e instalador exigente | Aumente `android.versionCode` |
 | Build antigo com código desatualizado | Arquivos não commitados | Faça commit/push antes do build |
+| APK de release travado (abre e navega devagar), mas o dev/Metro é fluido | release sem R8: `expo prebuild` não liga `minifyEnabled` | Veja a seção 11.1 e refaça o build |
+| `externalNativeBuildCleanRelease FAILED` / `add_subdirectory ... not an existing directory` | `gradlew clean` na raiz apagou o codegen de `node_modules` | Veja a nota da seção 11 (apague só `app/build`, `build`, `.cxx`) |
 
 ## 11. Build local (sem cota do EAS)
 
@@ -148,6 +150,17 @@ cd android
 # Windows (PowerShell):
 $env:NODE_ENV='production'; .\gradlew.bat :app:assembleRelease
 ```
+
+> **Não rode `.\gradlew.bat clean`.** Na raiz ele limpa *todos* os submódulos,
+> inclusive os de `node_modules`, apagando os fontes gerados pelo codegen
+> (`node_modules/<lib>/android/build/generated/source/codegen/jni/`). O CMake do
+> `:app` é reconfigurado **antes** dessas pastas serem regeradas e o build morre
+> com `add_subdirectory given source ... which is not an existing directory`.
+> Para um build do zero, apague só as saídas do app:
+>
+> ```powershell
+> Remove-Item -Recurse -Force android\app\build, android\build, android\app\.cxx, android\.gradle
+> ```
 
 O APK sai em:
 
@@ -167,6 +180,45 @@ Alternativa oficial do EAS (quando o ambiente local é compatível):
 ```bash
 npx eas-cli@latest build --platform android --profile preview --local
 ```
+
+### 11.1 Release com R8 — sem isto o APK abre travado
+
+O `expo prebuild` **não** liga a minificação no `buildType release`. Sem
+`minifyEnabled`, o dex sai com ~30 MB e multi-dex: o APK fica grande e o app
+instalado abre com atraso enorme em cada toque. O dev/Metro não sofre disso
+porque não empacota dex — só interpreta o bundle.
+
+As flags ficam em `app.config.ts` → `expo-build-properties` (fonte durável, o
+`android/` é regerado a cada prebuild):
+
+| Opção do plugin | Efeito no `android/app/build.gradle` |
+| --- | --- |
+| `enableMinifyInReleaseBuilds: true` | `minifyEnabled true` (R8) |
+| `enableShrinkResourcesInReleaseBuilds: true` | `shrinkResources true` |
+| `extraProguardRules` | regras gravadas em `android/app/proguard-rules.pro` |
+
+Conferir depois do prebuild:
+
+```powershell
+Select-String -Path android\app\build.gradle -Pattern 'minifyEnabled|shrinkResources'
+```
+
+Duas coisas que **parecem** erro e não são:
+
+- `--minify false` no log do Metro (`createBundleReleaseJsAndAssets`). Com
+  Hermes, o Metro não minifica de propósito: o `hermesc` já gera bytecode
+  otimizado (`it.minifyEnabled.set(!isHermesEnabledInThisVariant)` em
+  `TaskConfiguration.kt`). Minificar antes só engordaria o `.hbc`.
+- `Daemon will be stopped at the end of the build after running out of JVM
+  Metaspace`. Aviso, não erro: o R8 consome muito metaspace. O template do React
+  Native gera `org.gradle.jvmargs=-Xmx2048m -XX:MaxMetaspaceSize=512m` em
+  `android/gradle.properties`, e o build estoura esse valor. Suba para
+  `-Xmx3072m -XX:MaxMetaspaceSize=1024m` (é o que está no `android/gradle.properties`
+  local hoje) e repita o valor depois de cada `expo prebuild --clean`, já que
+  esse arquivo também é gerado.
+
+O `minifyReleaseWithR8` só aparece no log quando o R8 realmente roda; é ele que
+reduz o dex e resolve o travamento.
 
 ## 12. Referências
 

@@ -17,7 +17,7 @@ import { neonItemForPath } from '@/components/neon/nav-items';
 import { isDarkScheme } from '@/constants/theme';
 import { useThemeActions, useThemePreference, useThemeScheme } from '@/lib/theme-provider';
 import { readableSupabaseError, signOutFromSupabase } from '@/lib/supabase-chat';
-import { cardShadow, glowShadow, neonRadius, neonType } from '@/lib/theme-runtime';
+import { cardShadow, dollaTokens, glowShadow, neonRadius, neonType } from '@/lib/theme-runtime';
 
 type ThemeMode = 'auto' | 'dark' | 'light' | 'neon';
 
@@ -115,22 +115,42 @@ export function NeonTopbar({ compact = false, style }: { compact?: boolean; styl
   }, []);
 
   return (
-    <View style={[styles.shadow, { backgroundColor: colors.surface }, cardShadow('card'), style]}>
+    <View
+      style={[
+        styles.shadow,
+        { backgroundColor: colors.surface },
+        cardShadow('card', dollaTokens.elevation.card),
+        style,
+      ]}
+    >
       <NeonGradient
         name="panel"
         style={[styles.bar, compact ? styles.barCompact : styles.barWide, { borderColor: colors.border }]}
       >
         <View style={styles.copy}>
           <Text style={[styles.eyebrow, { color: colors.primary }]} numberOfLines={1}>{eyebrow}</Text>
+          {/*
+            `adjustsFontSizeToFit` + `numberOfLines={1}`: o título da Home
+            ("Bem-vinda de volta! 💜") não cabe em uma linha no celular e o RN
+            cortava o texto no meio da palavra (não havia reticências nem
+            encolhimento). Agora a fonte reduz até 62% para caber inteira.
+          */}
           <Text
+            adjustsFontSizeToFit
+            minimumFontScale={0.62}
+            numberOfLines={1}
             style={[styles.title, compact ? styles.titleCompact : styles.titleWide, { color: colors.foreground }]}
-            numberOfLines={2}
           >
             {title}
           </Text>
         </View>
         <View style={styles.actions}>
-          <Text style={[styles.date, { color: colors.muted }]} numberOfLines={1}>{formatToday(today)}</Text>
+          {/*
+            A data sai no compacto: com 3 botões de 40 px + a data, sobravam
+            ~110 px para o título — o encolhimento chegava ao mínimo e ainda
+            fatiava. No desktop (a partir de 900 px) ela volta.
+          */}
+          {compact ? null : <Text style={[styles.date, { color: colors.muted }]} numberOfLines={1}>{formatToday(today)}</Text>}
           <TopbarAction
             accessibilityLabel="Ir para o início"
             glyph="🏠"
@@ -165,16 +185,20 @@ const styles = StyleSheet.create({
   actions: { alignItems: 'center', flexDirection: 'row', gap: 8 },
   bar: {
     alignItems: 'center',
-    borderRadius: 22,
+    borderRadius: neonRadius.topbar,
     borderWidth: 1,
     flexDirection: 'row',
     gap: 15,
     justifyContent: 'space-between',
     overflow: 'hidden',
   },
-  barCompact: { paddingHorizontal: 18, paddingVertical: 16 },
-  barWide: { paddingHorizontal: 22, paddingVertical: 18 },
-  copy: { flex: 1, minWidth: 0 },
+  /** Dolla: topbar com `padding` 22/18; no compacto, 18/14 para dar largura ao título. */
+  barCompact: { paddingHorizontal: 18, paddingVertical: 14 },
+  barWide: {
+    paddingHorizontal: dollaTokens.layout.topbarPaddingHorizontal,
+    paddingVertical: dollaTokens.layout.topbarPaddingVertical,
+  },
+  copy: { flex: 1, justifyContent: 'center', minWidth: 0 },
   date: { fontSize: 12, fontWeight: '700' },
   eyebrow: {
     fontSize: neonType.eyebrow.size,
@@ -200,7 +224,7 @@ const styles = StyleSheet.create({
    * do gradiente `panel` e o SVG cobre o wrapper inteiro, então a base é
    * invisível — só devolve o contorno arredondado de 22 px.
    */
-  shadow: { borderRadius: 22 },
+  shadow: { borderRadius: neonRadius.topbar },
   title: { fontWeight: neonType.screenTitle.weight, letterSpacing: neonType.screenTitle.letterSpacing, marginTop: 3 },
   titleCompact: { fontSize: 22 },
   titleWide: { fontSize: neonType.screenTitle.size },

@@ -25,7 +25,7 @@ import { NeonParticles } from '@/components/neon/particles';
 import { NeonSidebar } from '@/components/neon/sidebar';
 import { NeonTopbar } from '@/components/neon/topbar';
 import { IconSymbol } from '@/components/ui/icon-symbol';
-import { cardShadow, glowShadow, hexToRgba, neonRadius } from '@/lib/theme-runtime';
+import { cardShadow, dollaTokens, glowShadow, hexToRgba, neonRadius } from '@/lib/theme-runtime';
 
 /**
  * Botão da bottom nav: mesma pílula do mockup (`.bottomnav button`, raio 16,
@@ -137,7 +137,12 @@ export default function TabLayout() {
                     styles.nav,
                     wide ? styles.navWide : styles.navTight,
                     {
-                      backgroundColor: hexToRgba(colors.surfaceAlt, 0.9),
+                      /**
+                       * Dolla: `rgba(12,17,30,0.95)` = `surfaceAlt` do tema Neon
+                       * (`#0C111E`) com 95% de alfa. Era 0.9: a pílula ficava
+                       * leitosa e as partículas atravessavam o rótulo.
+                       */
+                      backgroundColor: hexToRgba(colors.surfaceAlt, 0.95),
                       borderColor: colors.border,
                       bottom: navBottom,
                       height: navHeight,
@@ -177,10 +182,11 @@ const styles = StyleSheet.create({
   nav: {
     borderTopWidth: 1,
     borderWidth: 1,
-    borderRadius: neonRadius.panel,
+    /** Dolla: pílula com raio 24 e `elevation` 8. */
+    borderRadius: neonRadius.nav,
     flexDirection: 'row',
     position: 'absolute',
-    ...cardShadow('floating'),
+    ...cardShadow('floating', dollaTokens.elevation.nav),
   },
   /**
    * `paddingTop`/`paddingBottom` explícitos, e **não** `paddingVertical`.
@@ -193,15 +199,16 @@ const styles = StyleSheet.create({
    * — com `insets.bottom` de 24-48 px a caixa de conteúdo da pílula caía para
    * 10-34 px e fatiaba o ícone/sumia com o rótulo. Chave igual, esta vence.
    */
-  navTight: { paddingBottom: 8, paddingHorizontal: 4, paddingTop: 8 },
-  navWide: { paddingBottom: 10, paddingHorizontal: 10, paddingTop: 10 },
+  navTight: { paddingBottom: 6, paddingHorizontal: 4, paddingTop: 6 },
+  navWide: { paddingBottom: 8, paddingHorizontal: 10, paddingTop: 8 },
   scene: { flex: 1, minHeight: 0 },
   sceneFill: { backgroundColor: 'transparent' },
   shell: { flex: 1 },
   tabActiveFill: { borderRadius: 16 },
   tabButton: { alignItems: 'center', borderRadius: 16, flexDirection: 'column', justifyContent: 'center', overflow: 'hidden' },
-  tabButtonCompact: { gap: 4, paddingHorizontal: 2, paddingVertical: 4 },
-  tabButtonWide: { gap: 4, paddingHorizontal: 6, paddingVertical: 6 },
+  /** Dolla: botões com `paddingVertical: 10` (o respiro que faltava no rótulo). */
+  tabButtonCompact: { gap: 3, paddingHorizontal: 2, paddingVertical: NEON_LAYOUT.navPadding },
+  tabButtonWide: { gap: 4, paddingHorizontal: 6, paddingVertical: NEON_LAYOUT.navPadding },
   /**
    * Slot do ícone com altura fixa de 30 px; o glifo é desenhado em 22 px
    * (`size={22}` no `tabBarIcon`). O `MaterialIcons` mede exatamente `size`

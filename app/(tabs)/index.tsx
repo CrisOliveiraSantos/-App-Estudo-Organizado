@@ -1,4 +1,4 @@
-import { useMemo, useState, type ComponentProps } from 'react';
+import { memo, useCallback, useMemo, useState, type ComponentProps } from 'react';
 import { Alert, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
@@ -92,18 +92,31 @@ export default function HomeScreen() {
     return events.filter(event => !event.done && week.some(date => eventMatchesPoint(event, { day: date.getDate(), month: date.getMonth(), year: date.getFullYear() }, today)));
   }, [events, today]);
   const nextGoalTitle = openTasks[0]?.goalTitle ?? 'Nenhuma tarefa pendente';
-  const calendarDays = useMemo(() => {
-    const days = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth() + 1, 0).getDate();
-    const start = new Date(visibleMonth.getFullYear(), visibleMonth.getMonth(), 1).getDay();
-    return [...Array.from({ length: start }, () => null), ...Array.from({ length: days }, (_, index) => index + 1)];
-  }, [visibleMonth]);
 
   const goToday = () => {
     const now = new Date();
     setVisibleMonth(new Date(now.getFullYear(), now.getMonth(), 1));
     setSelectedPoint({ day: now.getDate(), month: now.getMonth(), year: now.getFullYear() });
   };
-  const selectDay = (day: number) => setSelectedPoint({ day, month: visibleMonth.getMonth(), year: visibleMonth.getFullYear() });
+  /**
+   * Callbacks estáveis (TAREFA 3 — lag do tema). `HeroCard`, `CalendarCard` e
+   * `TaskList` são `memo`: se estas funções fossem recriadas a cada render
+   * (cada tecla digitada nos formulários da própria Home), o `memo` nunca
+   * valeria e as 42 células do calendário + os SVGs seriam redesenhados.
+   */
+  const openProfile = useCallback(() => router.push('/profile'), []);
+  const prevMonth = useCallback(
+    () => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1)),
+    [],
+  );
+  const nextMonth = useCallback(
+    () => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1)),
+    [],
+  );
+  const selectDay = useCallback(
+    (day: number) => setSelectedPoint({ day, month: visibleMonth.getMonth(), year: visibleMonth.getFullYear() }),
+    [visibleMonth],
+  );
   const addSubjectFromForm = () => {
     if (!subjectName.trim()) return;
     addSubject(subjectName.trim(), professor.trim() || 'Professor não informado', '✦', c.indigo);
@@ -146,16 +159,7 @@ export default function HomeScreen() {
 
   return <ScreenContainer className="bg-transparent" containerClassName="bg-transparent" style={styles.screen}>
     <ScrollView style={styles.scroll} contentContainerStyle={[styles.content, tablet && styles.contentWide, { paddingBottom: navClearance }]}>
-      <View style={[styles.heroShadow, cardShadow('floating')]}>
-        <NeonGradient name="hero" style={styles.hero}>
-          <View style={styles.heroCopy}>
-            <Text style={styles.overline}>RESUMO DO DIA</Text>
-            <Text style={styles.heroTitle}>Tudo pronto para brilhar! ✨</Text>
-            <Text style={styles.heroText}>Seu espaço de estudos está organizado e esperando por você.</Text>
-          </View>
-          <TouchableOpacity accessibilityRole="button" accessibilityLabel="Abrir perfil" onPress={() => router.push('/profile')} activeOpacity={0.78} style={styles.avatar}><Text style={styles.avatarText}>C</Text></TouchableOpacity>
-        </NeonGradient>
-      </View>
+      <HeroCard onOpenProfile={openProfile} styles={styles} />
 
       <View style={[styles.twoCol, tablet && styles.twoColTablet]}>
         <AcademicCard style={styles.columnCard}>
@@ -189,7 +193,7 @@ export default function HomeScreen() {
       <View style={[styles.splitGrid, tablet && styles.splitGridTablet]}>
         <View style={styles.primaryColumn}>
           <AcademicSection eyebrow="AGORA" title="Seu próximo passo" actionLabel="Ver planejamento" onAction={() => router.push('/planning')}>
-            {openTasks.length ? <View style={styles.taskStack}>{openTasks.slice(0, 3).map((task, index) => <TaskRow key={`${task.goalId}-${task.id}-${index}`} title={task.title} subtitle={task.goalTitle} priority={task.priority} done={task.done} onToggle={() => toggleTask(task.goalId, task.id)} styles={styles} />)}</View> : <AcademicEmptyState title="Nenhuma tarefa pendente" description="Seu plano está livre por enquanto. Que tal planejar o próximo passo?" actionLabel="Criar meta" onAction={() => router.push('/planning')} />}
+            {openTasks.length ? <TaskList onToggle={toggleTask} styles={styles} tasks={openTasks} /> : <AcademicEmptyState title="Nenhuma tarefa pendente" description="Seu plano está livre por enquanto. Que tal planejar o próximo passo?" actionLabel="Criar meta" onAction={() => router.push('/planning')} />}
           </AcademicSection>
 
           <AcademicSection eyebrow="MATÉRIAS" title="Sua faculdade" actionLabel={showSubjectForm ? 'Fechar' : '+ Nova matéria'} onAction={() => setShowSubjectForm(value => !value)}>
@@ -204,19 +208,7 @@ export default function HomeScreen() {
 
         <View style={styles.secondaryColumn}>
           <AcademicSection eyebrow="AGENDA" title="Calendário" actionLabel="Hoje" onAction={goToday}>
-            <AcademicCard style={styles.calendarCard}>
-              <View style={styles.calendarTop}><TouchableOpacity onPress={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() - 1, 1))} accessibilityRole="button" accessibilityLabel="Mês anterior" style={styles.calendarArrow}><Text style={styles.calendarArrowText}>‹</Text></TouchableOpacity><Text style={styles.monthTitle}>{formatMonth(visibleMonth)}</Text><TouchableOpacity onPress={() => setVisibleMonth(current => new Date(current.getFullYear(), current.getMonth() + 1, 1))} accessibilityRole="button" accessibilityLabel="Próximo mês" style={styles.calendarArrow}><Text style={styles.calendarArrowText}>›</Text></TouchableOpacity></View>
-              <View style={styles.weekdayRow}>{weekdays.map((day, index) => <Text key={`${day}-${index}`} style={styles.weekday}>{day}</Text>)}</View>
-              <View style={styles.calendarGrid}>{calendarDays.map((day, index) => {
-                if (!day) return <View key={`empty-${index}`} style={styles.dayCell} />;
-                const point = { day, month: visibleMonth.getMonth(), year: visibleMonth.getFullYear() };
-                const selected = point.day === selectedPoint.day && point.month === selectedPoint.month && point.year === selectedPoint.year;
-                const isToday = point.day === today.getDate() && point.month === today.getMonth() && point.year === today.getFullYear();
-                const dayEvents = events.filter(event => eventMatchesPoint(event, point, today));
-                return <TouchableOpacity key={day} onPress={() => selectDay(day)} accessibilityRole="button" accessibilityLabel={`Dia ${day}`} activeOpacity={0.75} style={[styles.dayCell, selected && styles.daySelected, isToday && !selected && styles.dayToday]}><Text style={[styles.dayText, selected && styles.dayTextSelected]}>{day}</Text><View style={styles.dotRow}>{dayEvents.slice(0, 3).map(event => <View key={event.id} style={[styles.calendarDot, { backgroundColor: selected ? '#FFFFFF' : event.color ?? eventColors[event.type] }]} />)}</View></TouchableOpacity>;
-              })}</View>
-              <View style={styles.calendarLegend}><Legend color={eventColors.Aula} label="Aula" styles={styles} /><Legend color={eventColors.Prova} label="Prova" styles={styles} /><Legend color={eventColors.Exercício} label="Exercício" styles={styles} /></View>
-            </AcademicCard>
+            <CalendarCard events={events} month={visibleMonth} onNext={nextMonth} onPrev={prevMonth} onSelectDay={selectDay} selected={selectedPoint} styles={styles} today={today} />
           </AcademicSection>
 
           <AcademicSection title={`Agenda · ${String(selectedPoint.day).padStart(2, '0')}`} actionLabel={showEventForm ? 'Fechar' : '+ Compromisso'} onAction={() => setShowEventForm(value => !value)}>
@@ -261,6 +253,114 @@ export default function HomeScreen() {
   </ScreenContainer>;
 }
 
+/** Tarefa achatada da Home (`goal.tasks` + o título da meta, ver `allTasks`). */
+type HomeTask = {
+  done: boolean;
+  goalId: string;
+  goalTitle: string;
+  id: string;
+  priority: 'Alta' | 'Média' | 'Baixa';
+  title: string;
+};
+
+/**
+ * Cartão-herói da Home (`.hero` do mockup).
+ *
+ * `memo` porque é o bloco mais caro da tela: um `NeonGradient` (SVG com
+ * `<Defs>`/`<Stop>`), `elevation` e texto branco fixo. Nada aqui depende do
+ * estado da tela — sem o `memo`, cada tecla digitada nos formulários da Home
+ * (matéria/compromisso) redesenha o SVG inteiro. Com callbacks estáveis e o
+ * objeto `styles` memoizado pelo tema, ele só troca quando o TEMA muda.
+ */
+const HeroCard = memo(function HeroCard({
+  onOpenProfile,
+  styles,
+}: {
+  onOpenProfile: () => void;
+  styles: HomeStyles;
+}) {
+  return (
+    <View style={[styles.heroShadow, cardShadow('floating')]}>
+      <NeonGradient name="hero" style={styles.hero}>
+        <View style={styles.heroCopy}>
+          <Text style={styles.overline}>RESUMO DO DIA</Text>
+          <Text style={styles.heroTitle}>Tudo pronto para brilhar! ✨</Text>
+          <Text style={styles.heroText}>Seu espaço de estudos está organizado e esperando por você.</Text>
+        </View>
+        <TouchableOpacity accessibilityRole="button" accessibilityLabel="Abrir perfil" onPress={onOpenProfile} activeOpacity={0.78} style={styles.avatar}><Text style={styles.avatarText}>C</Text></TouchableOpacity>
+      </NeonGradient>
+    </View>
+  );
+});
+
+/**
+ * Calendário da Home (`.card` da agenda).
+ *
+ * `memo` com props primitivas/estáveis: mês, ponto selecionado, `today` e a
+ * lista de eventos. O `useMemo` interno evita recalcular as 42 células; antes,
+ * qualquer estado da tela (inclusive o texto do formulário) refazia o grid.
+ */
+const CalendarCard = memo(function CalendarCard({
+  events,
+  month,
+  onNext,
+  onPrev,
+  onSelectDay,
+  selected,
+  styles,
+  today,
+}: {
+  events: AcademicEvent[];
+  month: Date;
+  onNext: () => void;
+  onPrev: () => void;
+  onSelectDay: (day: number) => void;
+  selected: CalendarPoint;
+  styles: HomeStyles;
+  today: Date;
+}) {
+  const days = useMemo(() => {
+    const total = new Date(month.getFullYear(), month.getMonth() + 1, 0).getDate();
+    const start = new Date(month.getFullYear(), month.getMonth(), 1).getDay();
+    return [...Array.from({ length: start }, () => null), ...Array.from({ length: total }, (_, index) => index + 1)];
+  }, [month]);
+
+  return (
+    <AcademicCard style={styles.calendarCard}>
+      <View style={styles.calendarTop}><TouchableOpacity onPress={onPrev} accessibilityRole="button" accessibilityLabel="Mês anterior" style={styles.calendarArrow}><Text style={styles.calendarArrowText}>‹</Text></TouchableOpacity><Text style={styles.monthTitle}>{formatMonth(month)}</Text><TouchableOpacity onPress={onNext} accessibilityRole="button" accessibilityLabel="Próximo mês" style={styles.calendarArrow}><Text style={styles.calendarArrowText}>›</Text></TouchableOpacity></View>
+      <View style={styles.weekdayRow}>{weekdays.map((day, index) => <Text key={`${day}-${index}`} style={styles.weekday}>{day}</Text>)}</View>
+      <View style={styles.calendarGrid}>{days.map((day, index) => {
+        if (!day) return <View key={`empty-${index}`} style={styles.dayCell} />;
+        const point = { day, month: month.getMonth(), year: month.getFullYear() };
+        const isSelected = point.day === selected.day && point.month === selected.month && point.year === selected.year;
+        const isToday = point.day === today.getDate() && point.month === today.getMonth() && point.year === today.getFullYear();
+        const dayEvents = events.filter(event => eventMatchesPoint(event, point, today));
+        return <TouchableOpacity key={day} onPress={() => onSelectDay(day)} accessibilityRole="button" accessibilityLabel={`Dia ${day}`} activeOpacity={0.75} style={[styles.dayCell, isSelected && styles.daySelected, isToday && !isSelected && styles.dayToday]}><Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>{day}</Text><View style={styles.dotRow}>{dayEvents.slice(0, 3).map(event => <View key={event.id} style={[styles.calendarDot, { backgroundColor: isSelected ? '#FFFFFF' : event.color ?? eventColors[event.type] }]} />)}</View></TouchableOpacity>;
+      })}</View>
+      <View style={styles.calendarLegend}><Legend color={eventColors.Aula} label="Aula" styles={styles} /><Legend color={eventColors.Prova} label="Prova" styles={styles} /><Legend color={eventColors.Exercício} label="Exercício" styles={styles} /></View>
+    </AcademicCard>
+  );
+});
+
+/**
+ * Lista "Seu próximo passo". `memo` recebe a MESMA referência de `openTasks`
+ * (`useMemo` no pai) e o `toggleTask` do store (estável por `useMemo`), então
+ * tocar em uma tarefa não redesenha o calendário nem o herói.
+ */
+const TaskList = memo(function TaskList({
+  onToggle,
+  styles,
+  tasks,
+}: {
+  onToggle: (goalId: string, taskId: string) => void;
+  styles: HomeStyles;
+  tasks: HomeTask[];
+}) {
+  return (
+    <View style={styles.taskStack}>{tasks.slice(0, 3).map((task, index) => <TaskRow key={`${task.goalId}-${task.id}-${index}`} done={task.done} goalId={task.goalId} onToggle={onToggle} priority={task.priority} styles={styles} subtitle={task.goalTitle} taskId={task.id} title={task.title} />)}</View>
+  );
+});
+
 function StatCard({ emoji, label, styles, value }: { emoji: string; label: string; styles: HomeStyles; value: string }) {
   return <AcademicCard style={styles.statCard}><Text style={styles.statEmoji}>{emoji}</Text><Text style={styles.statValue}>{value}</Text><Text style={styles.statLabel}>{label}</Text></AcademicCard>;
 }
@@ -270,11 +370,35 @@ function QuickAction({ icon, label, last = false, onPress, styles }: { icon: Com
   return <TouchableOpacity onPress={onPress} accessibilityRole="button" accessibilityLabel={label} activeOpacity={0.78} style={[styles.quickAction, last && styles.quickActionLast]}><IconSymbol name={icon} size={17} color={c.primary} /><Text numberOfLines={1} style={styles.quickActionText}>{label}</Text><Text style={styles.quickActionArrow}>→</Text></TouchableOpacity>;
 }
 
-function TaskRow({ title, subtitle, priority, done, onToggle, styles }: { title: string; subtitle: string; priority: 'Alta' | 'Média' | 'Baixa'; done: boolean; onToggle: () => void; styles: HomeStyles }) {
+const TaskRow = memo(function TaskRow({
+  done,
+  goalId,
+  onToggle,
+  priority,
+  styles,
+  subtitle,
+  taskId,
+  title,
+}: {
+  done: boolean;
+  goalId: string;
+  onToggle: (goalId: string, taskId: string) => void;
+  priority: 'Alta' | 'Média' | 'Baixa';
+  styles: HomeStyles;
+  subtitle: string;
+  taskId: string;
+  title: string;
+}) {
   const c = useAcademicColors();
   const priorityColor = priority === 'Alta' ? c.danger : priority === 'Média' ? c.gold : c.muted;
-  return <AcademicCard style={styles.taskRow}><TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: done }} accessibilityLabel={`Concluir ${title}`} onPress={onToggle} style={[styles.check, done && styles.checkDone]}><Text style={styles.checkText}>{done ? '✓' : ''}</Text></TouchableOpacity><View style={styles.taskCopy}><Text style={[styles.taskTitle, done && styles.doneText]}>{title}</Text><Text style={styles.taskMeta}>{subtitle}</Text></View><View accessibilityLabel={`Prioridade ${priority}`} style={styles.priorityIndicator}><View style={[styles.priorityDot, { backgroundColor: priorityColor }]} /><Text style={styles.priorityLabel}>{priority}</Text></View></AcademicCard>;
-}
+  /**
+   * O `onPress` precisa ser estável para o `memo` funcionar: antes era
+   * `() => toggleTask(goalId, taskId)` criado no `map` do pai, o que anulava a
+   * comparação rasa a cada render.
+   */
+  const handleToggle = useCallback(() => onToggle(goalId, taskId), [goalId, onToggle, taskId]);
+  return <AcademicCard style={styles.taskRow}><TouchableOpacity accessibilityRole="checkbox" accessibilityState={{ checked: done }} accessibilityLabel={`Concluir ${title}`} onPress={handleToggle} style={[styles.check, done && styles.checkDone]}><Text style={styles.checkText}>{done ? '✓' : ''}</Text></TouchableOpacity><View style={styles.taskCopy}><Text style={[styles.taskTitle, done && styles.doneText]}>{title}</Text><Text style={styles.taskMeta}>{subtitle}</Text></View><View accessibilityLabel={`Prioridade ${priority}`} style={styles.priorityIndicator}><View style={[styles.priorityDot, { backgroundColor: priorityColor }]} /><Text style={styles.priorityLabel}>{priority}</Text></View></AcademicCard>;
+});
 
 function SubjectCard({ subject, events, onOpen, onSave, onDelete, styles }: { subject: Subject; events: AcademicEvent[]; onOpen: () => void; onSave: (changes: Partial<Subject>) => void; onDelete: () => void; styles: HomeStyles }) {
   const [editing, setEditing] = useState(false);

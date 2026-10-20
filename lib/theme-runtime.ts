@@ -75,12 +75,59 @@ export const neonRadius = {
   input: 12,
   listItem: 13,
   logo: 15,
+  nav: 24,
   panel: 24,
   sidebar: 26,
   tab: 10,
   toggle: 13,
   toolButton: 8,
+  topbar: 22,
   week: 13,
+} as const;
+
+/**
+ * Especificação oficial da Dolla (tema escuro), traduzida para RN/Android.
+ *
+ * A paleta do tema `neon` já é exatamente esta (`SchemeColors.neon` em
+ * `lib/_core/theme.ts`: bg `#080A12`, painel `#101522`, ciano `#00E5FF`, rosa
+ * `#E34BFF`). O que faltava era um lugar único para as MÉTRICAS que a Dolla
+ * define (raios, elevações, paddings e o gradiente do botão primário), porque
+ * topbar, bottom nav, cards e FAB repetiam esses números soltos no `StyleSheet`.
+ *
+ * Regra de ouro: componente **não** usa `dollaTokens.color` para pintar a
+ * interface — para isso existe a paleta do tema (`useAcademicPalette()`), que é
+ * a única que responde à troca de tema. As cores aqui são a referência do
+ * contrato visual (e o que os testes verificam), não um atalho de estilo.
+ */
+export const dollaTokens = {
+  color: {
+    background: '#080A12',
+    border: '#202B40',
+    cyan: '#00E5FF',
+    gold: '#FFD166',
+    green: '#49E5B1',
+    muted: '#91A0B8',
+    /** `rgba(12,17,30,0.95)` da pílula inferior. */
+    navSurface: 'rgba(12, 17, 30, 0.95)',
+    panel: '#101522',
+    /** `#101522` com 93% de alfa (`EE`), o fundo do card. */
+    panelTranslucent: '#101522EE',
+    pink: '#E34BFF',
+    text: '#F4F7FF',
+  },
+  /** `elevation` do Android: card 4, bottom nav 8. */
+  elevation: { card: 4, nav: 8 },
+  /** Botão primário: `linear-gradient(100deg, #00E5FF, #E34BFF)`. */
+  gradient: { angle: 100, from: '#00E5FF', to: '#E34BFF' },
+  layout: {
+    cardPadding: 20,
+    /** O FAB da Dolla é 64×64 em qualquer largura. */
+    fabSize: 64,
+    navPaddingVertical: 10,
+    topbarPaddingHorizontal: 22,
+    topbarPaddingVertical: 18,
+  },
+  radius: { card: 20, fab: 22, nav: 24, topbar: 22 },
 } as const;
 
 /** Durações do mockup (`--transition: all .25s`), em ms. */
@@ -100,7 +147,7 @@ export const neonMotion = {
 /** Métricas de tipografia do mockup (`.eyebrow`, `.topbar h1`, `.card-head h3`, `.text-link`). */
 export const neonType = {
   eyebrow: { letterSpacing: 1.6, size: 11, weight: '800' },
-  screenTitle: { letterSpacing: -0.8, size: 26, weight: '800' },
+  screenTitle: { letterSpacing: -0.8, size: 26, weight: '700' },
   cardTitle: { size: 15, weight: '800' },
   link: { size: 13, weight: '700' },
   body: { size: 14, weight: '400' },
@@ -225,7 +272,12 @@ function buildNeonGradientSpec(name: NeonGradientName, palette: AcademicPalette)
     case 'panel':
       return {
         angle: neonGradientAngles.panel,
-        stops: [hexToRgba(palette.surface, 0.96), hexToRgba(palette.surfaceAlt, 0.96)],
+        /**
+         * `#101522EE` da Dolla: o card é o painel com 93% de alfa (EE/255),
+         * não 96%. O alfa menor deixa o fundo/partículas respirarem sem perder
+         * o contorno sólido que o `elevation` do Android usa como outline.
+         */
+        stops: [hexToRgba(palette.surface, 0.93), hexToRgba(palette.surfaceAlt, 0.93)],
       };
     case 'hero':
       return {
@@ -272,11 +324,17 @@ export function glowShadow(color: string, intensity: GlowIntensity = 'base') {
   };
 }
 
-/** Sombra neutra de elevação (cards, painéis, FAB). */
-export function cardShadow(level: keyof typeof neonElevation = 'card') {
+/**
+ * Sombra neutra de elevação (cards, painéis, FAB).
+ *
+ * `elevation` é do Android e a Dolla fixa valores próprios (card 4, bottom nav
+ * 8) que não saem da proporção `y/1.5` do mockup. O segundo parâmetro deixa o
+ * chamador cravar o número da especificação sem perder `shadowRadius`/`alpha`.
+ */
+export function cardShadow(level: keyof typeof neonElevation = 'card', elevation?: number) {
   const preset = neonElevation[level];
   return {
-    elevation: Math.max(2, Math.round(preset.y / 1.5)),
+    elevation: elevation ?? Math.max(2, Math.round(preset.y / 1.5)),
     shadowColor: '#000000',
     shadowOffset: { width: 0, height: preset.y },
     shadowOpacity: preset.alpha,

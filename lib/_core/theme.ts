@@ -68,10 +68,30 @@ export const SchemeColors: Record<ColorScheme, Record<ThemeColorName, string>> =
     primary: '#FF8A5B', background: '#1B1023', surface: '#251630', foreground: '#FDEBE3', muted: '#B7A0C2', border: '#3B2748', success: '#5AD1A0', warning: '#F1BE55', error: '#FF7D94',
     accentPink: '#FF6B9D', accentGold: '#FFD166', accentGreen: '#5AD1A0', accentOrange: '#FF7A30', accentRose: '#FF6B9D', accentPurple: '#9333EA',
   },
+  /**
+   * Neon: a paleta do mockup oficial da Dolla. Os valores abaixo são o
+   * contrato verificado por `tests/theme-runtime.test.ts` e espelhados em
+   * `dollaTokens.color` (`lib/theme-runtime.ts`) — mudar um sem o outro quebra
+   * o teste de propósito.
+   */
   neon: {
     ...baseSchemeColors.dark,
-    primary: '#00E5FF', background: '#080A12', surface: '#101522', foreground: '#F4F7FF', muted: '#91A0B8', border: '#202B40', success: '#49E5B1', warning: '#FFD166', error: '#FF4D6D',
-    accentPink: '#E34BFF', accentGold: '#FFD166', accentGreen: '#49E5B1', accentOrange: '#FF9F43', accentRose: '#FF6B9D', accentPurple: '#9333EA', surfaceAlt: '#0C111E',
+    primary: '#00E5FF',
+    background: '#080A12',
+    surface: '#101522',
+    foreground: '#F4F7FF',
+    muted: '#91A0B8',
+    border: '#202B40',
+    success: '#49E5B1',
+    warning: '#FFD166',
+    error: '#FF4D6D',
+    accentPink: '#E34BFF',
+    accentGold: '#FFD166',
+    accentGreen: '#49E5B1',
+    accentOrange: '#FF9F43',
+    accentRose: '#FF6B9D',
+    accentPurple: '#9333EA',
+    surfaceAlt: '#0C111E',
   },
 };
 

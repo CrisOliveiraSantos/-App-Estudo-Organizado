@@ -1,15 +1,20 @@
 /**
- * `.fab` do mockup (linhas 165-167 + 202 + 209): 64 px (56 no celular),
- * raio 22, gradiente 140° ciano→rosa, borda ciano, glow e um anel rosa
- * pulsando por fora (`pulseGlow 2s`, inset -3).
+ * `.fab` da Dolla: **64×64 em qualquer largura** (`dollaTokens.layout.fabSize`),
+ * raio 22, gradiente 100° ciano→rosa (`neonGradientAngles.brand`, o mesmo do
+ * botão primário) e um anel rosa pulsando por fora (`pulseGlow 2s`, inset -3).
+ *
+ * O glifo `auto-awesome` (que parecia o ícone do Gemini) saiu: dentro do
+ * gradiente agora vive o **rosto da Cris**, recortado do mockup oficial
+ * (`assets/images/cris-avatar.png`, 160×160 com máscara circular e cantos
+ * transparentes). O PNG tem fundo próprio, então o `borderRadius` do botão só
+ * arredonda a caixa — o círculo da foto aparece inteiro sobre o gradiente.
  *
  * O estado, a posição e o `onPress` continuam em `components/cris-popup.tsx`;
  * aqui vive só a aparência e a animação.
  */
 
-import MaterialIcons from '@expo/vector-icons/MaterialIcons';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Easing, Image, Platform, Pressable, StyleSheet, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { NeonGradient, useAcademicPalette } from '@/components/academic/design-system';
@@ -17,6 +22,12 @@ import { NEON_LAYOUT, neonFabClearance, neonFabSize } from '@/components/neon/na
 import { glowShadow, neonGradientAngles, neonMotion, neonRadius } from '@/lib/theme-runtime';
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
+
+/**
+ * Rosto da Cris. `require` estático para o Metro empacotar o PNG no APK (não é
+ * asset remoto, então funciona offline e no build de release).
+ */
+const CRIS_FACE = require('../../assets/images/cris-avatar.png');
 
 export function NeonFab({ bottom, onPress, style }: { bottom?: number; onPress: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors } = useAcademicPalette();
@@ -99,11 +110,16 @@ export function NeonFab({ bottom, onPress, style }: { bottom?: number; onPress: 
       >
         <Animated.View pointerEvents="none" style={[styles.ring, { borderColor: colors.accentPink, opacity: ringOpacity }]} />
         <NeonGradient
-          angle={neonGradientAngles.brandSteep}
+          angle={neonGradientAngles.brand}
           colors={[colors.primary, colors.accentPink]}
           style={[styles.button, { borderColor: colors.primary, height: size, width: size }]}
         >
-          <MaterialIcons color="#FFFFFF" name="auto-awesome" size={wide ? 26 : 24} />
+          <Image
+            accessibilityIgnoresInvertColors
+            resizeMode="cover"
+            source={CRIS_FACE}
+            style={[styles.face, { borderRadius: neonRadius.fab, height: size, width: size }]}
+          />
         </NeonGradient>
       </Animated.View>
     </Pressable>
@@ -113,6 +129,13 @@ export function NeonFab({ bottom, onPress, style }: { bottom?: number; onPress: 
 const styles = StyleSheet.create({
   anchor: { position: 'absolute', zIndex: 40 },
   button: { alignItems: 'center', borderRadius: neonRadius.fab, borderWidth: 1, justifyContent: 'center', overflow: 'hidden' },
+  /**
+   * O PNG já é um círculo com os cantos transparentes; o raio 22 só fecha a
+   * caixa (e o `overflow: hidden` de `button` garante o recorte igual em
+   * Android e web). `cover` impede a foto de achatar em telas com densidade
+   * diferente de 1.
+   */
+  face: { alignSelf: 'center' },
   glow: { borderRadius: neonRadius.fab + 5 },
   ring: { borderWidth: 1, borderRadius: neonRadius.fab + 4, bottom: -3, left: -3, position: 'absolute', right: -3, top: -3 },
 });

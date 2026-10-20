@@ -9,6 +9,7 @@ import { splitCardStyle } from '@/lib/card-style';
 import {
   buildNeonTones,
   cardShadow,
+  dollaTokens,
   glowShadow,
   gradientVector,
   hexToRgba,
@@ -93,6 +94,9 @@ export function useAcademicColors() {
       purple: colors.accentPurple,
       rose: colors.accentRose,
       soft: colors.lavender,
+      /** Aliases com o nome da especificação da Dolla (tema escuro). */
+      cyan: colors.primary,
+      panel: colors.surface,
     }),
     [colors, isDark],
   );
@@ -226,7 +230,7 @@ export function AcademicCard({
          * não taparia a fresta e ainda traria o ghost box de volta.
          */
         { backgroundColor: colors.surface },
-        cardShadow(emphasis ? 'floating' : 'card'),
+        cardShadow(emphasis ? 'floating' : 'card', emphasis ? undefined : dollaTokens.elevation.card),
         glow && glowShadow(colors.primary, 'soft'),
         box,
       ]}
@@ -245,7 +249,13 @@ export function AcademicCard({
         style={[
           styles.card,
           padded && styles.cardPadded,
-          { borderColor: emphasis ? hexToRgba(colors.primary, 0.42) : hexToRgba(colors.border, 0.5) },
+          /**
+           * Card da Dolla: borda de **1 px** na cor cheia do token
+           * (`#202B40` no tema Neon), em vez do `0.5 px` translúcido anterior.
+           * `emphasis` continua com o contorno ciano, que é a hierarquia
+           * "selecionado" da especificação.
+           */
+          { borderColor: emphasis ? hexToRgba(colors.primary, 0.55) : colors.border },
           content,
         ]}
       >
@@ -343,7 +353,13 @@ export function AcademicButton({
         style,
       ]}
     >
-      {primary ? <NeonGradient colors={[colors.primary, colors.accentPink]} style={styles.buttonGradient} /> : null}
+      {primary ? (
+        <NeonGradient
+          angle={dollaTokens.gradient.angle}
+          colors={[colors.primary, colors.accentPink]}
+          style={styles.buttonGradient}
+        />
+      ) : null}
       {icon}
       <Text style={[styles.buttonText, !primary && { color: palette.text }, icon ? styles.buttonTextWithIcon : null]}>
         {label}
@@ -602,14 +618,14 @@ const styles = StyleSheet.create({
    * `flexGrow` e não `flex: 1` porque `flex: 1` zera o `flexBasis` e zeraria a
    * altura hipotética do card em containers de altura automática.
    */
-  card: { borderRadius: neonRadius.card, borderWidth: 0.5, flexGrow: 1, overflow: 'hidden' },
+  card: { borderRadius: neonRadius.card, borderWidth: 1, flexGrow: 1, overflow: 'hidden' },
   /**
    * Caixa **externa** do card: só o raio (contorno arredondado para a base opaca e
    * para o `elevation`) + o que o chamador manda de layout. Borda, gradiente e
    * `overflow` vivem na interna de propósito.
    */
   cardBox: { borderRadius: neonRadius.card, marginBottom: 16 },
-  cardPadded: { padding: 20 },
+  cardPadded: { padding: dollaTokens.layout.cardPadding },
   disabled: { opacity: 0.48 },
   emptyDescription: { fontSize: neonType.body.size, lineHeight: 20, marginTop: 6, textAlign: 'center' },
   emptyMark: {
