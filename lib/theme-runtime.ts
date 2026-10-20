@@ -194,8 +194,29 @@ export function gradientVector(angle: number): { x1: number; y1: number; x2: num
   };
 }
 
+/**
+ * Mesma ideia dos tons: o gradiente depende só de (paleta canônica, nome).
+ * Compartilhar o objeto evita recomputar `hexToRgba` em cada `NeonGradient`
+ * quando a árvore inteira é redesenhada na troca de tema.
+ */
+const neonGradientCache = new WeakMap<AcademicPalette, Map<NeonGradientName, NeonGradientSpec>>();
+
 /** Gradientes nomeados do mockup, resolvidos a partir da paleta do tema atual. */
 export function neonGradientSpec(name: NeonGradientName, palette: AcademicPalette): NeonGradientSpec {
+  let byName = neonGradientCache.get(palette);
+  if (!byName) {
+    byName = new Map();
+    neonGradientCache.set(palette, byName);
+  }
+  const cached = byName.get(name);
+  if (cached) return cached;
+
+  const spec = buildNeonGradientSpec(name, palette);
+  byName.set(name, spec);
+  return spec;
+}
+
+function buildNeonGradientSpec(name: NeonGradientName, palette: AcademicPalette): NeonGradientSpec {
   switch (name) {
     case 'brand':
       return { angle: neonGradientAngles.brand, stops: [palette.primary, palette.accentPink] };
@@ -263,8 +284,19 @@ export function cardShadow(level: keyof typeof neonElevation = 'card') {
   };
 }
 
+/**
+ * A paleta é um objeto canônico por esquema (`Colors[scheme]`), então o
+ * resultado pode ser compartilhado entre TODOS os componentes que chamam
+ * `useAcademicPalette()` no mesmo tema. Sem o cache, cada consumidor recriava
+ * as 14 entradas de tons a cada troca de tema.
+ */
+const neonTonesCache = new WeakMap<AcademicPalette, TonePaletteTable>();
+
 /** Tons derivados do tema: fundo translúcido + texto no acento + borda suave. */
 export function buildNeonTones(palette: AcademicPalette, isDark: boolean): TonePaletteTable {
+  const cached = neonTonesCache.get(palette);
+  if (cached) return cached;
+
   const fillAlpha = isDark ? 0.16 : 0.12;
   const borderAlpha = isDark ? 0.32 : 0.28;
   const tone = (color: string): TonePalette => ({
@@ -272,7 +304,7 @@ export function buildNeonTones(palette: AcademicPalette, isDark: boolean): ToneP
     fill: hexToRgba(color, fillAlpha),
     text: color,
   });
-  return {
+  const tones: TonePaletteTable = {
     accent: tone(palette.accentPink),
     danger: tone(palette.error),
     ghost: { border: palette.border, fill: 'transparent', text: palette.primary },
@@ -292,4 +324,7 @@ export function buildNeonTones(palette: AcademicPalette, isDark: boolean): ToneP
     violet: tone(palette.accentPurple),
     warning: tone(palette.accentGold),
   };
+
+  neonTonesCache.set(palette, tones);
+  return tones;
 }

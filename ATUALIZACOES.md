@@ -1,4 +1,13 @@
 # Atualizações
+## 2026-10-19 — APK de produção e troca de tema em transição
+
+- **Build de APK documentado e verificado.** `eas.json` já tinha o perfil `preview` com `distribution: "internal"` e `android.buildType: "apk"`; `app.config.ts` já tinha `android.package: "com.app.estudoorganizado"` e `android.versionCode: 1`. O novo `BUILD.md` registra login no EAS, variáveis de ambiente (o `.env` local não é enviado ao EAS), geração do APK, instalação por link/ADB, reinstalação por cima, incremento do `versionCode` e geração do AAB da Play Store.
+- **Paleta separada do modo.** `ThemeProvider` ganhou `ThemePaletteContext`, que guarda o objeto canônico `Colors[scheme]`; `useColors()` passou a consumir só esse contexto, enquanto `useColorScheme()` continua no contexto do nome do esquema e `ThemePreferenceContext` guarda a escolha salva. Assim, uma preferência que resolve para a mesma paleta não redesenha quem só pinta a interface.
+- **Troca de tema sem bloquear o toque.** `setColorSchemeState` agora roda dentro de `startTransition`: a preferência e o glifo do topbar mudam de forma síncrona, e a atualização pesada da paleta (que troca o `VariableContext` do NativeWind e reconcilia todos os `className`) é fatiada/interrompível pelo React. O glifo do topbar passou a ser derivado da preferência, não do esquema resolvido, para responder no mesmo toque.
+- **Menos trabalho por componente.** `buildNeonTones` e `neonGradientSpec` agora usam cache por paleta canônica (`WeakMap`), em vez de recriar 14 tons e os gradientes em cada `useAcademicPalette()`/`NeonGradient` a cada troca.
+- **Validação.** `npx tsc --noEmit` → exit 0; `npx vitest run` → **169 passed · 2 skipped (171)**; `npx eslint` nos quatro arquivos tocados → 0 erros/0 avisos; `npx expo export --platform android` → exit 0, bundle Hermes gerado (6,55 MB) e diretório temporário removido; `npx expo config --type public` confirmou `version=1.0.0`, `package=com.app.estudoorganizado`, `versionCode=1` e `projectId=4fd21b1e-eea8-4f62-a578-f821f8a42050`.
+
+
 ## 2026-10-19 — PDFs do Moodle no leitor interno, troca de tema mais leve e limites da IA
 
 - **PDF do Moodle deixa de cair no limbo do download.** `app/browser.tsx` instala um interceptador de cliques e também observa `onShouldStartLoadWithRequest`/`onOpenWindow`; qualquer link `.pdf` ou `/pluginfile.php/...` é desviado para o leitor interno. O `lib/moodle-pdf.ts` (novo, puro e testável) concentra detecção, nome seguro, parser das mensagens e os scripts injetados.

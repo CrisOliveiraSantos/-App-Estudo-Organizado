@@ -1,10 +1,16 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
+import { createContext, startTransition, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { Appearance, View } from "react-native";
 import { vars } from "nativewind";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as SystemUI from "expo-system-ui";
 
-import { SchemeColors, isDarkScheme, type ColorScheme } from "@/constants/theme";
+import {
+  Colors,
+  SchemeColors,
+  isDarkScheme,
+  type ColorScheme,
+  type ThemeColorPalette,
+} from "@/constants/theme";
 import { schemeForHour } from "@/lib/theme-runtime";
 
 export type ThemePreference = ColorScheme | "system" | "auto";
@@ -28,15 +34,17 @@ type ThemeActionsValue = Pick<ThemeContextValue, "setColorScheme" | "setThemePre
 
 /**
  * Contextos separados de propósito:
- * - `ThemeScheme` só muda quando a paleta RESOLVIDA muda. É o único que
- *   `useColors()`/`useColorScheme()` assinam, então uma alteração de preferência
- *   que resolve para o mesmo tema não redesenha a árvore inteira.
+ * - `ThemePalette` guarda o OBJETO de cores canônico (`Colors[scheme]`). É o
+ *   único contexto que `useColors()` assina.
+ * - `ThemeScheme` guarda só o NOME do esquema resolvido, para
+ *   `useColorScheme()`/decisões claro-vs-escuro.
  * - `ThemePreference` guarda a escolha salva (inclusive “auto”/“sistema”).
  * - `ThemeActions` é estável e nunca provoca render.
  * `useThemeContext()` continua devolvendo tudo junto para compatibilidade.
  */
 const ThemeContext = createContext<ThemeContextValue | null>(null);
 const ThemeSchemeContext = createContext<ColorScheme | null>(null);
+const ThemePaletteContext = createContext<ThemeColorPalette | null>(null);
 const ThemePreferenceContext = createContext<ThemePreference | null>(null);
 const ThemeActionsContext = createContext<ThemeActionsValue | null>(null);
 /**
@@ -85,11 +93,26 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  /**
+   * A paleta é a parte PESADA da troca: além dos componentes que usam
+   * `useColors`, o `vars()` aplicado na raiz troca o `VariableContext` do
+   * NativeWind e faz todos os elementos com `className` da árvore serem
+   * reconciliados. Colocar esse estado numa transição permite que o React
+   * interrompa/fatie o trabalho e mantém o toque responsivo; a preferência
+   * (o "modo") é atualizada de forma síncrona, então o ícone do topbar e o
+   * seletor de Ajustes respondem imediatamente.
+   */
+  const scheduleScheme = useCallback((scheme: ColorScheme) => {
+    startTransition(() => {
+      setColorSchemeState(prev => (prev === scheme ? prev : scheme));
+    });
+  }, []);
+
   const setColorScheme = useCallback((scheme: ColorScheme) => {
     setThemePreferenceState(scheme);
-    setColorSchemeState(scheme);
+    scheduleScheme(scheme);
     void AsyncStorage.setItem(THEME_STORAGE_KEY, scheme);
-  }, []);
+  }, [scheduleScheme]);
 
   const resolvePreference = useCallback((preference: ThemePreference): ColorScheme => {
     if (preference === "system") return Appearance.getColorScheme() ?? "light";
@@ -99,9 +122,9 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const setThemePreference = useCallback((preference: ThemePreference) => {
     setThemePreferenceState(preference);
-    setColorSchemeState(resolvePreference(preference));
+    scheduleScheme(resolvePreference(preference));
     void AsyncStorage.setItem(THEME_STORAGE_KEY, preference);
-  }, [resolvePreference]);
+  }, [resolvePreference, scheduleScheme]);
 
   useEffect(() => {
     applyScheme(colorScheme);
@@ -114,28 +137,33 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
       if (!active || !validThemes.includes(saved as ThemePreference)) return;
       const preference = saved as ThemePreference;
       setThemePreferenceState(preference);
-      setColorSchemeState(resolvePreference(preference));
+      scheduleScheme(resolvePreference(preference));
     });
     return () => { active = false; };
-  }, [resolvePreference]);
+  }, [resolvePreference, scheduleScheme]);
 
   useEffect(() => {
     if (themePreference !== "auto") return;
-    const apply = (next: ColorScheme) => {
-      setColorSchemeState(prev => (prev === next ? prev : next));
-    };
+    const apply = (next: ColorScheme) => scheduleScheme(next);
     apply(schemeForHour(new Date().getHours()));
     const id = setInterval(() => apply(schemeForHour(new Date().getHours())), 60_000);
     return () => clearInterval(id);
-  }, [themePreference]);
+  }, [scheduleScheme, themePreference]);
 
   useEffect(() => {
     if (themePreference !== "system") return;
     const subscription = Appearance.addChangeListener(({ colorScheme: next }) => {
-      setColorSchemeState(next ?? "light");
+      scheduleScheme(next ?? "light");
     });
     return () => subscription.remove();
-  }, [themePreference]);
+  }, [scheduleScheme, themePreference]);
+
+  /**
+   * O objeto da paleta é canônico (`Colors[scheme]`) e só troca de identidade
+   * quando o esquema resolvido muda. É este objeto — não o nome do modo — que
+   * `useColors()` consome.
+   */
+  const palette = useMemo(() => Colors[colorScheme], [colorScheme]);
 
   const themeVariables = useMemo(
     () =>
@@ -170,20 +198,39 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     <ThemeActionsContext.Provider value={actions}>
       <ThemePreferenceContext.Provider value={themePreference}>
         <ThemeSchemeContext.Provider value={colorScheme}>
-          <ThemeContext.Provider value={value}>
-            <View style={[{ flex: 1 }, themeVariables]}>{children}</View>
-          </ThemeContext.Provider>
+          <ThemePaletteContext.Provider value={palette}>
+            <ThemeContext.Provider value={value}>
+              <View style={[{ flex: 1 }, themeVariables]}>{children}</View>
+            </ThemeContext.Provider>
+          </ThemePaletteContext.Provider>
         </ThemeSchemeContext.Provider>
       </ThemePreferenceContext.Provider>
     </ThemeActionsContext.Provider>
   );
 }
 
-/** Só a paleta resolvida. É o contexto consumido por `useColors()`. */
+/**
+ * Nome do esquema resolvido (`light`, `dark`, `neon`, ...). Use este hook só
+ * quando precisar do NOME/escuro-vs-claro; para pintar a interface prefira
+ * `useThemePalette()`/`useColors()`, que não assinam o contexto de preferência.
+ */
 export function useThemeScheme(): ColorScheme {
   const ctx = useContext(ThemeSchemeContext);
   if (!ctx) {
     throw new Error("useThemeScheme must be used within ThemeProvider");
+  }
+  return ctx;
+}
+
+/**
+ * Objeto canônico de cores do tema ativo. É o único contexto que `useColors()`
+ * assina; mudanças de preferência que resolvem para a mesma paleta não
+ * redesenham quem só consome cores.
+ */
+export function useThemePalette(): ThemeColorPalette {
+  const ctx = useContext(ThemePaletteContext);
+  if (!ctx) {
+    throw new Error("useThemePalette must be used within ThemeProvider");
   }
   return ctx;
 }

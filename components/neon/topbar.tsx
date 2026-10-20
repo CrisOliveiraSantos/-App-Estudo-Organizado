@@ -84,17 +84,21 @@ export function NeonTopbar({ compact = false, style }: { compact?: boolean; styl
   const [today] = useState(() => new Date());
   const { eyebrow, title } = neonItemForPath(pathname);
   /**
-   * 'neon' vem da preferência salva (tem paleta própria); 'auto'/'system'
-   * seguem a hora do dia, e o tema resolvido decide entre 🌙 e ☀️.
+   * O glifo sai da PREFERÊNCIA (atualizada de forma síncrona), não do esquema
+   * resolvido: assim o botão responde no mesmo toque, mesmo quando a paleta
+   * pesada ainda está sendo aplicada numa transição. Só 'system' precisa do
+   * esquema resolvido para saber entre 🌙 e ☀️.
    */
   const mode: ThemeMode =
     themePreference === 'auto'
       ? 'auto'
       : themePreference === 'neon'
         ? 'neon'
-        : isDarkScheme(colorScheme)
+        : themePreference === 'dark' || themePreference === 'sunset'
           ? 'dark'
-          : 'light';
+          : themePreference === 'system'
+            ? (isDarkScheme(colorScheme) ? 'dark' : 'light')
+            : 'light';
 
   const cycleTheme = useCallback(() => {
     const index = THEME_CYCLE.indexOf(mode);
