@@ -139,6 +139,8 @@ npx eas-cli@latest submit --platform android --profile production
 | Build antigo com código desatualizado | Arquivos não commitados | Faça commit/push antes do build |
 | APK de release travado (abre e navega devagar), mas o dev/Metro é fluido | release sem R8: `expo prebuild` não liga `minifyEnabled` | Veja a seção 11.1 e refaça o build |
 | `externalNativeBuildCleanRelease FAILED` / `add_subdirectory ... not an existing directory` | `gradlew clean` na raiz apagou o codegen de `node_modules` | Veja a nota da seção 11 (apague só `app/build`, `build`, `.cxx`) |
+| `ninja: error: rebuilding 'build.ninja': subcommand failed` / `-- Configuring incomplete, errors occurred!` | `android/app/.cxx` foi gerado por outra versão do Gradle/NDK | Apague `android\app\.cxx` e rode o build de novo (seção 11.2) |
+| Build de release morre na configuração, antes de qualquer tarefa | wrapper do Gradle em 9.x (o RN 0.81 não suporta) | Volte o wrapper para `8.14.3` (seção 11.2) |
 
 ## 11. Build local (sem cota do EAS)
 
@@ -219,6 +221,45 @@ Duas coisas que **parecem** erro e não são:
 
 O `minifyReleaseWithR8` só aparece no log quando o R8 realmente roda; é ele que
 reduz o dex e resolve o travamento.
+
+### 11.2 Versão do Gradle — tem que ser 8.14.3
+
+O React Native **0.81.5** (e o template oficial `0.81-stable`) é construído para
+o **Gradle 8.14.3**. Com o Gradle **9.x** no wrapper o build de release não
+chega nem a executar tarefas: a configuração quebra dentro dos plugins
+(`com.facebook.react` / `expo-autolinking`), que ainda usam APIs removidas no 9.
+
+O `expo prebuild` **regera** `android/gradle/wrapper/gradle-wrapper.properties`,
+então a versão pode voltar sozinha depois de um prebuild. Confira:
+
+```powershell
+Select-String -Path android\gradle\wrapper\gradle-wrapper.properties -Pattern 'distributionUrl'
+# tem que sair: distributionUrl=https\://services.gradle.org/distributions/gradle-8.14.3-bin.zip
+```
+
+Se estiver em outra versão, ajuste a linha (não mexa no resto do arquivo):
+
+```powershell
+(Get-Content 'android\gradle\wrapper\gradle-wrapper.properties') `
+  -replace 'gradle-\d+(\.\d+)+-bin\.zip', 'gradle-8.14.3-bin.zip' |
+  Set-Content 'android\gradle\wrapper\gradle-wrapper.properties'
+.\android\gradlew.bat --version   # deve imprimir "Gradle 8.14.3"
+```
+
+Trocar de Gradle invalida o cache do CMake em `android/app/.cxx`: ele guarda os
+caminhos absolutos do Gradle anterior. Sem apagar, o `clean`/o build morrem em
+`externalNativeBuildCleanRelease` com `ninja: error: rebuilding 'build.ninja':
+subcommand failed` → `-- Configuring incomplete, errors occurred!`. Então, ao
+trocar de versão:
+
+```powershell
+Remove-Item -Recurse -Force android\app\.cxx, android\app\build, android\build
+cd android; $env:NODE_ENV='production'; .\gradlew.bat :app:assembleRelease
+```
+
+Não é preciso `gradlew clean` (veja o aviso da seção 11): apagar `app/.cxx` +
+`app/build` já força o build do zero do módulo `:app`. O build completo leva
+~45 min nessa máquina (compila `arm64-v8a` e `armeabi-v7a` do zero).
 
 ## 12. Referências
 
