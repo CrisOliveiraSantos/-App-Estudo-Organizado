@@ -21,10 +21,10 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { NeonGradient, useAcademicPalette } from '@/components/academic/design-system';
 import { HapticTab } from '@/components/haptic-tab';
 import { NEON_LAYOUT, NEON_NAV, neonNavBottom, neonNavHeight } from '@/components/neon/nav-items';
+import { NeonNavGlyph } from '@/components/neon/nav-glyph';
 import { NeonParticles } from '@/components/neon/particles';
 import { NeonSidebar } from '@/components/neon/sidebar';
 import { NeonTopbar } from '@/components/neon/topbar';
-import { IconSymbol } from '@/components/ui/icon-symbol';
 import { cardShadow, dollaTokens, glowShadow, hexToRgba, neonRadius } from '@/lib/theme-runtime';
 
 /**
@@ -158,7 +158,13 @@ export default function TabLayout() {
                     key={item.name}
                     name={item.name}
                     options={{
-                      tabBarIcon: ({ color }) => <IconSymbol color={color} name={item.icon} size={22} />,
+                      /**
+                       * Ícone neon tracejado da Dolla (`os ícones da Bottom Nav.png`),
+                       * desenhado em SVG e tingido pelo tema. O `color` do
+                       * react-navigation não é usado: o glifo já recebe o
+                       * gradiente ciano→rosa quando ativo e o `muted` quando não.
+                       */
+                      tabBarIcon: ({ focused }) => <NeonNavGlyph active={focused} name={item.glyph} size={22} />,
                       title: item.label,
                     }}
                   />

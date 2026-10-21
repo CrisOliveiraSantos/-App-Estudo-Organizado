@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, FlatList, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
-import { router } from 'expo-router';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Alert, FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
+import { router, useFocusEffect } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
 import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
 import { IconSymbol } from '@/components/ui/icon-symbol';
+import { useKeyboardInset } from '@/hooks/use-keyboard-inset';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStudyActions, useStudyChatMessages, type ChatMessage } from '@/lib/study-store';
 import { useColors } from '@/hooks/use-colors';
@@ -11,11 +12,20 @@ import { readLocalChatAccount, saveLocalChatAccount, type LocalChatAccount } fro
 import { isSupabaseConfigured, supabase } from '@/lib/supabase';
 import { isMessageInConversation, listCloudMessages, readableSupabaseError, requestPasswordReset, sendCloudMessage, signInWithSupabase, signUpWithSupabase, subscribeToCloudMessages, type CloudMessage } from '@/lib/supabase-chat';
 import { shouldSendChatOnEnter } from '@/lib/chat-utils';
+import { hexToRgba } from '@/lib/theme-runtime';
 
 type Room = 'Sala pública' | 'Conversa privada';
 type VisibleMessage = { id: string; author: string; text: string; createdAt: string; isOwn: boolean };
 type CloudUser = { id: string; email?: string; displayName: string };
 type AuthFeedback = { tone: 'success' | 'error'; text: string } | null;
+
+/**
+ * Rosto da Cris. É o recorte de `cris-avatar-novo-Mockup.png` com o xadrez do
+ * editor removido pixel a pixel (flood-fill a partir das bordas) e alpha real
+ * preservado — `assets/brand/avatar/cris-avatar.png`, 512×512. `require` estático
+ * para o Metro embutir o PNG no APK.
+ */
+const CRIS_AVATAR = require('../../assets/brand/avatar/cris-avatar.png');
 
 function toCloudUser(user: { id: string; email?: string; user_metadata?: Record<string, unknown> }): CloudUser {
   return {
@@ -37,6 +47,20 @@ export default function ChatScreen() {
    */
   const insets = useSafeAreaInsets();
   const navClearance = neonFabClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom + 8;
+  /**
+   * Teclado: o compositor sobe por `keyboard.inset` (já sem o inset do aparelho
+   * e sem o que a janela do Android encolheu sozinha) e a lista rola para a
+   * última mensagem assim que ele aparece — antes o campo de digitação ficava
+   * escondido atrás do teclado.
+   */
+  const keyboard = useKeyboardInset();
+  const listRef = useRef<FlatList<VisibleMessage>>(null);
+  const scrollToLatest = useCallback((animated: boolean) => {
+    requestAnimationFrame(() => listRef.current?.scrollToEnd({ animated }));
+  }, []);
+  useEffect(() => {
+    if (keyboard.visible) scrollToLatest(true);
+  }, [keyboard.visible, scrollToLatest]);
   const chatMessages = useStudyChatMessages();
   const { addChatMessage } = useStudyActions();
   const [localAccount, setLocalAccount] = useState<LocalChatAccount | null>(null);
@@ -56,10 +80,17 @@ export default function ChatScreen() {
   const sendingRef = useRef(false);
   const [connected, setConnected] = useState(false);
 
-  useEffect(() => {
-    if (isSupabaseConfigured) return;
-    void readLocalChatAccount().then(setLocalAccount);
-  }, []);
+  /**
+   * Conta local: relida a cada foco. A tela de login (`/login`) grava a
+   * identidade e volta para o chat; como a aba continua montada atrás da pilha,
+   * um `useEffect` de mount não veria a conta nova.
+   */
+  useFocusEffect(
+    useCallback(() => {
+      if (isSupabaseConfigured) return;
+      void readLocalChatAccount().then(setLocalAccount);
+    }, []),
+  );
 
   useEffect(() => {
     if (!supabase) return;
@@ -162,6 +193,14 @@ export default function ChatScreen() {
       .map(message => ({ ...message, isOwn: message.author === localAccount?.displayName || message.author === 'Cris' }));
   }, [chatMessages, cloudMessages, cloudUser?.id, localAccount?.displayName, pendingMessages, room]);
 
+  /**
+   * Mensagem nova (minha, da Cris ou da nuvem): a lista acompanha o fim. Com o
+   * teclado aberto isso também mantém o compositor e a última bolha visíveis.
+   */
+  useEffect(() => {
+    scrollToLatest(false);
+  }, [scrollToLatest, visibleMessages.length]);
+
   const send = async () => {
     const text = draft.trim();
     if (!text || sendingRef.current) return;
@@ -198,11 +237,7 @@ export default function ChatScreen() {
   if (!cloudUser && !localAccount) {
     return (
       <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior="padding"
-          keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-        >
+        <View className="flex-1" style={{ paddingBottom: keyboard.visible ? keyboard.inset : 0 }}>
           <AuthPanel
             navClearance={navClearance}
             mode={authMode}
@@ -220,7 +255,7 @@ export default function ChatScreen() {
             usesSupabase={isSupabaseConfigured}
             forgotEmail={() => setAuthFeedback({ tone: 'success', text: 'Por segurança, o aplicativo não revela endereços de contas sem uma sessão iniciada. Verifique as caixas de entrada que você usa ou entre em outro dispositivo e abra Configurações › Meu perfil.' })}
           />
-        </KeyboardAvoidingView>
+        </View>
       </ScreenContainer>
     );
   }
@@ -229,11 +264,7 @@ export default function ChatScreen() {
   const privateRecipientReady = room === 'Sala pública' || Boolean(recipient.trim());
   return (
     <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior="padding"
-        keyboardVerticalOffset={Platform.OS === 'ios' ? insets.top : 0}
-      >
+      <View className="flex-1">
         <View className="px-5 pt-5">
           <View className="flex-row items-start justify-between">
             <View className="flex-1 pr-3">
@@ -242,9 +273,23 @@ export default function ChatScreen() {
               <Text className="text-muted mt-2">Troque ideias, materiais e dúvidas com outros estudantes.</Text>
               {cloudUser && <TouchableOpacity onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Abrir meu perfil" style={styles.profileShortcut}><Text style={{ color: colors.primary, fontWeight: '800', fontSize: 13 }}>Meu perfil e configurações da conta</Text></TouchableOpacity>}
             </View>
-            <View className="h-11 w-11 rounded-2xl bg-lavender items-center justify-center">
-              <IconSymbol name="bubble.left.and.bubble.right.fill" size={22} color={colors.primary} />
-            </View>
+            {/*
+              O rosto da Cris no header (mockup de login/chat). É o mesmo arquivo
+              do FAB: enquanto o FAB é a ação, aqui ele é a identidade — tocar
+              abre o perfil da Cris.
+            */}
+            <Pressable
+              accessibilityLabel="Ver o perfil da Cris"
+              accessibilityRole="button"
+              onPress={() => router.push('/cris-profile')}
+              style={({ pressed }) => [
+                styles.headerAvatarRing,
+                { backgroundColor: colors.surfaceAlt, borderColor: hexToRgba(colors.primary, 0.55) },
+                pressed && styles.pressed,
+              ]}
+            >
+              <Image accessibilityIgnoresInvertColors source={CRIS_AVATAR} style={styles.headerAvatar} />
+            </Pressable>
           </View>
           <View className="flex-row bg-surface border border-border rounded-2xl p-1 mt-5 mb-4">
             <Pressable
@@ -276,13 +321,26 @@ export default function ChatScreen() {
           </View>
         </View>
         <FlatList
+          ref={listRef}
           data={visibleMessages}
           keyExtractor={item => item.id}
           contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20, flexGrow: 1 }}
+          keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
+          keyboardShouldPersistTaps="handled"
+          /** Conteúdo cresceu (mensagem nova ou teclado abrindo): acompanha o fim. */
+          onContentSizeChange={() => scrollToLatest(false)}
           ListEmptyComponent={<View className="bg-surface border border-border rounded-2xl p-5 mt-4"><Text className="text-foreground font-bold">Ainda não há mensagens</Text><Text className="text-muted mt-1">Comece a conversa compartilhando uma dúvida ou material.</Text></View>}
           renderItem={({ item }) => <View className={`mb-3 max-w-[88%] ${item.isOwn ? 'self-end' : 'self-start'}`}><Text className="text-muted text-[11px] mb-1">{item.author} · {item.createdAt}</Text><View className={`rounded-2xl px-4 py-3 ${item.isOwn ? 'bg-primary rounded-tr-sm' : 'bg-surface border border-border rounded-tl-sm'}`}><Text className={item.isOwn ? 'text-white leading-5' : 'text-foreground leading-5'}>{item.text}</Text></View></View>}
         />
-        <View className="px-5 pt-2 border-t border-border bg-background" style={{ paddingBottom: navClearance }}>
+        {/*
+          Com o teclado aberto a folga do FAB/pílula (152/180 px) não faz
+          sentido — os dois estão atrás do teclado — e some para dar lugar ao
+          `keyboard.inset`. Fechado, a folga volta exatamente como antes.
+        */}
+        <View
+          className="px-5 pt-2 border-t border-border bg-background"
+          style={{ paddingBottom: keyboard.visible ? keyboard.inset + 12 : navClearance }}
+        >
           <View className="flex-row items-end bg-surface border border-border rounded-2xl px-3 py-2">
             <TextInput
               value={draft}
@@ -314,7 +372,7 @@ export default function ChatScreen() {
           </View>
           <Text className="text-muted text-[10px] mt-2 text-center">Pressione Enter para enviar. Conversas privadas são visíveis somente para os dois participantes.</Text>
         </View>
-      </KeyboardAvoidingView>
+      </View>
     </ScreenContainer>
   );
 }
@@ -326,11 +384,32 @@ function AuthPanel({ mode, setMode, email, setEmail, name, setName, password, se
       contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', paddingBottom: navClearance, paddingHorizontal: 24 }}
       keyboardShouldPersistTaps="handled"
     >
-      <View className="bg-primary rounded-3xl p-6 mb-5">
-        <Text className="text-indigo-100 text-sm">ESTUDO ORGANIZADO</Text>
-        <Text className="text-white text-3xl font-bold mt-1">Entre para conversar</Text>
-        <Text className="text-indigo-100 leading-5 mt-2">Crie uma identidade própria para participar da sala pública e conversar em particular com outros estudantes.</Text>
+      {/*
+        Hero em pílula translúcida (e não `bg-primary` sólido): no tema Neon o
+        primário é ciano vivo e o texto branco de 30 px ficava ilegível em cima
+        dele. Aqui o acento entra no fundo a 14%, no texto de apoio e na borda.
+      */}
+      <View
+        className="rounded-3xl p-6 mb-5"
+        style={{ backgroundColor: hexToRgba(colors.primary, 0.14), borderColor: hexToRgba(colors.primary, 0.4), borderWidth: 1 }}
+      >
+        <Text style={{ color: colors.primary, fontSize: 12, fontWeight: '800', letterSpacing: 1.2 }}>ESTUDO ORGANIZADO</Text>
+        <Text style={{ color: colors.foreground, fontSize: 26, fontWeight: '800', marginTop: 4 }}>Entre para conversar</Text>
+        <Text style={{ color: colors.muted, lineHeight: 20, marginTop: 8 }}>Crie uma identidade própria para participar da sala pública e conversar em particular com outros estudantes.</Text>
       </View>
+      {/*
+        A tela de login da Dolla (`app/login.tsx`) é a entrada oficial. Este
+        atalho existe para o painel antigo não virar uma segunda porta sem saída
+        — quem já estava acostumado com o formulário inline continua nele.
+      */}
+      <TouchableOpacity
+        accessibilityLabel="Abrir a tela de login da Cris"
+        accessibilityRole="button"
+        onPress={() => router.push('/login')}
+        style={[styles.loginShortcut, { borderColor: colors.border, borderRadius: 12, borderWidth: 1, marginBottom: 16 }]}
+      >
+        <Text style={{ color: colors.primary, fontWeight: '800' }}>Entrar pela tela de login da Cris →</Text>
+      </TouchableOpacity>
       <View className="bg-surface border border-border rounded-3xl p-5">
         {mode !== 'recovery' && <View className="flex-row bg-background rounded-xl p-1 mb-5">
           <Pressable
@@ -381,6 +460,14 @@ const styles = StyleSheet.create({
   authChoice: { alignItems: 'center', borderRadius: 10, flex: 1, justifyContent: 'center', minHeight: 42, paddingHorizontal: 8 },
   authSubmit: { alignItems: 'center', borderRadius: 12, justifyContent: 'center', marginTop: 16, minHeight: 50, paddingHorizontal: 16 },
   disabledButton: { opacity: 0.5 },
+  /**
+   * Avatar do header: anel de 1,5 px + foto circular de 34 px dentro de uma
+   * caixa de 44 px (alvo de toque do Material/Apple). O PNG já tem alpha fora
+   * do círculo, então o `backgroundColor` da caixa só aparece no respiro do anel.
+   */
+  headerAvatar: { borderRadius: 17, height: 34, width: 34 },
+  headerAvatarRing: { alignItems: 'center', borderRadius: 22, borderWidth: 1.5, height: 44, justifyContent: 'center', width: 44 },
+  loginShortcut: { alignItems: 'center', alignSelf: 'stretch', justifyContent: 'center', minHeight: 44, paddingHorizontal: 4 },
   pressed: { opacity: 0.84, transform: [{ scale: 0.98 }] },
   profileShortcut: { alignSelf: 'flex-start', minHeight: 34, justifyContent: 'center', marginTop: 5 },
   recoveryHeader: { borderRadius: 10, marginBottom: 14, padding: 12 },

@@ -139,19 +139,19 @@ function AccountContent({ colors }: { colors: ReturnType<typeof useColors> }) {
 
 function AppearanceContent({ colors, preference, resolved, onChange }: { colors: ReturnType<typeof useColors>; preference: ThemePreference; resolved: ColorScheme; onChange: (value: ThemePreference) => void }) {
   const choices: { key: ThemePreference; label: string; detail: string; swatch: string }[] = [
+    { key: 'sunrise', label: 'Manhã', detail: 'Sol nascendo sobre as montanhas', swatch: '#FFB259' },
+    { key: 'ocean', label: 'Tarde', detail: 'Ondas azuis e bolhas de luz', swatch: '#1E88C7' },
+    { key: 'sunset', label: 'Noite', detail: 'Pôr do sol entre nuvens e estrelas', swatch: '#FF7A5C' },
+    { key: 'neon', label: 'Madrugada', detail: 'Raios ciano e rosa no céu estrelado', swatch: SchemeColors.neon.primary },
     { key: 'light', label: 'Claro', detail: 'Leitura nítida', swatch: SchemeColors.light.primary },
     { key: 'dark', label: 'Escuro', detail: 'Conforto noturno', swatch: SchemeColors.dark.primary },
     { key: 'violet', label: 'Violeta', detail: 'Criativo e acadêmico', swatch: SchemeColors.violet.primary },
-    { key: 'ocean', label: 'Oceano', detail: 'Calmo e concentrado', swatch: SchemeColors.ocean.primary },
-    { key: 'contrast', label: 'Alto contraste', detail: 'Máxima legibilidade', swatch: SchemeColors.contrast.primary },
-    { key: 'sunrise', label: 'Amanhecer', detail: 'Tons quentes da manhã', swatch: SchemeColors.sunrise.primary },
-    { key: 'sunset', label: 'Entardecer', detail: 'Noite aconchegante', swatch: SchemeColors.sunset.primary },
-    { key: 'neon', label: 'Neon', detail: 'Ciano, magenta e dourado', swatch: SchemeColors.neon.primary },
-    { key: 'auto', label: 'Por hora do dia', detail: '5h–9h Amanhecer · 9h–17h Oceano · 17h–21h Entardecer · noite Neon', swatch: SchemeColors.neon.accentPink },
+    { key: 'contrast', label: 'Alto contraste', detail: 'Máxima legibilidade, sem arte de fundo', swatch: SchemeColors.contrast.primary },
+    { key: 'auto', label: 'Por hora do dia', detail: '0h–6h Madrugada · 6h–12h Manhã · 12h–18h Tarde · 18h–24h Noite', swatch: SchemeColors.neon.accentPink },
     { key: 'system', label: 'Sistema', detail: 'Segue o dispositivo', swatch: '#7C8496' },
   ];
-  const schemeLabels: Record<ColorScheme, string> = { light: 'Claro', dark: 'Escuro', violet: 'Violeta', ocean: 'Oceano', contrast: 'Alto contraste', sunrise: 'Amanhecer', sunset: 'Entardecer', neon: 'Neon' };
-  return <View style={styles.contentStack}><Text style={[styles.body, { color: colors.muted }]}>Escolha a atmosfera do seu espaço. A preferência é salva neste dispositivo e cada tema altera fundo, superfícies, textos, bordas e cor de ação.</Text>{preference === 'auto' ? <Text style={[styles.body, { color: colors.primary, fontWeight: '800' }]}>Modo automático agora ({new Date().getHours()}h): {schemeLabels[resolved]} — madrugada → Neon · manhã → Amanhecer · tarde → Oceano · noite → Entardecer.</Text> : null}<View style={styles.themeGrid}>{choices.map(choice => <TouchableOpacity key={choice.key} onPress={() => onChange(choice.key)} accessibilityRole="button" accessibilityState={{ selected: preference === choice.key }} style={[styles.themeChoice, { borderColor: colors.border }, preference === choice.key && { backgroundColor: `${choice.swatch}18`, borderColor: choice.swatch }]}><View style={[styles.themeSwatch, { backgroundColor: choice.swatch, borderColor: colors.border }]} /><Text style={[styles.themeLabel, { color: colors.foreground }]}>{choice.label}</Text><Text style={[styles.themeDetail, { color: colors.muted }]}>{choice.detail}</Text></TouchableOpacity>)}</View></View>;
+  const schemeLabels: Record<ColorScheme, string> = { light: 'Claro', dark: 'Escuro', violet: 'Violeta', ocean: 'Tarde', contrast: 'Alto contraste', sunrise: 'Manhã', sunset: 'Noite', neon: 'Madrugada' };
+  return <View style={styles.contentStack}><Text style={[styles.body, { color: colors.muted }]}>Escolha a atmosfera do seu espaço. A preferência é salva neste dispositivo e cada tema altera fundo, superfícies, textos, bordas e cor de ação.</Text>{preference === 'auto' ? <Text style={[styles.body, { color: colors.primary, fontWeight: '800' }]}>Modo automático agora ({new Date().getHours()}h): {schemeLabels[resolved]} — Madrugada → 0h–6h · Manhã → 6h–12h · Tarde → 12h–18h · Noite → 18h–24h.</Text> : null}<View style={styles.themeGrid}>{choices.map(choice => <TouchableOpacity key={choice.key} onPress={() => onChange(choice.key)} accessibilityRole="button" accessibilityState={{ selected: preference === choice.key }} style={[styles.themeChoice, { borderColor: colors.border }, preference === choice.key && { backgroundColor: `${choice.swatch}18`, borderColor: choice.swatch }]}><View style={[styles.themeSwatch, { backgroundColor: choice.swatch, borderColor: colors.border }]} /><Text style={[styles.themeLabel, { color: colors.foreground }]}>{choice.label}</Text><Text style={[styles.themeDetail, { color: colors.muted }]}>{choice.detail}</Text></TouchableOpacity>)}</View></View>;
 }
 
 function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }) {
@@ -442,3 +442,4 @@ const styles = StyleSheet.create({
   openContentButton: { borderRadius: 9, borderWidth: 1, paddingHorizontal: 10, paddingVertical: 8 },
   openContentLabel: { fontSize: 11, fontWeight: '900' },
 });
+

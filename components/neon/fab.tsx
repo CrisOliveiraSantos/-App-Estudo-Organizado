@@ -4,10 +4,10 @@
  * botão primário) e um anel rosa pulsando por fora (`pulseGlow 2s`, inset -3).
  *
  * O glifo `auto-awesome` (que parecia o ícone do Gemini) saiu: dentro do
- * gradiente agora vive o **rosto da Cris**, recortado do mockup oficial
- * (`assets/images/cris-avatar.png`, 160×160 com máscara circular e cantos
- * transparentes). O PNG tem fundo próprio, então o `borderRadius` do botão só
- * arredonda a caixa — o círculo da foto aparece inteiro sobre o gradiente.
+ * gradiente agora vive o **rosto da Cris**, recortado da arte oficial
+ * (`assets/brand/avatar/cris-avatar.png`, 512×512, alpha real). O PNG tem fundo
+ * próprio, então o `borderRadius` do botão só arredonda a caixa — o círculo da
+ * foto aparece inteiro sobre o gradiente.
  *
  * O estado, a posição e o `onPress` continuam em `components/cris-popup.tsx`;
  * aqui vive só a aparência e a animação.
@@ -24,10 +24,14 @@ import { glowShadow, neonGradientAngles, neonMotion, neonRadius } from '@/lib/th
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
 /**
- * Rosto da Cris. `require` estático para o Metro empacotar o PNG no APK (não é
- * asset remoto, então funciona offline e no build de release).
+ * Rosto da Cris em HD. `assets/brand/avatar/cris-avatar.png` é o recorte da arte
+ * oficial (`cris-avatar-novo-Mockup.png`, 1100×1100) com o xadrez do editor
+ * removido por flood-fill e o alpha do círculo preservado — antes o FAB usava um
+ * crop de 160×160 do mockup, que pixelava em tela densa. `require` estático para
+ * o Metro empacotar o PNG no APK (não é asset remoto: funciona offline e no
+ * release).
  */
-const CRIS_FACE = require('../../assets/images/cris-avatar.png');
+const CRIS_FACE = require('../../assets/brand/avatar/cris-avatar.png');
 
 export function NeonFab({ bottom, onPress, style }: { bottom?: number; onPress: () => void; style?: StyleProp<ViewStyle> }) {
   const { colors } = useAcademicPalette();

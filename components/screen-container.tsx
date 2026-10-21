@@ -1,6 +1,7 @@
 import { View, type ViewProps } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
+import { ThemeBackground } from "@/components/theme-background";
 import { cn } from "@/lib/utils";
 
 export interface ScreenContainerProps extends ViewProps {
@@ -21,6 +22,17 @@ export interface ScreenContainerProps extends ViewProps {
    * Additional className for the SafeAreaView (content layer).
    */
   safeAreaClassName?: string;
+  /**
+   * Arte de fundo do tema (sol, ondas, nuvens, explosão estelar). Ligada por
+   * padrão para que toda tela nascida de `ScreenContainer` já respire o tema
+   * ativo; `false` deixa o fundo liso (telas de leitura pura, PDF, dev labs).
+   */
+  background?: boolean;
+  /**
+   * Opacidade da camada de arte (0-1). O padrão `1` respeita o véu de contraste
+   * de cada tema; valores menores deixam as partículas do shell aparecerem.
+   */
+  backgroundOpacity?: number;
 }
 
 /**
@@ -45,6 +57,8 @@ export function ScreenContainer({
   containerClassName,
   safeAreaClassName,
   style,
+  background = true,
+  backgroundOpacity,
   ...props
 }: ScreenContainerProps) {
   return (
@@ -56,6 +70,7 @@ export function ScreenContainer({
       )}
       {...props}
     >
+      {background ? <ThemeBackground opacity={backgroundOpacity} /> : null}
       <SafeAreaView
         edges={edges}
         className={cn("flex-1", safeAreaClassName)}

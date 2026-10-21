@@ -162,7 +162,15 @@ export function NeonGradient({
   return (
     <View style={style}>
       <View pointerEvents="none" style={styles.gradientLayer}>
-        <Svg pointerEvents="none" style={StyleSheet.absoluteFill}>
+        {/*
+          `width`/`height` explícitos são obrigatórios: no web um `<svg>` sem
+          esses atributos assume o tamanho intrínseco de 300×150 (replaced
+          element) e o gradiente pintava um retângulo de 300×150 a partir do
+          canto do botão, vazando por cima do conteúdo seguinte em botões
+          baixos (ex.: "Entrar com Google", 304×52). O `style` absoluto sozinho
+          não estica o SVG — ele só posiciona a caixa.
+        */}
+        <Svg height="100%" pointerEvents="none" style={StyleSheet.absoluteFill} width="100%">
           <Defs>
             <LinearGradient id={gradientId} x1={vector.x1} x2={vector.x2} y1={vector.y1} y2={vector.y2}>
               <Stop offset="0" stopColor={spec.stops[0]} />

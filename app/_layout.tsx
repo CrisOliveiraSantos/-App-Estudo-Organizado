@@ -1,6 +1,6 @@
 import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Stack } from "expo-router";
+import { usePathname, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
@@ -22,13 +22,8 @@ import { trpc, createTRPCClient } from "@/lib/trpc";
 import { initManusRuntime, subscribeSafeAreaInsets } from "@/lib/_core/manus-runtime";
 import CrisPopup from "@/components/cris-popup";
 import { HomeShortcut } from "@/components/neon/home-shortcut";
-import {
-  Inter_400Regular,
-  Inter_600SemiBold,
-  Inter_700Bold,
-  Inter_800ExtraBold,
-  useFonts,
-} from "@expo-google-fonts/inter";
+import { Inter_400Regular, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from "@expo-google-fonts/inter";
+import { useFonts } from "expo-font";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -46,19 +41,38 @@ function ThemedStatusBar() {
   return <StatusBar style={isDarkScheme(scheme) ? "light" : "dark"} />;
 }
 
+/**
+ * Overlays do shell (FAB da Cris + atalho "Início"). A tela de login é uma rota
+ * de pilha fora das abas: FAB e atalho flutuando sobre ela davam a impressão de
+ * que o app já estava aberto, então eles saem de cena nessa rota.
+ */
+function GlobalOverlays() {
+  const pathname = usePathname();
+  if (pathname === "/login") return null;
+  return (
+    <>
+      <CrisPopup />
+      <HomeShortcut />
+    </>
+  );
+}
+
 export default function RootLayout() {
   const initialInsets = initialWindowMetrics?.insets ?? DEFAULT_WEB_INSETS;
   const initialFrame = initialWindowMetrics?.frame ?? DEFAULT_WEB_FRAME;
 
   /**
-   * Inter para os títulos (design da Tarefa 4). Sem a fonte carregada, o app
-   * ficaria com "flash" de fonte do sistema: seguramos a primeira pintura.
+   * Inter para os títulos (design da Tarefa 4) + Bodoni Moda para a marca
+   * (`assets/fonts/`, licença OFL ao lado dos TTFs). Sem as fontes carregadas o
+   * app ficaria com "flash" de fonte do sistema: seguramos a primeira pintura.
    */
   const [fontsLoaded, fontError] = useFonts({
     Inter_400Regular,
     Inter_600SemiBold,
     Inter_700Bold,
     Inter_800ExtraBold,
+    BodoniModa_400Regular: require("../assets/fonts/BodoniModa_400Regular.ttf"),
+    BodoniModa_700Bold: require("../assets/fonts/BodoniModa_700Bold.ttf"),
   });
 
   const [insets, setInsets] = useState<EdgeInsets>(initialInsets);
@@ -118,6 +132,7 @@ export default function RootLayout() {
           {/* in order for ios apps tab switching to work properly, use presentation: "fullScreenModal" for login page, whenever you decide to use presentation: "modal*/}
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
+            <Stack.Screen name="login" options={{ animation: "fade" }} />
             <Stack.Screen name="profile" />
             <Stack.Screen name="subject" />
             <Stack.Screen name="oauth/callback" />
@@ -130,8 +145,7 @@ export default function RootLayout() {
             <Stack.Screen name="import" />
             <Stack.Screen name="flashcards" />
           </Stack>
-          <CrisPopup />
-          <HomeShortcut />
+          <GlobalOverlays />
           <ThemedStatusBar />
         </QueryClientProvider>
       </trpc.Provider>

@@ -11,6 +11,20 @@ export function getSupabaseEmailRedirectUrl() {
   return Linking.createURL('auth/confirm');
 }
 
+/**
+ * Retorno do OAuth do Google. Cai na própria tela de login: na web o
+ * `detectSessionInUrl` do cliente Supabase consome o `?code=` sozinho e o
+ * listener de sessão leva para o chat; no nativo o
+ * `WebBrowser.openAuthSessionAsync` devolve a URL e `consumeSupabaseAuthLink`
+ * troca o código por sessão.
+ */
+export function getSupabaseOAuthRedirectUrl() {
+  if (Platform.OS === 'web' && typeof window !== 'undefined') {
+    return `${window.location.origin}${githubPagesBasePath}/login`;
+  }
+  return Linking.createURL('login');
+}
+
 function getLinkParams(url: string) {
   const [beforeHash, hash = ''] = url.split('#');
   const query = beforeHash.includes('?') ? beforeHash.slice(beforeHash.indexOf('?') + 1) : '';

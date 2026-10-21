@@ -156,13 +156,143 @@ export const neonType = {
   pill: { size: 11, weight: '800' },
 } as const;
 
-/** Tipografia do tema: Inter carregada no `RootLayout` (fallback = fonte do sistema). */
+/** Tipografia do tema: Inter + Bodoni Moda carregadas no `RootLayout` (fallback = fonte do sistema). */
 export const neonFonts = {
   body: 'Inter_400Regular',
   medium: 'Inter_600SemiBold',
   strong: 'Inter_700Bold',
   display: 'Inter_800ExtraBold',
+  /**
+   * Serifada da marca (`assets/fonts/BodoniModa_700Bold.ttf`, OFL em
+   * `assets/fonts/OFL-BodoniModa.txt`). É a letra do wordmark "Cris" no mockup
+   * de login e nos títulos de capa — não serve para corpo de texto (a Inter é
+   * mais legível em 13-16 px).
+   */
+  brand: 'BodoniModa_700Bold',
+  brandRegular: 'BodoniModa_400Regular',
 } as const;
+
+/**
+ * Os quatro temas da Dolla (Manhã, Tarde, Noite e Madrugada).
+ *
+ * Cada um é uma dupla indissociável: a paleta de UI que já vive em
+ * `SchemeColors` (`lib/_core/theme.ts`) **e** a arte de fundo desenhada em
+ * `components/theme-background.tsx`. Este módulo guarda só a direção de arte
+ * (céu, sol/lua, ondas, brilho e o véu que protege o contraste), porque os
+ * tokens de superfície/texto continuam vindo do esquema — assim o tema continua
+ * trocando cards, bordas e botões de uma vez, sem duplicar valores.
+ *
+ * `scrimAlpha` é o véu da cor `scrim` aplicado sobre o SVG. Sem ele as
+ * ilustrações (que são vibrantes no mockup) engoliriam o texto de 11-14 px;
+ * `vivid` no componente reduz o véu pela metade para a tela de login.
+ */
+export type ThemeScene = 'manha' | 'tarde' | 'noite' | 'madrugada';
+
+export type ThemePaletteSpec = {
+  /** Esquema de cores que esta arte acompanha. */
+  scheme: ColorScheme;
+  /** Nome do tema na interface (Ajustes › Aparência). */
+  label: string;
+  description: string;
+  /** Três paradas do céu, de cima para baixo. */
+  sky: readonly [string, string, string];
+  /** Cor do corpo luminoso (sol na Manhã, reflexo na Tarde, sol na Noite, núcleo na Madrugada). */
+  glow: string;
+  /** Cor principal da arte (raios, ondas, nuvens). */
+  accent: string;
+  /** Cor secundária/oposta (montanhas, bordas de onda, estrelas coloridas). */
+  accentAlt: string;
+  /** Base escura da cena (mar, silhuetas, céu profundo). */
+  deep: string;
+  /** Realce claro (espuma, brilho, estrela). */
+  soft: string;
+  /** Cor do véu de contraste. */
+  scrim: string;
+  /** Opacidade do véu no modo ambiente (0-1). */
+  scrimAlpha: number;
+};
+
+export const themePalettes: Record<ThemeScene, ThemePaletteSpec> = {
+  manha: {
+    scheme: 'sunrise',
+    label: 'Manhã',
+    description: 'Sol nascendo sobre as montanhas',
+    sky: ['#A7C0EE', '#FFD3A0', '#EDA37E'],
+    glow: '#FFE6A8',
+    accent: '#FFB259',
+    accentAlt: '#FF8A5B',
+    deep: '#7C5A82',
+    soft: '#FFF6E9',
+    scrim: '#FFF8EF',
+    scrimAlpha: 0.62,
+  },
+  tarde: {
+    scheme: 'ocean',
+    label: 'Tarde',
+    description: 'Ondas azuis e bolhas de luz',
+    sky: ['#DFF6FF', '#BFEAFA', '#8FD3EE'],
+    glow: '#BFF3FF',
+    accent: '#4FD3F0',
+    accentAlt: '#1E88C7',
+    deep: '#0F3A66',
+    soft: '#E8FBFF',
+    scrim: '#F0FBFF',
+    scrimAlpha: 0.55,
+  },
+  noite: {
+    scheme: 'sunset',
+    label: 'Noite',
+    description: 'Pôr do sol entre nuvens e estrelas',
+    sky: ['#1B1023', '#4A1E52', '#C24E5A'],
+    glow: '#FFC46B',
+    accent: '#FF7A5C',
+    accentAlt: '#9B4DCA',
+    deep: '#150A1F',
+    soft: '#FFE6C7',
+    scrim: '#140B1C',
+    scrimAlpha: 0.48,
+  },
+  madrugada: {
+    scheme: 'neon',
+    label: 'Madrugada',
+    description: 'Explosão de raios ciano e rosa no céu estrelado',
+    sky: ['#080A12', '#170933', '#2B0F52'],
+    glow: '#7DF9FF',
+    accent: '#00E5FF',
+    accentAlt: '#E34BFF',
+    deep: '#0A0718',
+    soft: '#F4F7FF',
+    scrim: '#080A12',
+    scrimAlpha: 0.44,
+  },
+} as const;
+
+/**
+ * Esquema → cena. Os quatro temas "de arte" têm cena própria; `light`/`dark`
+ * herdam a mais próxima e `contrast` fica **sem** fundo ilustrado de propósito
+ * (alto contraste não combina com céu, ondas e estrelas atrás do texto).
+ */
+export const themeSceneByScheme: Record<ColorScheme, ThemeScene | null> = {
+  contrast: null,
+  dark: 'noite',
+  light: 'manha',
+  neon: 'madrugada',
+  ocean: 'tarde',
+  sunrise: 'manha',
+  sunset: 'noite',
+  violet: 'noite',
+};
+
+/** Cena do esquema ativo (fallback: Madrugada, a arte padrão do app). */
+export function themeSceneFor(scheme: ColorScheme): ThemeScene {
+  return themeSceneByScheme[scheme] ?? 'madrugada';
+}
+
+/** Paleta de arte do esquema — `null` quando o tema não deve ter fundo ilustrado. */
+export function themePaletteFor(scheme: ColorScheme): ThemePaletteSpec | null {
+  const scene = themeSceneByScheme[scheme];
+  return scene ? themePalettes[scene] : null;
+}
 
 /** Partículas de fundo (`#particles`: 40 nós, `float 12s`, 4px, opacidade .15–.4). */
 export const neonParticles = {

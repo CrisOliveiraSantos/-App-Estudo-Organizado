@@ -8,6 +8,7 @@
 
 import type { ComponentProps } from 'react';
 
+import type { NeonGlyphName } from '@/components/neon/nav-glyph';
 import type { IconSymbol } from '@/components/ui/icon-symbol';
 import { dollaTokens } from '@/lib/theme-runtime';
 
@@ -23,6 +24,8 @@ export type NeonNavItem = {
   /** Rótulo da bottom nav e da sidebar (`pages[x]` do mockup). */
   label: string;
   icon: ComponentProps<typeof IconSymbol>['name'];
+  /** Glifo neon tracejado da bottom nav (`components/neon/nav-glyph.tsx`). */
+  glyph: NeonGlyphName;
   /** Eyebrow do topbar (`pages[x].eyebrow`). */
   eyebrow: string;
   /** Título do topbar (`pages[x].title`). */
@@ -31,6 +34,7 @@ export type NeonNavItem = {
 
 const HOME: NeonNavItem = {
   eyebrow: 'SEU ESPAÇO DE ESTUDOS',
+  glyph: 'hoje',
   icon: 'house.fill',
   label: 'Hoje',
   name: 'index',
@@ -40,11 +44,11 @@ const HOME: NeonNavItem = {
 
 export const NEON_NAV: readonly NeonNavItem[] = [
   HOME,
-  { eyebrow: 'IDEIAS QUE VIRAM CONHECIMENTO', icon: 'note.text', label: 'Editor', name: 'editor', route: '/editor', title: 'Seu Editor' },
-  { eyebrow: 'UM PASSO DE CADA VEZ', icon: 'chart.bar.fill', label: 'Planejamento', name: 'planning', route: '/planning', title: 'Cronograma e Metas' },
-  { eyebrow: 'TUDO NO SEU LUGAR', icon: 'book.fill', label: 'Biblioteca', name: 'library', route: '/library', title: 'Sua Biblioteca' },
-  { eyebrow: 'CONEXÕES', icon: 'bubble.left.and.bubble.right.fill', label: 'Conversas', name: 'chat', route: '/chat', title: 'Conversas' },
-  { eyebrow: 'DO SEU JEITO', icon: 'gearshape.fill', label: 'Ajustes', name: 'settings', route: '/settings', title: 'Preferências' },
+  { eyebrow: 'IDEIAS QUE VIRAM CONHECIMENTO', glyph: 'editor', icon: 'note.text', label: 'Editor', name: 'editor', route: '/editor', title: 'Seu Editor' },
+  { eyebrow: 'UM PASSO DE CADA VEZ', glyph: 'planejamento', icon: 'chart.bar.fill', label: 'Planejamento', name: 'planning', route: '/planning', title: 'Cronograma e Metas' },
+  { eyebrow: 'TUDO NO SEU LUGAR', glyph: 'biblioteca', icon: 'book.fill', label: 'Biblioteca', name: 'library', route: '/library', title: 'Sua Biblioteca' },
+  { eyebrow: 'CONEXÕES', glyph: 'conversas', icon: 'bubble.left.and.bubble.right.fill', label: 'Conversas', name: 'chat', route: '/chat', title: 'Conversas' },
+  { eyebrow: 'DO SEU JEITO', glyph: 'ajustes', icon: 'gearshape.fill', label: 'Ajustes', name: 'settings', route: '/settings', title: 'Preferências' },
 ];
 
 /** Métricas do mockup: `.app` 1480/26 · `.sidebar` 245 · `.bottomnav` 920/12-20 · `.fab` 64-56. */
