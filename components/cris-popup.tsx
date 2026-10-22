@@ -30,6 +30,7 @@ import { router, usePathname } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Modal,
   Platform,
@@ -65,6 +66,22 @@ const GREETING_BASE = 'Sou a Cris, sua mentora de estudos. Posso explicar um ass
 
 /** Telas que vivem dentro das abas (o FAB precisa ficar acima da barra). */
 const TAB_ROUTES = ['/', '/editor', '/planning', '/library', '/chat', '/settings'];
+
+/**
+ * Rosto da Cris (512×512, alpha real) — o mesmo PNG do FAB. Dentro do painel
+ * ele aparece no cabeçalho, na saudação e ao lado de cada resposta dela:
+ * antes eram glifos (`psychology`/`smart-toy`) e a usuária via "robôs" no chat.
+ */
+const CRIS_AVATAR = require('../assets/brand/avatar/cris-avatar.png');
+
+/** Iniciais para o avatar do usuário ("Ana Paula" → "AP"); vazio sem nome. */
+function userInitials(name?: string): string {
+  const parts = (name ?? '').trim().split(/\s+/).filter(Boolean);
+  if (!parts.length) return '';
+  const first = parts[0][0] ?? '';
+  const last = parts.length > 1 ? parts[parts.length - 1][0] ?? '' : '';
+  return `${first}${last}`.toUpperCase();
+}
 
 /* ------------------------------------------------------------------ *
  * Tipos internos
@@ -416,6 +433,8 @@ export default function CrisPopup() {
   const showHint = Boolean(hint) && prefs.suggestionsEnabled && !hintDismissed && turns.length === 0;
   const greeting = memory.name ? `Oi, ${memory.name}! ${GREETING_BASE}` : `Oi! ${GREETING_BASE}`;
   const knowsMe = !isCrisMemoryEmpty(memory);
+  /** Avatar do usuário: iniciais quando o "Sobre mim" tem nome, senão `person`. */
+  const initials = userInitials(memory.name);
 
   return (
     <>
@@ -440,12 +459,11 @@ export default function CrisPopup() {
               <View style={[styles.header, { borderBottomColor: colors.border }]}>
                 <View style={styles.mark}>
                   {/*
-                    Era o glifo "✦" (a estrela de quatro pontas do Gemini) no
-                    avatar do painel. A Cris tem identidade própria — a foto
-                    realista do FAB — então aqui entra um ícone neutro de
-                    "mentora/psicologia", não o símbolo da IA do Google.
+                    Era o glifo "✦" (a estrela de quatro pontas do Gemini) e
+                    depois um ícone de psicologia. A Cris tem identidade
+                    própria: aqui entra o rosto real dela, o mesmo do FAB.
                   */}
-                  <MaterialIcons name="psychology" size={19} color={academicColors.violet} />
+                  <Image accessibilityIgnoresInvertColors source={CRIS_AVATAR} style={styles.markPhoto} />
                 </View>
                 <View style={styles.headerText}>
                   <Text style={[styles.headerTitle, { color: colors.foreground }]}>Cris</Text>
@@ -506,8 +524,8 @@ export default function CrisPopup() {
               >
                 <View style={styles.intro}>
                   <View style={styles.introMark}>
-                    {/* Avatar pequeno ao lado da saudação: robô neutro no lugar do "✦". */}
-                    <MaterialIcons name="smart-toy" size={18} color={academicColors.violet} />
+                    {/* Saudação com o rosto da Cris (antes: robô/smart-toy). */}
+                    <Image accessibilityIgnoresInvertColors source={CRIS_AVATAR} style={styles.introPhoto} />
                   </View>
                   <Text style={[styles.introText, { color: colors.foreground }]}>{greeting}</Text>
                 </View>
@@ -571,14 +589,26 @@ export default function CrisPopup() {
                   const empty = !turn.text.trim();
                   return (
                     <View key={turn.id} style={[styles.turn, isUser ? styles.turnUser : styles.turnCris]}>
-                      <View
-                        style={[
-                          styles.bubble,
-                          isUser
-                            ? { backgroundColor: colors.primary, borderColor: colors.primary }
-                            : { backgroundColor: colors.background, borderColor: colors.border },
-                        ]}
-                      >
+                      <View style={[styles.bubbleRow, isUser && styles.bubbleRowUser]}>
+                        {isUser ? (
+                          <View style={[styles.turnAvatar, styles.turnAvatarUser, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
+                            {initials ? (
+                              <Text style={[styles.turnInitials, { color: colors.primary }]}>{initials}</Text>
+                            ) : (
+                              <MaterialIcons name="person" size={17} color={colors.muted} />
+                            )}
+                          </View>
+                        ) : (
+                          <Image accessibilityIgnoresInvertColors source={CRIS_AVATAR} style={styles.turnAvatar} />
+                        )}
+                        <View
+                          style={[
+                            styles.bubble,
+                            isUser
+                              ? { backgroundColor: colors.primary, borderColor: colors.primary }
+                              : { backgroundColor: colors.background, borderColor: colors.border },
+                          ]}
+                        >
                         {turn.pending && empty ? (
                           <View style={styles.thinking}>
                             <ActivityIndicator size="small" color={colors.primary} />
@@ -589,6 +619,7 @@ export default function CrisPopup() {
                             {empty && turn.canceled ? 'Chamada interrompida.' : turn.text}
                           </Text>
                         )}
+                        </View>
                       </View>
                       {!isUser && !turn.pending ? (
                         <Text style={[styles.meta, { color: colors.muted }]}>
@@ -709,7 +740,10 @@ export default function CrisPopup() {
 
 const styles = StyleSheet.create({
   backdrop: { bottom: 0, left: 0, position: 'absolute', right: 0, top: 0 },
-  bubble: { borderRadius: 14, borderWidth: 1, maxWidth: '92%', paddingHorizontal: 12, paddingVertical: 10 },
+  bubble: { borderRadius: 14, borderWidth: 1, flexShrink: 1, paddingHorizontal: 12, paddingVertical: 10 },
+  /** Bolha + avatar na mesma linha; o usuário espelha (avatar à direita). */
+  bubbleRow: { alignItems: 'flex-end', flexDirection: 'row', gap: 8, maxWidth: '100%' },
+  bubbleRowUser: { flexDirection: 'row-reverse' },
   bubbleText: { fontSize: 14, lineHeight: 20 },
   chip: { borderRadius: 999, borderWidth: 1, marginRight: 8, paddingHorizontal: 12, paddingVertical: 7 },
   chips: { borderTopWidth: 1, paddingHorizontal: 12, paddingVertical: 10 },
@@ -734,10 +768,12 @@ const styles = StyleSheet.create({
   inlineActionText: { fontSize: 12, fontWeight: '800' },
   input: { borderRadius: 14, borderWidth: 1, flex: 1, fontSize: 14, lineHeight: 19, marginRight: 8, maxHeight: 120, minHeight: 42, paddingHorizontal: 12, paddingVertical: 10 },
   intro: { alignItems: 'flex-start', flexDirection: 'row', marginBottom: 4 },
-  introMark: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 12, height: 32, justifyContent: 'center', marginRight: 10, width: 32 },
+  introMark: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 16, height: 32, justifyContent: 'center', marginRight: 10, overflow: 'hidden', width: 32 },
+  introPhoto: { height: '100%', width: '100%' },
   introText: { flex: 1, fontSize: 14, lineHeight: 20 },
   keyboard: { flex: 1 },
-  mark: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 12, height: 34, justifyContent: 'center', marginRight: 10, width: 34 },
+  mark: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 17, height: 34, justifyContent: 'center', marginRight: 10, overflow: 'hidden', width: 34 },
+  markPhoto: { height: '100%', width: '100%' },
   meta: { fontSize: 11, marginTop: 4 },
   note: { fontSize: 11, lineHeight: 15, paddingBottom: 12, paddingHorizontal: 14, paddingTop: 6 },
   overlay: { backgroundColor: 'rgba(15,19,32,0.42)', flex: 1 },
@@ -753,6 +789,9 @@ const styles = StyleSheet.create({
   thread: { flexBasis: 'auto', flexGrow: 1, flexShrink: 1 },
   threadContent: { padding: 14 },
   turn: { marginBottom: 14 },
+  turnAvatar: { borderRadius: 15, height: 30, overflow: 'hidden', width: 30 },
+  turnAvatarUser: { alignItems: 'center', borderWidth: 1, justifyContent: 'center' },
   turnCris: { alignItems: 'flex-start' },
+  turnInitials: { fontSize: 11, fontWeight: '800', letterSpacing: 0.2 },
   turnUser: { alignItems: 'flex-end' },
 });

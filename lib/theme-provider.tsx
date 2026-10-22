@@ -48,6 +48,11 @@ const ThemePaletteContext = createContext<ThemeColorPalette | null>(null);
 const ThemePreferenceContext = createContext<ThemePreference | null>(null);
 const ThemeActionsContext = createContext<ThemeActionsValue | null>(null);
 /**
+ * `true` depois que a preferência salva foi lida do `AsyncStorage`. O shell usa
+ * isso para não pintar o loading num tema e trocá-lo no frame seguinte.
+ */
+const ThemeReadyContext = createContext<boolean | null>(null);
+/**
  * v2 (Etapa 3): a chave foi versionada de propósito. A preferência antiga
  * ("light", salva antes do shell Neon) deixa de valer, então o primeiro acesso
  * depois da Etapa 3 abre no Neon; qualquer escolha feita a partir de agora é
@@ -61,6 +66,7 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   // (o `AsyncStorage` sobrescreve este padrão no primeiro efeito abaixo).
   const [colorScheme, setColorSchemeState] = useState<ColorScheme>("neon");
   const [themePreference, setThemePreferenceState] = useState<ThemePreference>("neon");
+  const [themeReady, setThemeReady] = useState(false);
   /**
    * `applyScheme` não chama `Appearance.setColorScheme` nem o setter global do
    * NativeWind: neste app todas as superfícies usam a paleta via `useColors`/
@@ -132,13 +138,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     let active = true;
-    void AsyncStorage.getItem(THEME_STORAGE_KEY).then(saved => {
-      const validThemes: ThemePreference[] = ['light', 'dark', 'violet', 'ocean', 'contrast', 'sunrise', 'sunset', 'neon', 'system', 'auto'];
-      if (!active || !validThemes.includes(saved as ThemePreference)) return;
-      const preference = saved as ThemePreference;
-      setThemePreferenceState(preference);
-      scheduleScheme(resolvePreference(preference));
-    });
+    void AsyncStorage.getItem(THEME_STORAGE_KEY)
+      .then(saved => {
+        const validThemes: ThemePreference[] = ['light', 'dark', 'violet', 'ocean', 'contrast', 'sunrise', 'sunset', 'neon', 'system', 'auto'];
+        if (!active || !validThemes.includes(saved as ThemePreference)) return;
+        const preference = saved as ThemePreference;
+        setThemePreferenceState(preference);
+        scheduleScheme(resolvePreference(preference));
+      })
+      /** Falha de leitura não pode deixar o app preso no loading: cai no Neon. */
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setThemeReady(true);
+      });
     return () => { active = false; };
   }, [resolvePreference, scheduleScheme]);
 
@@ -195,17 +207,19 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
     [colorScheme, themePreference, setColorScheme, setThemePreference],
   );
   return (
-    <ThemeActionsContext.Provider value={actions}>
-      <ThemePreferenceContext.Provider value={themePreference}>
-        <ThemeSchemeContext.Provider value={colorScheme}>
-          <ThemePaletteContext.Provider value={palette}>
-            <ThemeContext.Provider value={value}>
-              <View style={[{ flex: 1 }, themeVariables]}>{children}</View>
-            </ThemeContext.Provider>
-          </ThemePaletteContext.Provider>
-        </ThemeSchemeContext.Provider>
-      </ThemePreferenceContext.Provider>
-    </ThemeActionsContext.Provider>
+    <ThemeReadyContext.Provider value={themeReady}>
+      <ThemeActionsContext.Provider value={actions}>
+        <ThemePreferenceContext.Provider value={themePreference}>
+          <ThemeSchemeContext.Provider value={colorScheme}>
+            <ThemePaletteContext.Provider value={palette}>
+              <ThemeContext.Provider value={value}>
+                <View style={[{ flex: 1 }, themeVariables]}>{children}</View>
+              </ThemeContext.Provider>
+            </ThemePaletteContext.Provider>
+          </ThemeSchemeContext.Provider>
+        </ThemePreferenceContext.Provider>
+      </ThemeActionsContext.Provider>
+    </ThemeReadyContext.Provider>
   );
 }
 
@@ -247,6 +261,15 @@ export function useThemeActions(): ThemeActionsValue {
   const ctx = useContext(ThemeActionsContext);
   if (!ctx) {
     throw new Error("useThemeActions must be used within ThemeProvider");
+  }
+  return ctx;
+}
+
+/** `true` quando a preferência salva já foi lida (o loading espera por isso). */
+export function useThemeHydrated(): boolean {
+  const ctx = useContext(ThemeReadyContext);
+  if (ctx === null) {
+    throw new Error("useThemeHydrated must be used within ThemeProvider");
   }
   return ctx;
 }

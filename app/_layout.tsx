@@ -2,14 +2,14 @@ import "@/global.css";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { usePathname, Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import "react-native-reanimated";
 import { Platform } from "react-native";
 import "@/lib/_core/nativewind-pressable";
-import { ThemeProvider, useThemeScheme } from "@/lib/theme-provider";
+import { ThemeProvider, useThemeHydrated, useThemeScheme } from "@/lib/theme-provider";
 import { isDarkScheme } from "@/constants/theme";
-import { StudyProvider } from "@/lib/study-store";
+import { StudyProvider, useStudyHydrated } from "@/lib/study-store";
 import {
   SafeAreaFrameContext,
   SafeAreaInsetsContext,
@@ -24,6 +24,8 @@ import CrisPopup from "@/components/cris-popup";
 import { HomeShortcut } from "@/components/neon/home-shortcut";
 import { Inter_400Regular, Inter_600SemiBold, Inter_700Bold, Inter_800ExtraBold } from "@expo-google-fonts/inter";
 import { useFonts } from "expo-font";
+
+import { LoadingScreen } from "@/components/neon/loading-screen";
 
 const DEFAULT_WEB_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
 const DEFAULT_WEB_FRAME: Rect = { x: 0, y: 0, width: 0, height: 0 };
@@ -55,6 +57,44 @@ function GlobalOverlays() {
       <HomeShortcut />
     </>
   );
+}
+
+/**
+ * Tempo mínimo do loading. Em aparelho rápido, fontes + tema + `AsyncStorage`
+ * resolvem em um frame; sem este piso a tela de espera apareceria como um
+ * "flash" branco. 700 ms é o suficiente para a barra sair do zero sem atrasar
+ * quem já está com o app quente.
+ */
+const MIN_SPLASH_MS = 700;
+
+/**
+ * Portão de entrada do app.
+ *
+ * A navegação (o `<Stack>` inteiro) só monta quando as três leituras
+ * assíncronas terminaram:
+ *   - `useFonts` (Inter + Bodoni): sem elas a primeira pintura usaria a fonte
+ *     do sistema e "pularia" quando as fontes chegassem;
+ *   - `useThemeHydrated`: evita abrir no Neon e trocar para o tema salvo;
+ *   - `useStudyHydrated`: metas/tarefas/mensagens já são as reais no primeiro
+ *     frame (nada de tarefas de exemplo piscando na Home).
+ *
+ * Enquanto isso, `LoadingScreen` mostra a marca e o termômetro. O `children`
+ * não é renderizado (e não fica escondido atrás do loading): assim nenhuma
+ * tela monta, busca dados ou agenda animação antes da hora.
+ */
+function AppShell({ children, fontsReady }: { children: ReactNode; fontsReady: boolean }) {
+  const studyHydrated = useStudyHydrated();
+  const themeHydrated = useThemeHydrated();
+  const [minimumElapsed, setMinimumElapsed] = useState(false);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setMinimumElapsed(true), MIN_SPLASH_MS);
+    return () => clearTimeout(timer);
+  }, []);
+
+  const dataReady = fontsReady && themeHydrated && studyHydrated;
+  if (!dataReady || !minimumElapsed) return <LoadingScreen ready={dataReady} />;
+  return <>{children}</>;
 }
 
 export default function RootLayout() {
@@ -153,8 +193,8 @@ export default function RootLayout() {
   );
 
   const shouldOverrideSafeArea = Platform.OS === "web";
-
-  if (!fontsLoaded && !fontError) return null;
+  /** Falha de fonte não pode deixar o app preso no loading. */
+  const fontsReady = fontsLoaded || Boolean(fontError);
 
   if (shouldOverrideSafeArea) {
     return (
@@ -163,7 +203,7 @@ export default function RootLayout() {
         <SafeAreaProvider initialMetrics={providerInitialMetrics}>
           <SafeAreaFrameContext.Provider value={frame}>
             <SafeAreaInsetsContext.Provider value={insets}>
-              {content}
+              <AppShell fontsReady={fontsReady}>{content}</AppShell>
             </SafeAreaInsetsContext.Provider>
           </SafeAreaFrameContext.Provider>
 </SafeAreaProvider>
@@ -175,7 +215,9 @@ export default function RootLayout() {
   return (
     <ThemeProvider>
       <StudyProvider>
-      <SafeAreaProvider initialMetrics={providerInitialMetrics}>{content}</SafeAreaProvider>
+      <SafeAreaProvider initialMetrics={providerInitialMetrics}>
+        <AppShell fontsReady={fontsReady}>{content}</AppShell>
+      </SafeAreaProvider>
       </StudyProvider>
     </ThemeProvider>
   );

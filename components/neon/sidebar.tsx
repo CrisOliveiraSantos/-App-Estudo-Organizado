@@ -9,12 +9,18 @@
 
 import { router, usePathname } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
+import { Animated, Easing, Image, Platform, Pressable, StyleSheet, Text, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { NeonGradient, useAcademicPalette } from '@/components/academic/design-system';
 import { NEON_LAYOUT, NEON_NAV, neonItemForPath, type NeonNavItem } from '@/components/neon/nav-items';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { cardShadow, glowShadow, hexToRgba, neonMotion, neonRadius } from '@/lib/theme-runtime';
+
+/**
+ * Rosto da Cris no cartão da mentora. Era o glifo "✦" (lido como ícone do
+ * Gemini); o PNG é o mesmo do FAB e do chat, com alpha fora do círculo.
+ */
+const CRIS_AVATAR = require('../../assets/brand/avatar/cris-avatar.png');
 
 const USE_NATIVE_DRIVER = Platform.OS !== 'web';
 
@@ -106,7 +112,7 @@ export function NeonSidebar({ style }: { style?: StyleProp<ViewStyle> }) {
         <View style={[styles.mentor, { backgroundColor: colors.surfaceAlt, borderColor: colors.border }]}>
           <View style={styles.mentorRow}>
             <NeonGradient colors={[colors.primary, colors.accentPink]} style={styles.mentorAvatar}>
-              <Text style={styles.mentorAvatarText}>✦</Text>
+              <Image accessibilityIgnoresInvertColors source={CRIS_AVATAR} style={styles.mentorPhoto} />
             </NeonGradient>
             <View style={styles.mentorCopy}>
               <Text style={[styles.mentorName, { color: colors.foreground }]} numberOfLines={1}>Cris · Mentora IA</Text>
@@ -147,7 +153,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     width: 44,
   },
-  mentorAvatarText: { color: '#FFFFFF', fontSize: 20 },
+  mentorPhoto: { height: '100%', width: '100%' },
   mentorCopy: { flex: 1, minWidth: 0 },
   mentorName: { fontSize: 13, fontWeight: '800' },
   mentorNote: { fontSize: 12, lineHeight: 17, marginTop: 12 },

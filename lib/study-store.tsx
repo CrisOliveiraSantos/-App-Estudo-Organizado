@@ -131,6 +131,13 @@ const GoalsContext = createContext<Goal[] | null>(null);
 const SubjectsContext = createContext<Subject[] | null>(null);
 const EventsContext = createContext<AcademicEvent[] | null>(null);
 const ChatMessagesContext = createContext<ChatMessage[] | null>(null);
+/**
+ * `false` enquanto o `AsyncStorage` não devolveu os dados salvos. É o que
+ * segura a primeira pintura da navegação (`components/neon/loading-screen.tsx`):
+ * abrir a Home com o estado padrão e trocá-lo 1-2 s depois fazia as tarefas
+ * "piscarem" na tela.
+ */
+const StudyHydrationContext = createContext<boolean | null>(null);
 
 function useSlice<T>(context: React.Context<T | null>, hookName: string): T {
   const value = useContext(context);
@@ -359,21 +366,23 @@ export function StudyProvider({ children }: { children: React.ReactNode }) {
   const value = useMemo<Store>(() => ({ ...state, ...actions }), [state, actions]);
 
   return (
-    <StudyActionsContext.Provider value={actions}>
-      <NotesContext.Provider value={state.notes}>
-        <FoldersContext.Provider value={state.folders}>
-          <GoalsContext.Provider value={state.goals}>
-            <SubjectsContext.Provider value={state.subjects}>
-              <EventsContext.Provider value={state.events}>
-                <ChatMessagesContext.Provider value={state.chatMessages}>
-                  <StudyContext.Provider value={value}>{children}</StudyContext.Provider>
-                </ChatMessagesContext.Provider>
-              </EventsContext.Provider>
-            </SubjectsContext.Provider>
-          </GoalsContext.Provider>
-        </FoldersContext.Provider>
-      </NotesContext.Provider>
-    </StudyActionsContext.Provider>
+    <StudyHydrationContext.Provider value={hydrated}>
+      <StudyActionsContext.Provider value={actions}>
+        <NotesContext.Provider value={state.notes}>
+          <FoldersContext.Provider value={state.folders}>
+            <GoalsContext.Provider value={state.goals}>
+              <SubjectsContext.Provider value={state.subjects}>
+                <EventsContext.Provider value={state.events}>
+                  <ChatMessagesContext.Provider value={state.chatMessages}>
+                    <StudyContext.Provider value={value}>{children}</StudyContext.Provider>
+                  </ChatMessagesContext.Provider>
+                </EventsContext.Provider>
+              </SubjectsContext.Provider>
+            </GoalsContext.Provider>
+          </FoldersContext.Provider>
+        </NotesContext.Provider>
+      </StudyActionsContext.Provider>
+    </StudyHydrationContext.Provider>
   );
 }
 
@@ -411,4 +420,12 @@ export function useStudyEvents() {
 
 export function useStudyChatMessages() {
   return useSlice(ChatMessagesContext, 'useStudyChatMessages');
+}
+
+/**
+ * `true` quando o estado salvo já foi lido do `AsyncStorage` (ou a leitura
+ * falhou): a partir daí todos os dados que aparecem na tela são os reais.
+ */
+export function useStudyHydrated() {
+  return useSlice(StudyHydrationContext, 'useStudyHydrated');
 }

@@ -1,364 +1,79 @@
 /**
  * Fundo ilustrado dos quatro temas da Dolla (Manhã, Tarde, Noite e Madrugada).
  *
- * As referências são ilustrações raster 1600×2848 (`assets/images/tema … Mockup.png`)
- * com o xadrez do editor **queimado** no PNG, marca d'água "Dola AI" e cantos
- * arredondados — impróprias para `ImageBackground`. Em vez de embutir 4 imagens
- * de ~4 MB (e ficar preso à resolução do mockup), a cena é **desenhada em
- * `react-native-svg`**: escala sem serrilhado em qualquer densidade, acompanha a
- * paleta do tema e pesa alguns KB.
+ * Antes a cena era **desenhada em `react-native-svg`** (16 raios de sol,
+ * 54 estrelas, 46 raios da explosão, 22 bolhas, ondas, serras…). Em teoria era
+ * barato (alguns KB de marcação), mas no Android cada troca de tema obrigava o
+ * renderizador a recriar centenas de nós e recompô-los — era o "lag de tema":
+ * o toque no seletor de Ajustes travava por um instante e a interface só
+ * terminava de trocar depois de um salto visível.
  *
- * A geometria vive num `viewBox` fixo de 400×800 com
- * `preserveAspectRatio="xMidYMid slice"`, então o desenho cobre a tela inteira
- * em retrato, tablet e desktop (o excesso é recortado, como `background-size:
- * cover` no CSS).
+ * Agora a arte é **raster** (PNG 2160×4320) e trocar de tema é um crossfade
+ * entre duas `<Image>` com `resizeMode="cover"`: dois draws, `opacity` animada
+ * no driver nativo, nenhum nó de SVG para reconciliar. A geometria continua no
+ * repositório (`scripts/generate-theme-backgrounds.cjs`) — o script é a fonte
+ * da arte; para mudar uma ilustração, edite-o e rode
+ * `node scripts/generate-theme-backgrounds.cjs`.
  *
- * Contraste: por cima do SVG há um véu (`scrim`) na cor do tema. Sem ele o
+ * Contraste: por cima da imagem há um véu (`scrim`) na cor do tema. Sem ele o
  * céu/onda/estrela engole texto de 11-14 px. `vivid` corta o véu pela metade —
  * é o modo da tela de login, onde a arte é protagonista.
  */
 
-import { memo, useMemo, type ReactNode } from 'react';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
-import Svg, {
-  Circle,
-  Defs,
-  Ellipse,
-  G,
-  LinearGradient,
-  Line,
-  Path,
-  RadialGradient,
-  Rect,
-  Stop,
-} from 'react-native-svg';
+import { memo, useEffect, useRef, useState } from 'react';
+import {
+  Animated,
+  Easing,
+  Image,
+  StyleSheet,
+  View,
+  type ImageSourcePropType,
+  type StyleProp,
+  type ViewStyle,
+} from 'react-native';
 
 import { useThemeScheme } from '@/lib/theme-provider';
-import {
-  hexToRgba,
-  themePalettes,
-  themeSceneByScheme,
-  themeSceneGradientIds,
-  type ThemePaletteSpec,
-  type ThemeScene,
-} from '@/lib/theme-runtime';
+import { themePalettes, themeSceneByScheme, type ThemeScene } from '@/lib/theme-runtime';
 
-const CANVAS_WIDTH = 400;
-const CANVAS_HEIGHT = 800;
+/**
+ * `require` estático (e não caminho em string) para o Metro embutir os PNGs no
+ * APK e o bundler do web copiá-los com hash para `_expo/static`.
+ */
+const SCENE_SOURCES: Record<ThemeScene, ImageSourcePropType> = {
+  manha: require('../assets/brand/backgrounds/manha.png'),
+  tarde: require('../assets/brand/backgrounds/tarde.png'),
+  noite: require('../assets/brand/backgrounds/noite.png'),
+  madrugada: require('../assets/brand/backgrounds/madrugada.png'),
+};
 
-/** Gerador determinístico: a cena não pode "tremer" a cada render. */
-function seeded(seed: number) {
-  let state = seed;
-  return () => {
-    state = (state * 1664525 + 1013904223) % 4294967296;
-    return state / 4294967296;
-  };
-}
+/** Duração do crossfade na troca de tema (curto o bastante para não "arrastar"). */
+const FADE_MS = 420;
 
-/** Raios de sol: ângulos abertos para cima, comprimentos alternados. */
-const SUN_RAYS = Array.from({ length: 16 }, (_, index) => {
-  const angle = (-160 + index * 13.4) * (Math.PI / 180);
-  const length = 130 + (index % 3) * 58;
-  return {
-    length,
-    opacity: 0.22 + (index % 4) * 0.07,
-    width: index % 4 === 0 ? 2.6 : 1.4,
-    x2: 200 + Math.cos(angle) * length,
-    y2: 268 + Math.sin(angle) * length,
-  };
-});
-
-/** Estrelas da Noite/Madrugada (posição, raio e brilho fixos). */
-const STARS = (() => {
-  const random = seeded(20261021);
-  return Array.from({ length: 54 }, () => ({
-    opacity: 0.3 + random() * 0.6,
-    r: 0.6 + random() * 1.5,
-    x: Math.round(random() * CANVAS_WIDTH * 10) / 10,
-    y: Math.round(random() * 560 * 10) / 10,
-  }));
-})();
-
-/** Explosão estelar da Madrugada: raios saindo de um ponto alto à direita. */
-const BURST_RAYS = (() => {
-  const random = seeded(48271);
-  return Array.from({ length: 46 }, (_, index) => {
-    const angle = (index / 46) * Math.PI * 2 + random() * 0.08;
-    const length = 70 + random() * 260;
-    return {
-      cyan: index % 3 !== 0,
-      opacity: 0.16 + random() * 0.5,
-      width: 0.8 + random() * 2,
-      x1: 286,
-      x2: 286 + Math.cos(angle) * length,
-      y1: 262,
-      y2: 262 + Math.sin(angle) * length,
-    };
-  });
-})();
-
-/** Bolhas da Tarde. */
-const BUBBLES = (() => {
-  const random = seeded(7919);
-  return Array.from({ length: 22 }, () => ({
-    opacity: 0.25 + random() * 0.5,
-    r: 2 + random() * 9,
-    x: 10 + random() * 380,
-    y: 360 + random() * 400,
-  }));
-})();
-
-/** Faíscas de luz (Tarde/Noite/Manhã). */
-const SPARKS = [
-  { o: 0.8, r: 9, x: 74, y: 170 },
-  { o: 0.55, r: 6, x: 330, y: 120 },
-  { o: 0.7, r: 7, x: 250, y: 420 },
-  { o: 0.45, r: 5, x: 120, y: 90 },
-  { o: 0.6, r: 6, x: 356, y: 330 },
-];
-
-/** Estrela de quatro pontas (o "brilho" dos mockups). */
-function Sparkle({ color, opacity, r, x, y }: { color: string; opacity: number; r: number; x: number; y: number }) {
+function SceneLayer({
+  fade,
+  scene,
+  vivid,
+}: {
+  /** Quando presente, a camada entra em fade (a anterior fica embaixo, opaca). */
+  fade?: Animated.Value;
+  scene: ThemeScene;
+  vivid: boolean;
+}) {
+  const spec = themePalettes[scene];
+  const scrimAlpha = Math.min(1, spec.scrimAlpha * (vivid ? 0.5 : 1));
   return (
-    <Path
-      d={`M${x} ${y - r} Q${x} ${y} ${x + r} ${y} Q${x} ${y} ${x} ${y + r} Q${x} ${y} ${x - r} ${y} Q${x} ${y} ${x} ${y - r} Z`}
-      fill={color}
-      opacity={opacity}
-    />
+    <Animated.View style={[styles.layer, { opacity: fade ?? 1 }]}>
+      <Image
+        accessibilityIgnoresInvertColors
+        resizeMode="cover"
+        source={SCENE_SOURCES[scene]}
+        style={styles.image}
+      />
+      <View style={[StyleSheet.absoluteFill, { backgroundColor: spec.scrim, opacity: scrimAlpha }]} />
+    </Animated.View>
   );
 }
 
-function ManhaScene({ beam, spec, sun }: { beam: string; spec: ThemePaletteSpec; sun: string }) {
-  return (
-    <G>
-      <Circle cx={200} cy={268} fill={`url(#${sun})`} r={150} />
-      <Circle cx={200} cy={268} fill={hexToRgba(spec.soft, 0.96)} r={46} />
-      {SUN_RAYS.map((ray, index) => (
-        <Line
-          key={`sun-ray-${index}`}
-          opacity={ray.opacity}
-          stroke={`url(#${beam})`}
-          strokeLinecap="round"
-          strokeWidth={ray.width}
-          x1={200}
-          x2={ray.x2}
-          y1={268}
-          y2={ray.y2}
-        />
-      ))}
-      {/* nuvens finas, como no mockup */}
-      <Path d="M18 214 q26 -16 54 -6 q22 -16 48 -2 q24 -10 44 4 l0 9 l-146 0 z" fill={spec.soft} opacity={0.4} />
-      <Path d="M268 168 q22 -12 44 -4 q18 -12 40 0 q20 -6 36 6 l0 8 l-120 0 z" fill={spec.soft} opacity={0.28} />
-      {SPARKS.slice(0, 4).map((spark, index) => (
-        <Sparkle color={spec.soft} key={`manha-spark-${index}`} opacity={spark.o * 0.8} r={spark.r} x={spark.x} y={spark.y - 70} />
-      ))}
-      {/* serras em duas camadas */}
-      <Path
-        d="M0 512 L66 462 L124 502 L196 438 L262 496 L330 452 L400 500 L400 800 L0 800 Z"
-        fill={spec.accentAlt}
-        opacity={0.32}
-      />
-      <Path
-        d="M0 556 L86 514 L152 548 L232 494 L306 544 L400 510 L400 800 L0 800 Z"
-        fill={spec.deep}
-        opacity={0.55}
-      />
-      {/* mar com reflexos do sol */}
-      <Rect fill={spec.deep} height={230} opacity={0.55} width={CANVAS_WIDTH} y={570} />
-      {Array.from({ length: 9 }, (_, index) => (
-        <Rect
-          fill={spec.glow}
-          height={2.4}
-          key={`manha-glint-${index}`}
-          opacity={0.45 - index * 0.035}
-          rx={1.2}
-          width={150 - index * 9}
-          x={125 + index * 5}
-          y={604 + index * 22}
-        />
-      ))}
-    </G>
-  );
-}
-
-function TardeScene({ beam, spec }: { beam: string; spec: ThemePaletteSpec }) {
-  return (
-    <G>
-      {BUBBLES.map((bubble, index) => (
-        <Circle
-          cx={bubble.x}
-          cy={bubble.y}
-          fill="none"
-          key={`tarde-bubble-${index}`}
-          opacity={bubble.opacity}
-          r={bubble.r}
-          stroke={index % 2 === 0 ? spec.glow : spec.soft}
-          strokeWidth={1}
-        />
-      ))}
-      {SPARKS.slice(0, 3).map((spark, index) => (
-        <Sparkle color={spec.soft} key={`tarde-spark-${index}`} opacity={spark.o * 0.7} r={spark.r} x={spark.x + 20} y={spark.y} />
-      ))}
-      {/* quatro faixas de onda: da mais clara (fundo) à mais escura (frente) */}
-      <Path
-        d="M0 430 C 60 396, 118 470, 186 438 C 250 408, 306 462, 400 418 L400 800 L0 800 Z"
-        fill={spec.accent}
-        opacity={0.26}
-      />
-      <Path
-        d="M0 492 C 74 452, 132 528, 206 492 C 272 460, 330 520, 400 476 L400 800 L0 800 Z"
-        fill={spec.accentAlt}
-        opacity={0.38}
-      />
-      <Path
-        d="M0 566 C 82 522, 140 600, 214 562 C 286 526, 340 590, 400 548 L400 800 L0 800 Z"
-        fill={spec.deep}
-        opacity={0.62}
-      />
-      <Path
-        d="M0 654 C 88 606, 152 686, 232 646 C 302 610, 350 668, 400 630 L400 800 L0 800 Z"
-        fill={spec.deep}
-        opacity={0.82}
-      />
-      {/* cristas iluminadas */}
-      <Path
-        d="M0 430 C 60 396, 118 470, 186 438 C 250 408, 306 462, 400 418"
-        fill="none"
-        opacity={0.5}
-        stroke={`url(#${beam})`}
-        strokeWidth={1.6}
-      />
-      <Path
-        d="M0 492 C 74 452, 132 528, 206 492 C 272 460, 330 520, 400 476"
-        fill="none"
-        opacity={0.4}
-        stroke={spec.glow}
-        strokeWidth={1.2}
-      />
-    </G>
-  );
-}
-
-function NoiteScene({ beam, spec, sun }: { beam: string; spec: ThemePaletteSpec; sun: string }) {
-  return (
-    <G>
-      <Ellipse cx={200} cy={600} fill={`url(#${sun})`} rx={210} ry={150} />
-      <Circle cx={200} cy={596} fill={hexToRgba(spec.glow, 0.9)} r={26} />
-      {STARS.map((star, index) => (
-        <Circle
-          cx={star.x}
-          cy={star.y}
-          fill={index % 7 === 0 ? spec.glow : spec.soft}
-          key={`noite-star-${index}`}
-          opacity={star.opacity}
-          r={star.r}
-        />
-      ))}
-      {SPARKS.map((spark, index) => (
-        <Sparkle
-          color={spec.soft}
-          key={`noite-spark-${index}`}
-          opacity={spark.o * 0.6}
-          r={spark.r * 0.8}
-          x={spark.x}
-          y={spark.y + 40}
-        />
-      ))}
-      {/* nuvens em bloco, como no mockup do pôr do sol */}
-      <Path
-        d="M-10 190 q26 -34 66 -24 q16 -30 52 -22 q30 6 34 32 q30 0 34 26 l0 14 l-186 0 z"
-        fill={spec.accentAlt}
-        opacity={0.35}
-      />
-      <Path
-        d="M214 246 q22 -28 56 -20 q14 -24 44 -16 q26 6 30 26 q26 2 30 22 l0 12 l-160 0 z"
-        fill={spec.accentAlt}
-        opacity={0.26}
-      />
-      <Path
-        d="M40 330 q30 -28 70 -18 q18 -24 50 -14 q28 8 30 30 q26 4 28 22 l0 12 l-178 0 z"
-        fill={spec.deep}
-        opacity={0.5}
-      />
-      <Path
-        d="M-20 430 q30 -30 74 -20 q18 -26 52 -16 q30 8 32 32 q28 4 30 24 l0 12 l-188 0 z"
-        fill={spec.accentAlt}
-        opacity={0.22}
-      />
-      {/* mar escuro com reflexo */}
-      <Path d="M0 640 L400 640 L400 800 L0 800 Z" fill={spec.deep} opacity={0.9} />
-      <Path
-        d="M0 640 C 70 626, 130 656, 200 640 C 270 624, 330 652, 400 636"
-        fill="none"
-        opacity={0.35}
-        stroke={`url(#${beam})`}
-        strokeWidth={1.4}
-      />
-      {Array.from({ length: 6 }, (_, index) => (
-        <Rect
-          fill={spec.glow}
-          height={1.8}
-          key={`noite-reflect-${index}`}
-          opacity={0.3 - index * 0.035}
-          rx={0.9}
-          width={72 - index * 8}
-          x={164 + index * 4}
-          y={664 + index * 18}
-        />
-      ))}
-    </G>
-  );
-}
-
-function MadrugadaScene({ spec }: { spec: ThemePaletteSpec }) {
-  return (
-    <G>
-      {/* nebulosas suaves */}
-      <Ellipse cx={112} cy={214} fill={spec.accentAlt} opacity={0.16} rx={128} ry={86} />
-      <Ellipse cx={322} cy={520} fill={spec.accent} opacity={0.12} rx={150} ry={110} />
-      <Ellipse cx={286} cy={262} fill={spec.soft} opacity={0.14} rx={54} ry={54} />
-      <Circle cx={286} cy={262} fill={spec.soft} opacity={0.9} r={6} />
-      {BURST_RAYS.map((ray, index) => (
-        <Line
-          key={`burst-${index}`}
-          opacity={ray.opacity}
-          stroke={ray.cyan ? spec.accent : spec.accentAlt}
-          strokeLinecap="round"
-          strokeWidth={ray.width}
-          x1={ray.x1}
-          x2={ray.x2}
-          y1={ray.y1}
-          y2={ray.y2}
-        />
-      ))}
-      {STARS.map((star, index) => (
-        <Circle
-          cx={star.x}
-          cy={(star.y + 120) % 700}
-          fill={index % 5 === 0 ? spec.glow : spec.soft}
-          key={`madrugada-star-${index}`}
-          opacity={star.opacity * 0.85}
-          r={star.r}
-        />
-      ))}
-      {[
-        { o: 0.9, r: 16, x: 64, y: 96 },
-        { o: 0.75, r: 11, x: 342, y: 140 },
-        { o: 0.6, r: 8, x: 118, y: 460 },
-        { o: 0.7, r: 6, x: 316, y: 606 },
-      ].map((spark, index) => (
-        <Sparkle
-          color={spec.soft}
-          key={`madrugada-spark-${index}`}
-          opacity={spark.o}
-          r={spark.r}
-          x={spark.x}
-          y={spark.y}
-        />
-      ))}
-    </G>
-  );
-}
 
 type ThemeBackgroundProps = {
   /** Opacidade da camada inteira (deixa as partículas do shell respirarem). */
@@ -370,99 +85,65 @@ type ThemeBackgroundProps = {
   vivid?: boolean;
 };
 
-/**
- * Arte de cada cena montada **uma única vez por processo**.
- *
- * Antes, `ThemeBackground` recriava `<Defs>`, gradientes, serras, ondas e
- * estrelas em cada render — e o `useId()` gerava ids novos a cada montagem. Como
- * o fundo aparece em quase toda tela (e o `ScreenContainer` re-renderiza a cada
- * tecla digitada, a cada troca de aba e em cada passo da troca de tema), esse
- * trabalho caía na thread de UI justamente no momento do toque. O cache devolve
- * a MESMA árvore de elementos: o React compara por identidade, não reconcilia
- * filho por filho e o SVG só é redesenhado quando a cena muda de verdade.
- *
- * Os ids agora são por cena (`sky-manha`, `sun-noite`, …) e não por instância.
- * Duas telas com a mesma cena montadas ao mesmo tempo compartilham esses ids —
- * cada SVG resolve `url(#id)` pelo próprio documento/escopo, e as definições
- * são idênticas para a mesma cena, então o gradiente renderizado é o mesmo.
- */
-const sceneArtCache = new Map<ThemeScene, ReactNode>();
-
-function buildArtwork(scene: ThemeScene, spec: ThemePaletteSpec): ReactNode {
-  const { beam: beamId, sky: skyId, sun: sunId } = themeSceneGradientIds(scene);
-  return (
-    <>
-      <Defs>
-        <LinearGradient id={skyId} x1="0" x2="0" y1="0" y2="1">
-          <Stop offset="0" stopColor={spec.sky[0]} />
-          <Stop offset="0.52" stopColor={spec.sky[1]} />
-          <Stop offset="1" stopColor={spec.sky[2]} />
-        </LinearGradient>
-        <RadialGradient id={sunId}>
-          <Stop offset="0" stopColor={hexToRgba(spec.glow, 0.95)} />
-          <Stop offset="0.45" stopColor={hexToRgba(spec.glow, 0.34)} />
-          <Stop offset="1" stopColor={hexToRgba(spec.glow, 0)} />
-        </RadialGradient>
-        <LinearGradient id={beamId} x1="0" x2="1" y1="0" y2="1">
-          <Stop offset="0" stopColor={spec.accent} />
-          <Stop offset="1" stopColor={spec.accentAlt} />
-        </LinearGradient>
-      </Defs>
-      <Rect fill={`url(#${skyId})`} height={CANVAS_HEIGHT} width={CANVAS_WIDTH} x={0} y={0} />
-      {scene === 'manha' ? <ManhaScene beam={beamId} spec={spec} sun={sunId} /> : null}
-      {scene === 'tarde' ? <TardeScene beam={beamId} spec={spec} /> : null}
-      {scene === 'noite' ? <NoiteScene beam={beamId} spec={spec} sun={sunId} /> : null}
-      {scene === 'madrugada' ? <MadrugadaScene spec={spec} /> : null}
-    </>
-  );
-}
-
-function sceneArtwork(scene: ThemeScene, spec: ThemePaletteSpec): ReactNode {
-  const cached = sceneArtCache.get(scene);
-  if (cached) return cached;
-  const artwork = buildArtwork(scene, spec);
-  sceneArtCache.set(scene, artwork);
-  return artwork;
-}
-
 function ThemeBackgroundBase({ opacity = 1, scene, style, vivid = false }: ThemeBackgroundProps) {
   const scheme = useThemeScheme();
-  const activeScene = scene ?? themeSceneByScheme[scheme];
-  const spec = activeScene ? themePalettes[activeScene] : null;
+  const activeScene = scene ?? themeSceneByScheme[scheme] ?? null;
   /**
-   * `useMemo` + cache por cena: só recalcula quando o tema resolvido muda
-   * (`themePalettes` é estático, então `spec` mantém a identidade entre renders
-   * do mesmo tema). Fora da troca de tema o fundo é lido do cache.
+   * Duas camadas: `current` (a cena nova, entrando em fade) e `previous` (a
+   * antiga, opaca embaixo). Guardar as duas evita o "salto seco" da troca e,
+   * como cada cena é um PNG já decodificado, o custo é só mais um draw.
    */
-  const artwork = useMemo(
-    () => (activeScene && spec ? sceneArtwork(activeScene, spec) : null),
-    [activeScene, spec],
+  const [layers, setLayers] = useState<{ current: ThemeScene | null; previous: ThemeScene | null }>(
+    () => ({ current: activeScene, previous: null }),
   );
-  if (!spec || !activeScene || !artwork) return null;
+  const fade = useRef(new Animated.Value(1)).current;
 
-  const scrimAlpha = Math.min(1, spec.scrimAlpha * (vivid ? 0.5 : 1));
+  useEffect(() => {
+    setLayers(state => (state.current === activeScene ? state : { current: activeScene, previous: state.current }));
+  }, [activeScene]);
+
+  const previous = layers.previous;
+  useEffect(() => {
+    if (!previous) return;
+    fade.setValue(0);
+    const animation = Animated.timing(fade, {
+      duration: FADE_MS,
+      easing: Easing.inOut(Easing.quad),
+      toValue: 1,
+      /** `opacity` roda no driver nativo: a thread de JS pode ser interrompida sem travar o fade. */
+      useNativeDriver: true,
+    });
+    animation.start(({ finished }) => {
+      if (!finished) return;
+      /** Fim do crossfade: a camada antiga sai da árvore (só a imagem nova fica). */
+      setLayers(state => (state.previous ? { current: state.current, previous: null } : state));
+    });
+    return () => animation.stop();
+  }, [fade, previous]);
+
+  if (!layers.current && !layers.previous) return null;
 
   return (
-    <View pointerEvents="none" style={[styles.layer, { opacity }, style]}>
-      <Svg height="100%" preserveAspectRatio="xMidYMid slice" viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`} width="100%">
-        {artwork}
-      </Svg>
-      <View style={[StyleSheet.absoluteFill, { backgroundColor: spec.scrim, opacity: scrimAlpha }]} />
+    <View pointerEvents="none" style={[styles.container, { opacity }, style]}>
+      {layers.previous ? <SceneLayer scene={layers.previous} vivid={vivid} /> : null}
+      {layers.current ? (
+        <SceneLayer fade={layers.previous ? fade : undefined} scene={layers.current} vivid={vivid} />
+      ) : null}
     </View>
   );
 }
 
 /**
  * `memo`: o fundo é pintado por várias telas e não depende de nenhuma prop que
- * mude com teclado, formulário ou foco. Sem o `memo`, cada render do pai
- * re-renderizava a camada SVG inteira mesmo com `opacity`/`scene` idênticas.
- *
- * Assina só `useThemeScheme` (nome do tema), não a paleta: trocar de preferência
- * que resolve para a mesma cena não redesenha a arte.
+ * mude com teclado, formulário ou foco. Assina só `useThemeScheme` (nome do
+ * tema), não a paleta: trocar de preferência que resolve para a mesma cena não
+ * recria imagens.
  */
 export const ThemeBackground = memo(ThemeBackgroundBase);
 ThemeBackground.displayName = 'ThemeBackground';
 
 const styles = StyleSheet.create({
-  layer: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  container: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },
+  image: { ...StyleSheet.absoluteFillObject, height: '100%', width: '100%' },
+  layer: { ...StyleSheet.absoluteFillObject },
 });

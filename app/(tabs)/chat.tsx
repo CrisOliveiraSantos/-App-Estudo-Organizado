@@ -238,9 +238,28 @@ export default function ChatScreen() {
     void send();
   };
 
+  /**
+   * Item da lista com identidade estável: sem o `useCallback`, cada tecla no
+   * compositor recriava a função e o FlatList redesenhava as bolhas visíveis.
+   *
+   * Precisa ficar **antes** do `return` do `AuthPanel`: hooks não podem viver
+   * depois de uma saída antecipada (era o erro #310 do React ao sair do login).
+   */
+  const renderMessage = useCallback(
+    ({ item }: { item: VisibleMessage }) => (
+      <View className={`mb-3 max-w-[88%] ${item.isOwn ? 'self-end' : 'self-start'}`}>
+        <Text className="text-muted text-[11px] mb-1">{item.author} · {item.createdAt}</Text>
+        <View className={`rounded-2xl px-4 py-3 ${item.isOwn ? 'bg-primary rounded-tr-sm' : 'bg-surface border border-border rounded-tl-sm'}`}>
+          <Text className={item.isOwn ? 'text-white leading-5' : 'text-foreground leading-5'}>{item.text}</Text>
+        </View>
+      </View>
+    ),
+    [],
+  );
+
   if (!cloudUser && !localAccount) {
     return (
-      <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
+      <ScreenContainer edges={['bottom', 'left', 'right']}>
         <View className="flex-1" style={{ paddingBottom: keyboard.visible ? keyboard.inset : 0 }}>
           <AuthPanel
             navClearance={navClearance}
@@ -267,9 +286,15 @@ export default function ChatScreen() {
   const accountName = cloudUser?.displayName ?? localAccount?.displayName ?? 'Estudante';
   const privateRecipientReady = room === 'Sala pública' || Boolean(recipient.trim());
   return (
-    <ScreenContainer edges={['top', 'bottom', 'left', 'right']}>
+    <ScreenContainer edges={['bottom', 'left', 'right']}>
       <View className="flex-1">
-        <View className="px-5 pt-5">
+        {/*
+          O shell das abas já reserva o inset de cima (frame + topbar), então o
+          `SafeAreaView` daqui **não** repete `top` e o cabeçalho começa logo
+          abaixo da topbar: antes eram ~36 px perdidos (inset + `pt-5`) entre a
+          barra e "COMUNIDADE DE ESTUDOS".
+        */}
+        <View className="px-5 pt-2">
           <View className="flex-row items-start justify-between">
             <View className="flex-1 pr-3">
               {/*
@@ -301,7 +326,7 @@ export default function ChatScreen() {
               <Image accessibilityIgnoresInvertColors source={CRIS_AVATAR} style={styles.headerAvatar} />
             </Pressable>
           </View>
-          <View className="flex-row bg-surface border border-border rounded-2xl p-1 mt-5 mb-4">
+          <View className="flex-row bg-surface border border-border rounded-2xl p-1 mt-3 mb-3">
             <Pressable
               onPress={() => setRoom('Sala pública')}
               accessibilityRole="button"
@@ -342,15 +367,24 @@ export default function ChatScreen() {
            * web mantém a altura do conteúdo e a lista passa por baixo do input.
            */
           style={{ flex: 1, minHeight: 0 }}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16, flexGrow: 1 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 4, paddingBottom: 16, flexGrow: 1 }}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
+          /**
+           * Lista incremental: as conversas em nuvem podem ter centenas de
+           * mensagens e o mockup de banco local já traz um histórico. Só as 10
+           * primeiras entram no primeiro frame e a janela de montagem fica em
+           * 5 telas — trocar de aba não espera a lista inteira.
+           */
+          initialNumToRender={10}
+          maxToRenderPerBatch={10}
+          windowSize={5}
           /** Conteúdo cresceu (mensagem nova ou teclado abrindo): acompanha o fim. */
           onContentSizeChange={() => scrollToLatest(false)}
           ListEmptyComponent={<View className="bg-surface border border-border rounded-2xl p-5 mt-4"><Text className="text-foreground font-bold">Ainda não há mensagens</Text><Text className="text-muted mt-1">Comece a conversa compartilhando uma dúvida ou material.</Text></View>}
           /** Aviso de privacidade rola junto com as mensagens em vez de ocupar faixa fixa sobre elas. */
           ListFooterComponent={<Text className="text-muted text-[10px] mt-4 text-center leading-4">Conversas privadas são visíveis somente para os dois participantes.</Text>}
-          renderItem={({ item }) => <View className={`mb-3 max-w-[88%] ${item.isOwn ? 'self-end' : 'self-start'}`}><Text className="text-muted text-[11px] mb-1">{item.author} · {item.createdAt}</Text><View className={`rounded-2xl px-4 py-3 ${item.isOwn ? 'bg-primary rounded-tr-sm' : 'bg-surface border border-border rounded-tl-sm'}`}><Text className={item.isOwn ? 'text-white leading-5' : 'text-foreground leading-5'}>{item.text}</Text></View></View>}
+          renderItem={renderMessage}
         />
         {/*
           Compositor: fica **fora** da lista (a lista termina acima dele) e é o

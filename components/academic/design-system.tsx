@@ -580,11 +580,18 @@ export function NeonBanner({
 export function AcademicEmptyState({
   actionLabel,
   description,
+  icon,
   onAction,
   title,
 }: {
   actionLabel?: string;
   description: string;
+  /**
+   * Glifo opcional no selo. O padrão é um **check** (✓): a estrela de quatro
+   * pontas que ficava aqui era lida como o ícone do Gemini e não tem relação
+   * com "nada pendente".
+   */
+  icon?: ReactNode;
   onAction?: () => void;
   title: string;
 }) {
@@ -592,7 +599,7 @@ export function AcademicEmptyState({
   return (
     <AcademicCard style={styles.emptyState}>
       <View style={[styles.emptyMark, { backgroundColor: tones.accent.fill, borderColor: tones.accent.border }]}>
-        <Text style={[styles.emptyMarkText, { color: tones.accent.text }]}>✦</Text>
+        {icon ?? <Text style={[styles.emptyMarkText, { color: tones.accent.text }]}>✓</Text>}
       </View>
       <Text style={[styles.emptyTitle, { color: colors.foreground }]}>{title}</Text>
       <Text style={[styles.emptyDescription, { color: colors.muted }]}>{description}</Text>

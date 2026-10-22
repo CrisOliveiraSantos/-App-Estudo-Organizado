@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { View, type ViewProps } from "react-native";
 import { SafeAreaView, type Edge } from "react-native-safe-area-context";
 
@@ -50,7 +51,7 @@ export interface ScreenContainerProps extends ViewProps {
  * </ScreenContainer>
  * ```
  */
-export function ScreenContainer({
+function ScreenContainerBase({
   children,
   edges = ["top", "left", "right"],
   className,
@@ -81,3 +82,13 @@ export function ScreenContainer({
     </View>
   );
 }
+
+/**
+ * `memo`: a casca só depende das props (`edges`, classNames, opacidade do
+ * fundo). Sem ele, qualquer render do layout das abas — troca de aba, mudança
+ * de tema, abertura da Cris — reexecutava este componente e reconciliava a
+ * `SafeAreaView` inteira; com ele, um render de pai com as mesmas props para
+ * aqui. O fundo (`ThemeBackground`) já é memoizado por conta própria.
+ */
+export const ScreenContainer = memo(ScreenContainerBase);
+ScreenContainer.displayName = "ScreenContainer";
