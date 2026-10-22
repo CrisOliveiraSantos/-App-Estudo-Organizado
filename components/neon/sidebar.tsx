@@ -177,7 +177,14 @@ const styles = StyleSheet.create({
    * limites — o quadrado que vazava pelos cantos da sidebar. `surfaceAlt` é a 2ª
    * parada do gradiente e o SVG cobre o wrapper inteiro: base invisível.
    */
-  shadow: { borderRadius: neonRadius.sidebar, flex: 1 },
+  /**
+   * **Sem `flex: 1`.** A coluna é uma barra lateral de largura fixa (245) dentro
+   * da grade em linha do shell; `flex: 1` define `flex-basis: 0`, que vence o
+   * `width` e fazia a sidebar crescer até dividir a grade meio a meio com a
+   * coluna `.main` (683 × 683 numa janela de 1440). `flexShrink: 0` mantém os
+   * 245 px do `width` em qualquer largura de janela.
+   */
+  shadow: { borderRadius: neonRadius.sidebar, flexShrink: 0 },
   sidebar: {
     borderRadius: neonRadius.sidebar,
     borderWidth: 1,

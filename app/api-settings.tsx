@@ -284,9 +284,15 @@ export default function ApiSettingsScreen() {
     <ScreenContainer style={styles.screen}>
       <ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
         <View style={styles.header}>
-          <View>
-            <Text style={styles.eyebrow}>CRIS · APIS DE IA</Text>
-            <Text style={styles.title}>IA local ou API de terceiros</Text>
+          <View style={styles.headerCopy}>
+            <Text numberOfLines={1} style={styles.eyebrow}>CRIS · APIS DE IA</Text>
+            {/*
+              Auto-ajuste em vez de reticências: com o botão "Voltar" ao lado, a
+              coluna era espremida e o título longo aparecia cortado. `headerCopy`
+              (flex: 1) dá a largura e o `adjustsFontSizeToFit` reduz a fonte até
+              caber em uma linha, sem perder o texto.
+            */}
+            <Text adjustsFontSizeToFit minimumFontScale={0.68} numberOfLines={1} style={styles.title}>IA local ou API de terceiros</Text>
             <Text style={styles.subtitle}>
               Conecte a Cris a um servidor de IA no seu dispositivo (Ollama, LM Studio, llama.cpp) ou a um provedor na
               nuvem. O Estudo Organizado não hospeda nem paga por IA: a conexão sai direto do seu aparelho.
@@ -667,6 +673,7 @@ const styles = StyleSheet.create({
   screen: { backgroundColor: academicColors.canvas },
   content: { padding: 24, paddingBottom: 120, gap: 18 },
   header: { alignItems: 'flex-start', flexDirection: 'row', gap: 16, justifyContent: 'space-between' },
+  headerCopy: { flex: 1 },
   eyebrow: { color: academicColors.violet, fontSize: 11, fontWeight: '900', letterSpacing: 1.3 },
   title: { color: academicColors.ink, fontSize: 30, fontWeight: '900', lineHeight: 36, marginTop: 5 },
   subtitle: { color: academicColors.muted, fontSize: 14, lineHeight: 20, marginTop: 6, maxWidth: 640 },

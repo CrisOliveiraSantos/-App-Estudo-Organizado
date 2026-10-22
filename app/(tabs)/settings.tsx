@@ -65,8 +65,8 @@ export default function SettingsScreen() {
       <ScrollView contentContainerStyle={[styles.content, isWide && styles.contentWide, { paddingBottom: navClearance }]}>
         <View style={styles.heading}>
           <View style={styles.headingCopy}>
-            <Text style={[styles.overline, { color: academicColors.violet }]}>ESPAÇO PESSOAL</Text>
-            <Text style={[styles.title, { color: colors.foreground }]}>Configurações</Text>
+            <Text numberOfLines={1} style={[styles.overline, { color: academicColors.violet }]}>ESPAÇO PESSOAL</Text>
+            <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={[styles.title, { color: colors.foreground }]}>Configurações</Text>
             <Text style={[styles.subtitle, { color: colors.muted }]}>Um só lugar para cuidar do seu perfil, aparência e rotina de estudos.</Text>
           </View>
           <View style={[styles.ownerMark, { backgroundColor: academicColors.violetSoft, borderColor: colors.border }]}><Text style={styles.ownerMarkText}>C</Text></View>
@@ -154,6 +154,21 @@ function AppearanceContent({ colors, preference, resolved, onChange }: { colors:
   return <View style={styles.contentStack}><Text style={[styles.body, { color: colors.muted }]}>Escolha a atmosfera do seu espaço. A preferência é salva neste dispositivo e cada tema altera fundo, superfícies, textos, bordas e cor de ação.</Text>{preference === 'auto' ? <Text style={[styles.body, { color: colors.primary, fontWeight: '800' }]}>Modo automático agora ({new Date().getHours()}h): {schemeLabels[resolved]} — Madrugada → 0h–6h · Manhã → 6h–12h · Tarde → 12h–18h · Noite → 18h–24h.</Text> : null}<View style={styles.themeGrid}>{choices.map(choice => <TouchableOpacity key={choice.key} onPress={() => onChange(choice.key)} accessibilityRole="button" accessibilityState={{ selected: preference === choice.key }} style={[styles.themeChoice, { borderColor: colors.border }, preference === choice.key && { backgroundColor: `${choice.swatch}18`, borderColor: choice.swatch }]}><View style={[styles.themeSwatch, { backgroundColor: choice.swatch, borderColor: colors.border }]} /><Text style={[styles.themeLabel, { color: colors.foreground }]}>{choice.label}</Text><Text style={[styles.themeDetail, { color: colors.muted }]}>{choice.detail}</Text></TouchableOpacity>)}</View></View>;
 }
 
+/**
+ * Adia o trabalho pesado da conexão acadêmica (leitura do token protegido e,
+ * no modo automático, a sincronização completa com o Moodle) para **depois** do
+ * primeiro paint da seção. Antes, o mesmo commit que abria "Conexões" disparava
+ * `readAcademicToken()` e um `syncAcademic` inteiro: a aba congelava por alguns
+ * segundos, com o cabeçalho já visível e o conteúdo ainda vazio.
+ *
+ * `setTimeout` é usado de propósito em vez de `InteractionManager`: na web o
+ * `runAfterInteractions` não existe e o atraso curto já entrega o frame.
+ */
+function afterFirstPaint(work: () => void, delay = 400) {
+  const timer = setTimeout(work, delay);
+  return () => clearTimeout(timer);
+}
+
 function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }) {
   const [provider, setProvider] = useState<'moodle' | 'sigaa'>('moodle');
   const [url, setUrl] = useState('https://ead.ifsudestemg.edu.br');
@@ -176,7 +191,7 @@ function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }
   const events = useStudyEvents();
   const notes = useStudyNotes();
   const { addSubject, createNote, saveNote, addEvent, addSubjectTask } = useStudyActions();
-  useEffect(() => {
+  useEffect(() => afterFirstPaint(() => {
     AsyncStorage.getItem('@estudo-organizado/academic-connection').then(async raw => {
       if (!raw) return;
       try {
@@ -192,7 +207,7 @@ function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }
         setStatus('Não foi possível ler a preferência local.');
       }
     });
-  }, []);
+  }), []);
   const save = async () => {
     const normalized = url.trim().replace(/\/$/, '');
     if (!/^https:\/\//i.test(normalized)) {
@@ -259,8 +274,16 @@ function ConnectionsContent({ colors }: { colors: ReturnType<typeof useColors> }
   };
   useEffect(() => {
     if (syncMode !== 'automatic' || !token.trim() || autoSyncAttempted.current) return;
-    autoSyncAttempted.current = true;
-    void handleFullSync();
+    /**
+     * A sincronização automática espera a seção pintar (e a leitura do token
+     * terminar) antes de bater no Web Service do AVA. O `ref` é reconferido
+     * dentro do callback porque o efeito roda de novo quando `token` chega.
+     */
+    return afterFirstPaint(() => {
+      if (autoSyncAttempted.current) return;
+      autoSyncAttempted.current = true;
+      void handleFullSync();
+    }, 900);
   }, [syncMode, token]); // eslint-disable-line react-hooks/exhaustive-deps
   const openContent = async (item: MoodleContentItem) => { const urlToOpen = item.youtubeUrl || item.url || item.files?.find(file => file.url)?.url; if (urlToOpen) await WebBrowser.openBrowserAsync(urlToOpen); };
   return <View style={styles.contentStack}>

@@ -294,6 +294,20 @@ export function themePaletteFor(scheme: ColorScheme): ThemePaletteSpec | null {
   return scene ? themePalettes[scene] : null;
 }
 
+/**
+ * Ids dos gradientes de uma cena (`sky`/`sun`/`beam`).
+ *
+ * Eles são **derivados da cena**, não da instância do componente: o
+ * `ThemeBackground` memoriza a árvore SVG por cena (`components/theme-background.tsx`)
+ * e, para o React reaproveitar os mesmos elementos entre renders, os ids também
+ * precisam ser estáveis. Antes vinham de `useId()` (um id novo por montagem), o
+ * que obrigava a recriar `<Defs>` e todos os filhos a cada render — uma das
+ * fontes do engasgo na troca de tema.
+ */
+export function themeSceneGradientIds(scene: ThemeScene) {
+  return { beam: `beam-${scene}`, sky: `sky-${scene}`, sun: `sun-${scene}` } as const;
+}
+
 /** Partículas de fundo (`#particles`: 40 nós, `float 12s`, 4px, opacidade .15–.4). */
 export const neonParticles = {
   count: 40,

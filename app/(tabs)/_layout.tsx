@@ -80,14 +80,35 @@ export default function TabLayout() {
   /**
    * A pílula vive dentro da coluna `.main`, então o alvo de 920 px do mockup é
    * aplicado à largura dessa coluna (não à da janela) e fica centralizado nela.
+   *
+   * Ela é `position: absolute`, portanto quem a dimensiona é o `tabBarStyle` — e
+   * esse estilo fica **congelado no primeiro paint**. No web o primeiro paint roda
+   * com `useWindowDimensions()` = 0 (react-native-web só mede a janela depois de
+   * montar e, no build estático, não reemite até o primeiro `resize`). Somando as
+   * duas coisas, um `width` calculado a partir do hook chegava 0 e assim ficava:
+   * pílula de 10 px (só padding + borda) com os seis rótulos empilhados no canto
+   * inferior esquerdo, e o conteúdo das abas reservando a folga de uma barra que
+   * não aparecia.
+   *
+   * Daí a geometria por plataforma: no **web** `left`/`right` zerados esticam a
+   * pílula na coluna `.main` (o pai posicionado), `maxWidth` segura os 920 px e as
+   * margens automáticas centralizam — nada depende de medida pós-mount, então o
+   * primeiro paint já sai certo em qualquer largura. No **nativo** as dimensões
+   * são confiáveis desde o primeiro render (e o Yoga não centraliza caixa
+   * absoluta com margem automática), então `left`/`width` continuam explícitos.
    */
-  const shellWidth = Math.min(width, NEON_LAYOUT.shellMaxWidth);
   const sceneWidth = Math.max(
-    shellWidth - 2 * shellPadding - (wide ? NEON_LAYOUT.sidebarWidth + NEON_LAYOUT.gapWide : 0),
+    Math.min(width, NEON_LAYOUT.shellMaxWidth) -
+      2 * shellPadding -
+      (wide ? NEON_LAYOUT.sidebarWidth + NEON_LAYOUT.gapWide : 0),
     0,
   );
   const navWidth = wide ? Math.min(NEON_LAYOUT.navMaxWidth, sceneWidth) : sceneWidth;
   const navLeft = Math.max((sceneWidth - navWidth) / 2, 0);
+  const navGeometry: ViewStyle =
+    Platform.OS === 'web'
+      ? { left: 0, marginHorizontal: 'auto', maxWidth: NEON_LAYOUT.navMaxWidth, right: 0 }
+      : { left: navLeft, width: navWidth };
   /**
    * A pílula do mockup (`.bottomnav`) é `position:fixed; bottom:12-20px`, isto é,
    * medida da JANELA. Aqui ela é `position:absolute` e o pai é a cena, portanto o
@@ -146,8 +167,7 @@ export default function TabLayout() {
                       borderColor: colors.border,
                       bottom: navBottom,
                       height: navHeight,
-                      left: navLeft,
-                      width: navWidth,
+                      ...navGeometry,
                     },
                     webBlur,
                   ],

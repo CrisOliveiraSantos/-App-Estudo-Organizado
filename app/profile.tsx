@@ -58,7 +58,7 @@ export default function ProfileScreen() {
 
   return <ScreenContainer edges={['top', 'bottom', 'left', 'right']} style={[styles.screen, { backgroundColor: colors.background }]}><ScrollView contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
     <TouchableOpacity onPress={() => router.back()} accessibilityRole="button" accessibilityLabel="Voltar para Configurações" style={styles.back}><Text style={[styles.backText, { color: colors.primary }]}>← Voltar para Ajustes</Text></TouchableOpacity>
-    <Text style={styles.overline}>CONTA E PERFIL</Text><Text style={[styles.title, { color: colors.foreground }]}>Meu perfil</Text><Text style={[styles.subtitle, { color: colors.muted }]}>Seu nome e seu contexto ficam salvos neste aparelho — a Cris usa para te chamar pelo nome. Com uma conta, o nome também aparece nas áreas conectadas.</Text>
+    <Text style={styles.overline}>CONTA E PERFIL</Text><Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={[styles.title, { color: colors.foreground }]}>Meu perfil</Text><Text style={[styles.subtitle, { color: colors.muted }]}>Seu nome e seu contexto ficam salvos neste aparelho — a Cris usa para te chamar pelo nome. Com uma conta, o nome também aparece nas áreas conectadas.</Text>
     {(loading || accountLoading) ? <ActivityIndicator color={colors.primary} style={styles.spinner} /> : <>
       <AcademicCard style={[styles.card, { backgroundColor: colors.surface, borderColor: colors.border }]}>
         <Text style={[styles.cardTitle, { color: colors.foreground }]}>Seus dados</Text>

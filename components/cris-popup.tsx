@@ -262,6 +262,16 @@ export default function CrisPopup() {
   const bottomPadding = Platform.OS === 'web' ? 12 : Math.max(insets.bottom, 8);
   // Dentro das abas o FAB se posiciona sozinho, colado na bottom nav do shell.
   const fabBottom = TAB_ROUTES.includes(route) ? undefined : bottomPadding + 26;
+  /**
+   * A aba Conversas tem um compositor próprio grudado na barra inferior. O FAB
+   * pairava 16 px acima da pílula — exatamente sobre o campo de digitação — e o
+   * compositor tinha de reservar a faixa dele (`neonFabClearance` = 176 px) para
+   * não ficar embaixo do botão, o que deixava o "espaço vazio" e a lista
+   * espremida. Nesta rota a Cris continua a um toque no avatar do cabeçalho
+   * (`/cris-profile`), então o FAB sai de cena — mesmo critério do `/login`,
+   * onde os overlays também não aparecem.
+   */
+  const showFab = route !== '/chat';
 
   const toggleSuggestions = useCallback(() => {
     const next: PopupPrefs = { suggestionsEnabled: !prefs.suggestionsEnabled };
@@ -409,7 +419,7 @@ export default function CrisPopup() {
 
   return (
     <>
-      <NeonFab bottom={fabBottom} onPress={openPopup} />
+      {showFab ? <NeonFab bottom={fabBottom} onPress={openPopup} /> : null}
 
       <Modal visible={open} transparent animationType="fade" onRequestClose={closePopup}>
         <KeyboardAvoidingView
@@ -429,7 +439,13 @@ export default function CrisPopup() {
             >
               <View style={[styles.header, { borderBottomColor: colors.border }]}>
                 <View style={styles.mark}>
-                  <Text style={styles.markText}>✦</Text>
+                  {/*
+                    Era o glifo "✦" (a estrela de quatro pontas do Gemini) no
+                    avatar do painel. A Cris tem identidade própria — a foto
+                    realista do FAB — então aqui entra um ícone neutro de
+                    "mentora/psicologia", não o símbolo da IA do Google.
+                  */}
+                  <MaterialIcons name="psychology" size={19} color={academicColors.violet} />
                 </View>
                 <View style={styles.headerText}>
                   <Text style={[styles.headerTitle, { color: colors.foreground }]}>Cris</Text>
@@ -470,7 +486,7 @@ export default function CrisPopup() {
                   onPress={clearHistory}
                   style={({ pressed }) => [styles.iconButton, pressed && styles.pressed]}
                 >
-                  <MaterialIcons name="delete-sweep" size={20} color={colors.muted} />
+                  <MaterialIcons name="history" size={20} color={colors.muted} />
                 </Pressable>
                 <Pressable
                   accessibilityRole="button"
@@ -490,7 +506,8 @@ export default function CrisPopup() {
               >
                 <View style={styles.intro}>
                   <View style={styles.introMark}>
-                    <Text style={styles.introMarkText}>✦</Text>
+                    {/* Avatar pequeno ao lado da saudação: robô neutro no lugar do "✦". */}
+                    <MaterialIcons name="smart-toy" size={18} color={academicColors.violet} />
                   </View>
                   <Text style={[styles.introText, { color: colors.foreground }]}>{greeting}</Text>
                 </View>
@@ -718,11 +735,9 @@ const styles = StyleSheet.create({
   input: { borderRadius: 14, borderWidth: 1, flex: 1, fontSize: 14, lineHeight: 19, marginRight: 8, maxHeight: 120, minHeight: 42, paddingHorizontal: 12, paddingVertical: 10 },
   intro: { alignItems: 'flex-start', flexDirection: 'row', marginBottom: 4 },
   introMark: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 12, height: 32, justifyContent: 'center', marginRight: 10, width: 32 },
-  introMarkText: { color: academicColors.violet, fontSize: 16, fontWeight: '800' },
   introText: { flex: 1, fontSize: 14, lineHeight: 20 },
   keyboard: { flex: 1 },
   mark: { alignItems: 'center', backgroundColor: academicColors.violetSoft, borderRadius: 12, height: 34, justifyContent: 'center', marginRight: 10, width: 34 },
-  markText: { color: academicColors.violet, fontSize: 17, fontWeight: '800' },
   meta: { fontSize: 11, marginTop: 4 },
   note: { fontSize: 11, lineHeight: 15, paddingBottom: 12, paddingHorizontal: 14, paddingTop: 6 },
   overlay: { backgroundColor: 'rgba(15,19,32,0.42)', flex: 1 },

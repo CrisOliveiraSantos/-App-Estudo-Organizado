@@ -18,7 +18,7 @@
  * é o modo da tela de login, onde a arte é protagonista.
  */
 
-import { useId } from 'react';
+import { memo, useMemo, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Svg, {
   Circle,
@@ -38,6 +38,7 @@ import {
   hexToRgba,
   themePalettes,
   themeSceneByScheme,
+  themeSceneGradientIds,
   type ThemePaletteSpec,
   type ThemeScene,
 } from '@/lib/theme-runtime';
@@ -359,12 +360,7 @@ function MadrugadaScene({ spec }: { spec: ThemePaletteSpec }) {
   );
 }
 
-export function ThemeBackground({
-  opacity = 1,
-  scene,
-  style,
-  vivid = false,
-}: {
+type ThemeBackgroundProps = {
   /** Opacidade da camada inteira (deixa as partículas do shell respirarem). */
   opacity?: number;
   /** Força uma cena; por padrão segue o tema ativo. */
@@ -372,48 +368,100 @@ export function ThemeBackground({
   style?: StyleProp<ViewStyle>;
   /** Véu mais leve: a arte aparece quase inteira (tela de login). */
   vivid?: boolean;
-}) {
+};
+
+/**
+ * Arte de cada cena montada **uma única vez por processo**.
+ *
+ * Antes, `ThemeBackground` recriava `<Defs>`, gradientes, serras, ondas e
+ * estrelas em cada render — e o `useId()` gerava ids novos a cada montagem. Como
+ * o fundo aparece em quase toda tela (e o `ScreenContainer` re-renderiza a cada
+ * tecla digitada, a cada troca de aba e em cada passo da troca de tema), esse
+ * trabalho caía na thread de UI justamente no momento do toque. O cache devolve
+ * a MESMA árvore de elementos: o React compara por identidade, não reconcilia
+ * filho por filho e o SVG só é redesenhado quando a cena muda de verdade.
+ *
+ * Os ids agora são por cena (`sky-manha`, `sun-noite`, …) e não por instância.
+ * Duas telas com a mesma cena montadas ao mesmo tempo compartilham esses ids —
+ * cada SVG resolve `url(#id)` pelo próprio documento/escopo, e as definições
+ * são idênticas para a mesma cena, então o gradiente renderizado é o mesmo.
+ */
+const sceneArtCache = new Map<ThemeScene, ReactNode>();
+
+function buildArtwork(scene: ThemeScene, spec: ThemePaletteSpec): ReactNode {
+  const { beam: beamId, sky: skyId, sun: sunId } = themeSceneGradientIds(scene);
+  return (
+    <>
+      <Defs>
+        <LinearGradient id={skyId} x1="0" x2="0" y1="0" y2="1">
+          <Stop offset="0" stopColor={spec.sky[0]} />
+          <Stop offset="0.52" stopColor={spec.sky[1]} />
+          <Stop offset="1" stopColor={spec.sky[2]} />
+        </LinearGradient>
+        <RadialGradient id={sunId}>
+          <Stop offset="0" stopColor={hexToRgba(spec.glow, 0.95)} />
+          <Stop offset="0.45" stopColor={hexToRgba(spec.glow, 0.34)} />
+          <Stop offset="1" stopColor={hexToRgba(spec.glow, 0)} />
+        </RadialGradient>
+        <LinearGradient id={beamId} x1="0" x2="1" y1="0" y2="1">
+          <Stop offset="0" stopColor={spec.accent} />
+          <Stop offset="1" stopColor={spec.accentAlt} />
+        </LinearGradient>
+      </Defs>
+      <Rect fill={`url(#${skyId})`} height={CANVAS_HEIGHT} width={CANVAS_WIDTH} x={0} y={0} />
+      {scene === 'manha' ? <ManhaScene beam={beamId} spec={spec} sun={sunId} /> : null}
+      {scene === 'tarde' ? <TardeScene beam={beamId} spec={spec} /> : null}
+      {scene === 'noite' ? <NoiteScene beam={beamId} spec={spec} sun={sunId} /> : null}
+      {scene === 'madrugada' ? <MadrugadaScene spec={spec} /> : null}
+    </>
+  );
+}
+
+function sceneArtwork(scene: ThemeScene, spec: ThemePaletteSpec): ReactNode {
+  const cached = sceneArtCache.get(scene);
+  if (cached) return cached;
+  const artwork = buildArtwork(scene, spec);
+  sceneArtCache.set(scene, artwork);
+  return artwork;
+}
+
+function ThemeBackgroundBase({ opacity = 1, scene, style, vivid = false }: ThemeBackgroundProps) {
   const scheme = useThemeScheme();
-  const rawId = useId();
-  const uid = rawId.replace(/[^a-zA-Z0-9]/g, '');
   const activeScene = scene ?? themeSceneByScheme[scheme];
   const spec = activeScene ? themePalettes[activeScene] : null;
-  if (!spec || !activeScene) return null;
+  /**
+   * `useMemo` + cache por cena: só recalcula quando o tema resolvido muda
+   * (`themePalettes` é estático, então `spec` mantém a identidade entre renders
+   * do mesmo tema). Fora da troca de tema o fundo é lido do cache.
+   */
+  const artwork = useMemo(
+    () => (activeScene && spec ? sceneArtwork(activeScene, spec) : null),
+    [activeScene, spec],
+  );
+  if (!spec || !activeScene || !artwork) return null;
 
   const scrimAlpha = Math.min(1, spec.scrimAlpha * (vivid ? 0.5 : 1));
-  const skyId = `sky-${uid}`;
-  const sunId = `sun-${uid}`;
-  const beamId = `beam-${uid}`;
 
   return (
     <View pointerEvents="none" style={[styles.layer, { opacity }, style]}>
       <Svg height="100%" preserveAspectRatio="xMidYMid slice" viewBox={`0 0 ${CANVAS_WIDTH} ${CANVAS_HEIGHT}`} width="100%">
-        <Defs>
-          <LinearGradient id={skyId} x1="0" x2="0" y1="0" y2="1">
-            <Stop offset="0" stopColor={spec.sky[0]} />
-            <Stop offset="0.52" stopColor={spec.sky[1]} />
-            <Stop offset="1" stopColor={spec.sky[2]} />
-          </LinearGradient>
-          <RadialGradient id={sunId}>
-            <Stop offset="0" stopColor={hexToRgba(spec.glow, 0.95)} />
-            <Stop offset="0.45" stopColor={hexToRgba(spec.glow, 0.34)} />
-            <Stop offset="1" stopColor={hexToRgba(spec.glow, 0)} />
-          </RadialGradient>
-          <LinearGradient id={beamId} x1="0" x2="1" y1="0" y2="1">
-            <Stop offset="0" stopColor={spec.accent} />
-            <Stop offset="1" stopColor={spec.accentAlt} />
-          </LinearGradient>
-        </Defs>
-        <Rect fill={`url(#${skyId})`} height={CANVAS_HEIGHT} width={CANVAS_WIDTH} x={0} y={0} />
-        {activeScene === 'manha' ? <ManhaScene beam={beamId} spec={spec} sun={sunId} /> : null}
-        {activeScene === 'tarde' ? <TardeScene beam={beamId} spec={spec} /> : null}
-        {activeScene === 'noite' ? <NoiteScene beam={beamId} spec={spec} sun={sunId} /> : null}
-        {activeScene === 'madrugada' ? <MadrugadaScene spec={spec} /> : null}
+        {artwork}
       </Svg>
       <View style={[StyleSheet.absoluteFill, { backgroundColor: spec.scrim, opacity: scrimAlpha }]} />
     </View>
   );
 }
+
+/**
+ * `memo`: o fundo é pintado por várias telas e não depende de nenhuma prop que
+ * mude com teclado, formulário ou foco. Sem o `memo`, cada render do pai
+ * re-renderizava a camada SVG inteira mesmo com `opacity`/`scene` idênticas.
+ *
+ * Assina só `useThemeScheme` (nome do tema), não a paleta: trocar de preferência
+ * que resolve para a mesma cena não redesenha a arte.
+ */
+export const ThemeBackground = memo(ThemeBackgroundBase);
+ThemeBackground.displayName = 'ThemeBackground';
 
 const styles = StyleSheet.create({
   layer: { ...StyleSheet.absoluteFillObject, overflow: 'hidden' },

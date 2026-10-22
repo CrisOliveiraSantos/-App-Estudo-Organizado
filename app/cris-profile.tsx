@@ -95,7 +95,7 @@ export default function CrisProfileScreen() {
         </TouchableOpacity>
 
         <Text style={styles.overline}>CRIS · SOBRE MIM</Text>
-        <Text style={[styles.title, { color: colors.foreground }]}>Sobre mim</Text>
+        <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={[styles.title, { color: colors.foreground }]}>Sobre mim</Text>
         <Text style={[styles.subtitle, { color: colors.muted }]}>O que a Cris sabe sobre você. Fica só neste aparelho e serve para ela te chamar pelo nome e entender seu contexto — sem perguntar tudo de novo.</Text>
 
         {loading ? <ActivityIndicator color={colors.primary} style={styles.spinner} /> : <>

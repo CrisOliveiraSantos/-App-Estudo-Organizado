@@ -2,10 +2,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, FlatList, Image, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from 'react-native';
 import { router, useFocusEffect } from 'expo-router';
 import { ScreenContainer } from '@/components/screen-container';
-import { NEON_LAYOUT, neonFabClearance } from '@/components/neon/nav-items';
+import { NEON_LAYOUT, neonNavClearance } from '@/components/neon/nav-items';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { useKeyboardInset } from '@/hooks/use-keyboard-inset';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useStudyActions, useStudyChatMessages, type ChatMessage } from '@/lib/study-store';
 import { useColors } from '@/hooks/use-colors';
 import { readLocalChatAccount, saveLocalChatAccount, type LocalChatAccount } from '@/lib/local-chat-auth';
@@ -39,14 +38,19 @@ export default function ChatScreen() {
   const colors = useColors();
   const { width } = useWindowDimensions();
   /**
-   * A pílula da bottom nav é flutuante e o FAB da Cris paira 16 px acima dela —
-   * exatamente sobre a linha de digitação. O compositor (e o `AuthPanel`) reserva
-   * a folga do FAB (`neonFabClearance` = 152/180) + 8 px de respiro + o inset de
-   * baixo, então o FAB fica no vão entre o compositor e a pílula. A lista de
-   * mensagens não precisa disso: ela termina exatamente onde o compositor começa.
+   * Folga do fim do compositor (e do `AuthPanel`): a pílula da bottom nav é
+   * `position:absolute` e não reserva espaço sozinha, então o campo de digitação
+   * precisa terminar **acima** dela (`neonNavClearance` = 84 + 12 + 20 = 116,
+   * mais 8 px de respiro).
+   *
+   * Antes a conta era `neonFabClearance` (176) + `insets.bottom` + 8 = ~208/232:
+   * a faixa em que o FAB da Cris pairava sobre o compositor, o que empurrava o
+   * input ~90 px para cima (o "espaço vazio" embaixo) e espremia a lista. O FAB
+   * sai de cena nesta aba (ver `components/cris-popup.tsx`), então a folga é só
+   * a da pílula. `insets.bottom` **não** entra: o `SafeAreaView` do
+   * `ScreenContainer` já o aplica por fora e somar de novo subia o input.
    */
-  const insets = useSafeAreaInsets();
-  const navClearance = neonFabClearance(width >= NEON_LAYOUT.breakpoint) + insets.bottom + 8;
+  const navClearance = neonNavClearance(width >= NEON_LAYOUT.breakpoint) + 8;
   /**
    * Teclado: o compositor sobe por `keyboard.inset` (já sem o inset do aparelho
    * e sem o que a janela do Android encolheu sozinha) e a lista rola para a
@@ -268,8 +272,14 @@ export default function ChatScreen() {
         <View className="px-5 pt-5">
           <View className="flex-row items-start justify-between">
             <View className="flex-1 pr-3">
-              <Text className="text-xs font-semibold text-primary">COMUNIDADE DE ESTUDOS · {accountName}</Text>
-              <Text className="text-3xl font-bold text-foreground mt-1">Conversas</Text>
+              {/*
+                O título divide a linha com o avatar da Cris e com o nome da
+                conta no overline. `numberOfLines` + `adjustsFontSizeToFit`
+                mantêm "Conversas" inteiro em telas estreitas, em vez de cortar
+                com reticências quando o bloco da direita cresce.
+              */}
+              <Text adjustsFontSizeToFit minimumFontScale={0.75} numberOfLines={1} className="text-xs font-semibold text-primary">COMUNIDADE DE ESTUDOS · {accountName}</Text>
+              <Text adjustsFontSizeToFit minimumFontScale={0.8} numberOfLines={1} className="text-3xl font-bold text-foreground mt-1">Conversas</Text>
               <Text className="text-muted mt-2">Troque ideias, materiais e dúvidas com outros estudantes.</Text>
               {cloudUser && <TouchableOpacity onPress={() => router.push('/profile')} accessibilityRole="button" accessibilityLabel="Abrir meu perfil" style={styles.profileShortcut}><Text style={{ color: colors.primary, fontWeight: '800', fontSize: 13 }}>Meu perfil e configurações da conta</Text></TouchableOpacity>}
             </View>
@@ -324,18 +334,30 @@ export default function ChatScreen() {
           ref={listRef}
           data={visibleMessages}
           keyExtractor={item => item.id}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 20, flexGrow: 1 }}
+          /**
+           * `flex: 1` + `minHeight: 0`: a lista ocupa **todo** o espaço que sobra
+           * entre o cabeçalho e o compositor e é ela quem encolhe quando o
+           * teclado abre — o compositor fica com a altura que precisa e nunca é
+           * coberto nem cobre a última bolha. Sem `minHeight: 0` o flexbox do
+           * web mantém a altura do conteúdo e a lista passa por baixo do input.
+           */
+          style={{ flex: 1, minHeight: 0 }}
+          contentContainerStyle={{ paddingHorizontal: 20, paddingBottom: 16, flexGrow: 1 }}
           keyboardDismissMode={Platform.OS === 'ios' ? 'interactive' : 'on-drag'}
           keyboardShouldPersistTaps="handled"
           /** Conteúdo cresceu (mensagem nova ou teclado abrindo): acompanha o fim. */
           onContentSizeChange={() => scrollToLatest(false)}
           ListEmptyComponent={<View className="bg-surface border border-border rounded-2xl p-5 mt-4"><Text className="text-foreground font-bold">Ainda não há mensagens</Text><Text className="text-muted mt-1">Comece a conversa compartilhando uma dúvida ou material.</Text></View>}
+          /** Aviso de privacidade rola junto com as mensagens em vez de ocupar faixa fixa sobre elas. */
+          ListFooterComponent={<Text className="text-muted text-[10px] mt-4 text-center leading-4">Conversas privadas são visíveis somente para os dois participantes.</Text>}
           renderItem={({ item }) => <View className={`mb-3 max-w-[88%] ${item.isOwn ? 'self-end' : 'self-start'}`}><Text className="text-muted text-[11px] mb-1">{item.author} · {item.createdAt}</Text><View className={`rounded-2xl px-4 py-3 ${item.isOwn ? 'bg-primary rounded-tr-sm' : 'bg-surface border border-border rounded-tl-sm'}`}><Text className={item.isOwn ? 'text-white leading-5' : 'text-foreground leading-5'}>{item.text}</Text></View></View>}
         />
         {/*
-          Com o teclado aberto a folga do FAB/pílula (152/180 px) não faz
-          sentido — os dois estão atrás do teclado — e some para dar lugar ao
-          `keyboard.inset`. Fechado, a folga volta exatamente como antes.
+          Compositor: fica **fora** da lista (a lista termina acima dele) e é o
+          único container que recebe o `paddingBottom` dinâmico — fechado ele
+          reserva a folga da pílula, aberto ele sobe exatamente o que o teclado
+          ocupa. O aviso de privacidade saiu daqui: era uma faixa fixa de texto
+          dentro do mesmo padding, ou seja, mais altura opaca sobre as mensagens.
         */}
         <View
           className="px-5 pt-2 border-t border-border bg-background"
@@ -370,7 +392,10 @@ export default function ChatScreen() {
               <Text style={styles.sendButtonText}>{sending ? '...' : 'Enviar'}</Text>
             </Pressable>
           </View>
-          <Text className="text-muted text-[10px] mt-2 text-center">Pressione Enter para enviar. Conversas privadas são visíveis somente para os dois participantes.</Text>
+          {/* Dica de teclado só no desktop: no celular o Enter quebra linha e a linha extra virava faixa vazia. */}
+          {Platform.OS === 'web' && (
+            <Text className="text-muted text-[10px] mt-1 text-center">Pressione Enter para enviar.</Text>
+          )}
         </View>
       </View>
     </ScreenContainer>

@@ -67,7 +67,7 @@ export default function PlanningScreen() {
       keyExtractor={item => item.id}
       contentContainerStyle={[styles.content, { paddingBottom: navClearance }]}
       ListHeaderComponent={<View>
-        <View style={styles.header}><View style={styles.headerCopy}><Text style={styles.overline}>PLANEJAMENTO</Text><Text style={styles.title}>Ritmo de estudos</Text><Text style={styles.subtitle}>Organize prioridades, acompanhe metas e transforme intenção em avanço real.</Text></View><AcademicButton label="Nova meta" onPress={() => setShowGoalForm(value => !value)} compact /></View>
+        <View style={styles.header}><View style={styles.headerCopy}><Text numberOfLines={1} style={styles.overline}>PLANEJAMENTO</Text><Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={styles.title}>Ritmo de estudos</Text><Text style={styles.subtitle}>Organize prioridades, acompanhe metas e transforme intenção em avanço real.</Text></View><AcademicButton label="Nova meta" onPress={() => setShowGoalForm(value => !value)} compact /></View>
 
         <View style={styles.overview}><View><Text style={styles.overviewLabel}>PROGRESSO GERAL</Text><Text style={styles.overviewValue}>{overall}%</Text><Text style={styles.overviewCaption}>{completed} de {total} tarefas concluídas</Text></View><View style={styles.overviewRing}><Text style={styles.overviewRingText}>{goals.length}</Text><Text style={styles.overviewRingLabel}>metas</Text></View></View>
         <AcademicProgress value={overall} color={c.violet} height={8} />

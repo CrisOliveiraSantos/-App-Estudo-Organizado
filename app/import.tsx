@@ -364,7 +364,7 @@ export default function AcademicImportScreen() {
           <Text style={[styles.backLabel, { color: colors.foreground }]}>Voltar</Text>
         </Pressable>
         <View style={styles.headerCopy}>
-          <Text style={[styles.title, { color: colors.foreground }]}>Importar SIGAA/Moodle</Text>
+          <Text adjustsFontSizeToFit minimumFontScale={0.7} numberOfLines={1} style={[styles.title, { color: colors.foreground }]}>Importar SIGAA/Moodle</Text>
           <Text style={[styles.subtitle, { color: colors.muted }]}>Login no site oficial, sem API e sem token.</Text>
         </View>
       </View>
